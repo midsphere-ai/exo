@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from orbiter._internal.message_builder import build_messages
+from orbiter._internal.planner import prepare_planned_execution
 from orbiter._internal.state import RunState
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.types import (
@@ -72,9 +73,16 @@ async def call_runner(
     node.start()
 
     try:
-        output = await agent.run(
+        planned_input, planned_messages = await prepare_planned_execution(
+            agent,
             input,
-            messages=messages,
+            messages,
+            provider,
+            max_retries=max_retries,
+        )
+        output = await agent.run(
+            planned_input,
+            messages=planned_messages,
             provider=provider,
             max_retries=max_retries,
         )
@@ -101,7 +109,7 @@ async def call_runner(
             instr = str(raw_instr)
         final_messages = build_messages(
             instr,
-            list(messages) if messages else [],
+            list(planned_messages) if planned_messages else [],
         )
         state.add_messages(final_messages)
 

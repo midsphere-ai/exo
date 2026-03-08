@@ -24,6 +24,7 @@ from typing import Any
 from orbiter._internal.call_runner import call_runner
 from orbiter._internal.message_builder import build_messages
 from orbiter._internal.output_parser import parse_tool_arguments
+from orbiter._internal.planner import prepare_planned_execution
 from orbiter.hooks import HookPoint
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.observability.metrics import (  # pyright: ignore[reportMissingImports]
@@ -248,6 +249,14 @@ async def _stream(
         from orbiter.agent import AgentError
 
         raise AgentError(f"Agent '{agent.name}' requires a provider for stream()")
+
+    input, messages = await prepare_planned_execution(
+        agent,
+        input,
+        messages,
+        resolved,
+        max_retries=3,
+    )
 
     steps = max_steps if max_steps is not None else agent.max_steps
 
