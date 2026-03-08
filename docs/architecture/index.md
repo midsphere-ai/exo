@@ -95,5 +95,6 @@ from orbiter.context import Context, ContextConfig, PromptBuilder
 - [Dependency Graph](./dependency-graph.md) -- Package dependencies and internal modules
 - [Design Decisions](./design-decisions.md) -- Why Orbiter is structured the way it is
 - [Agent Runtime Control Contracts](./agent-runtime-control-contracts.md) -- Decision memo for planning, HITL, injected args, sub-agents, and progress controls
+- [Context Management and Infinite Context Stages](./context-management-infinite-context-stages.md) -- Decision memo for persisted summaries, checkpoints, retrieval-aware compaction, and branch-scoped context
 - [Async Patterns](./async-patterns.md) -- Async-first design and sync bridge
 - [Error Handling](./error-handling.md) -- Exception hierarchy and propagation
