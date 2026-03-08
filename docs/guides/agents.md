@@ -158,6 +158,11 @@ config = AgentConfig(
     instructions="Be helpful.",
     temperature=0.7,
     max_steps=5,
+    planning_enabled=True,
+    planning_model="openai:gpt-4o-mini",
+    budget_awareness="limit:70",
+    hitl_tools=["deploy_service"],
+    injected_tool_args={"ui_request_id": "Opaque UI correlation id"},
 )
 ```
 
@@ -169,6 +174,15 @@ config = AgentConfig(
 | `temperature` | `float` | `1.0` (range: 0.0-2.0) |
 | `max_tokens` | `int \| None` | `None` |
 | `max_steps` | `int` | `10` (min: 1) |
+| `planning_enabled` | `bool` | `False` |
+| `planning_model` | `str \| None` | `None` |
+| `planning_instructions` | `str` | `""` |
+| `budget_awareness` | `str \| None` | `None` (`per-message` or `limit:<0-100>`) |
+| `hitl_tools` | `list[str]` | `[]` |
+| `emit_mcp_progress` | `bool` | `True` |
+| `injected_tool_args` | `dict[str, str]` | `{}` |
+| `allow_parallel_subagents` | `bool` | `False` |
+| `max_parallel_subagents` | `int` | `3` (range: 1-7) |
 
 ## Live Message Injection
 

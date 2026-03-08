@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from orbiter.agent import Agent, _deserialize_tool, _import_object, _serialize_tool
+from orbiter.agent import Agent, AgentError, _deserialize_tool, _import_object, _serialize_tool
 from orbiter.swarm import Swarm
 from orbiter.tool import FunctionTool, Tool, tool
 
@@ -61,9 +61,44 @@ class TestAgentToDict:
         assert data["max_steps"] == 10
         assert data["temperature"] == 1.0
         assert data["max_tokens"] is None
+        assert data["planning_enabled"] is False
+        assert data["planning_model"] is None
+        assert data["planning_instructions"] == ""
+        assert data["budget_awareness"] is None
+        assert data["hitl_tools"] == []
+        assert data["emit_mcp_progress"] is True
+        assert data["injected_tool_args"] == {}
+        assert data["allow_parallel_subagents"] is False
+        assert data["max_parallel_subagents"] == 3
         assert "tools" not in data
         assert "handoffs" not in data
         assert "output_type" not in data
+
+    def test_with_runtime_controls(self) -> None:
+        """New runtime-control fields serialize without losing values."""
+        agent = Agent(
+            name="planner",
+            tools=[search, calculate],
+            planning_enabled=True,
+            planning_model="openai:gpt-4o-mini",
+            planning_instructions="Return a short numbered plan.",
+            budget_awareness="limit:70",
+            hitl_tools=["search"],
+            emit_mcp_progress=False,
+            injected_tool_args={"ui_request_id": "Opaque request id"},
+            allow_parallel_subagents=True,
+            max_parallel_subagents=4,
+        )
+        data = agent.to_dict()
+        assert data["planning_enabled"] is True
+        assert data["planning_model"] == "openai:gpt-4o-mini"
+        assert data["planning_instructions"] == "Return a short numbered plan."
+        assert data["budget_awareness"] == "limit:70"
+        assert data["hitl_tools"] == ["search"]
+        assert data["emit_mcp_progress"] is False
+        assert data["injected_tool_args"] == {"ui_request_id": "Opaque request id"}
+        assert data["allow_parallel_subagents"] is True
+        assert data["max_parallel_subagents"] == 4
 
     def test_with_tools(self) -> None:
         """Agent with tools serializes tool paths."""
@@ -169,6 +204,15 @@ class TestAgentFromDict:
         assert agent.name == "bot"
         assert agent.model == "openai:gpt-4o"
         assert agent.max_steps == 10
+        assert agent.planning_enabled is False
+        assert agent.planning_model is None
+        assert agent.planning_instructions == ""
+        assert agent.budget_awareness is None
+        assert agent.hitl_tools == []
+        assert agent.emit_mcp_progress is True
+        assert agent.injected_tool_args == {}
+        assert agent.allow_parallel_subagents is False
+        assert agent.max_parallel_subagents == 3
 
     def test_with_all_fields(self) -> None:
         """from_dict() reconstructs agent with all scalar fields."""
@@ -187,6 +231,33 @@ class TestAgentFromDict:
         assert agent.max_steps == 5
         assert agent.temperature == 0.7
         assert agent.max_tokens == 1000
+
+    def test_with_runtime_controls(self) -> None:
+        """from_dict() reconstructs the new runtime-control fields."""
+        path = f"{search._fn.__module__}.{search._fn.__qualname__}"
+        data = {
+            "name": "planner",
+            "tools": [path],
+            "planning_enabled": True,
+            "planning_model": "openai:gpt-4o-mini",
+            "planning_instructions": "Return a short numbered plan.",
+            "budget_awareness": "per-message",
+            "hitl_tools": ["search"],
+            "emit_mcp_progress": False,
+            "injected_tool_args": {"ui_request_id": "Opaque request id"},
+            "allow_parallel_subagents": True,
+            "max_parallel_subagents": 4,
+        }
+        agent = Agent.from_dict(data)
+        assert agent.planning_enabled is True
+        assert agent.planning_model == "openai:gpt-4o-mini"
+        assert agent.planning_instructions == "Return a short numbered plan."
+        assert agent.budget_awareness == "per-message"
+        assert agent.hitl_tools == ["search"]
+        assert agent.emit_mcp_progress is False
+        assert agent.injected_tool_args == {"ui_request_id": "Opaque request id"}
+        assert agent.allow_parallel_subagents is True
+        assert agent.max_parallel_subagents == 4
 
     def test_with_tools_from_path(self) -> None:
         """from_dict() resolves tool paths to actual tools."""
@@ -221,6 +292,25 @@ class TestAgentFromDict:
         with pytest.raises(ValueError, match="Cannot import"):
             Agent.from_dict(data)
 
+    def test_invalid_budget_awareness_raises(self) -> None:
+        """Malformed budget-awareness strings fail during deserialization."""
+        data = {"name": "bot", "budget_awareness": "limit:abc"}
+        with pytest.raises(ValueError, match="budget_awareness"):
+            Agent.from_dict(data)
+
+    def test_unknown_hitl_tool_raises(self) -> None:
+        """Unknown HITL tool names fail during deserialization."""
+        path = f"{search._fn.__module__}.{search._fn.__qualname__}"
+        data = {"name": "bot", "tools": [path], "hitl_tools": ["deploy_service"]}
+        with pytest.raises(AgentError, match="hitl_tools contains unknown tool names"):
+            Agent.from_dict(data)
+
+    def test_max_parallel_subagents_above_limit_raises(self) -> None:
+        """Parallel-subagent limits above seven are rejected."""
+        data = {"name": "bot", "max_parallel_subagents": 8}
+        with pytest.raises(ValueError, match="max_parallel_subagents"):
+            Agent.from_dict(data)
+
 
 # ---------------------------------------------------------------------------
 # Round-trip tests
@@ -249,6 +339,15 @@ class TestAgentRoundTrip:
             max_steps=5,
             temperature=0.7,
             max_tokens=2000,
+            planning_enabled=True,
+            planning_model="openai:gpt-4o-mini",
+            planning_instructions="Return a short numbered plan.",
+            budget_awareness="limit:70",
+            hitl_tools=["search"],
+            emit_mcp_progress=False,
+            injected_tool_args={"ui_request_id": "Opaque request id"},
+            allow_parallel_subagents=True,
+            max_parallel_subagents=4,
         )
         data = original.to_dict()
         reconstructed = Agent.from_dict(data)
@@ -259,6 +358,15 @@ class TestAgentRoundTrip:
         assert reconstructed.max_steps == original.max_steps
         assert reconstructed.temperature == original.temperature
         assert reconstructed.max_tokens == original.max_tokens
+        assert reconstructed.planning_enabled is original.planning_enabled
+        assert reconstructed.planning_model == original.planning_model
+        assert reconstructed.planning_instructions == original.planning_instructions
+        assert reconstructed.budget_awareness == original.budget_awareness
+        assert reconstructed.hitl_tools == original.hitl_tools
+        assert reconstructed.emit_mcp_progress is original.emit_mcp_progress
+        assert reconstructed.injected_tool_args == original.injected_tool_args
+        assert reconstructed.allow_parallel_subagents is original.allow_parallel_subagents
+        assert reconstructed.max_parallel_subagents == original.max_parallel_subagents
         assert set(reconstructed.tools.keys()) == set(original.tools.keys())
         assert set(reconstructed.handoffs.keys()) == set(original.handoffs.keys())
         assert reconstructed.output_type is original.output_type

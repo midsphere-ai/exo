@@ -100,6 +100,29 @@ class TestBuildAgent:
         assert agent.temperature == 0.5
         assert agent.max_steps == 5
 
+    def test_builtin_with_runtime_controls(self) -> None:
+        agent = _build_agent(
+            "planner",
+            {
+                "planning_enabled": True,
+                "planning_model": "openai:gpt-4o-mini",
+                "planning_instructions": "Return a short plan.",
+                "budget_awareness": "per-message",
+                "emit_mcp_progress": False,
+                "injected_tool_args": {"ui_request_id": "Opaque request id"},
+                "allow_parallel_subagents": True,
+                "max_parallel_subagents": 4,
+            },
+        )
+        assert agent.planning_enabled is True
+        assert agent.planning_model == "openai:gpt-4o-mini"
+        assert agent.planning_instructions == "Return a short plan."
+        assert agent.budget_awareness == "per-message"
+        assert agent.emit_mcp_progress is False
+        assert agent.injected_tool_args == {"ui_request_id": "Opaque request id"}
+        assert agent.allow_parallel_subagents is True
+        assert agent.max_parallel_subagents == 4
+
     def test_custom_class(self) -> None:
         class MyAgent:
             def __init__(self, *, name: str, **kw: Any) -> None:
@@ -246,6 +269,32 @@ class TestLoadAgents:
         f.write_text(content)
         agents = load_agents(f)
         assert agents["a"].instructions == "Be smart"
+
+    def test_with_runtime_controls(self, tmp_path: Path) -> None:
+        content = textwrap.dedent("""\
+            agents:
+              planner:
+                planning_enabled: true
+                planning_model: openai:gpt-4o-mini
+                planning_instructions: Return a short plan.
+                budget_awareness: limit:70
+                emit_mcp_progress: false
+                injected_tool_args:
+                  ui_request_id: Opaque request id
+                allow_parallel_subagents: true
+                max_parallel_subagents: 4
+        """)
+        f = tmp_path / "agents.yaml"
+        f.write_text(content)
+        agents = load_agents(f)
+        agent = agents["planner"]
+        assert agent.planning_enabled is True
+        assert agent.planning_model == "openai:gpt-4o-mini"
+        assert agent.budget_awareness == "limit:70"
+        assert agent.emit_mcp_progress is False
+        assert agent.injected_tool_args == {"ui_request_id": "Opaque request id"}
+        assert agent.allow_parallel_subagents is True
+        assert agent.max_parallel_subagents == 4
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,13 @@ from pydantic import BaseModel
 
 from orbiter._internal.message_builder import build_messages
 from orbiter._internal.output_parser import parse_response, parse_tool_arguments
-from orbiter.config import parse_model_string
+from orbiter.config import (
+    parse_model_string,
+    validate_budget_awareness,
+    validate_injected_tool_args,
+    validate_max_parallel_subagents,
+    validate_planning_model,
+)
 from orbiter.hooks import Hook, HookManager, HookPoint
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.tool import FunctionTool, Tool, ToolError
@@ -124,9 +130,10 @@ async def _inject_long_term_knowledge(
     )
     if sys_idx is not None:
         existing = new_msg_list[sys_idx]
+        existing_content = existing.content if isinstance(existing.content, str) else ""
         new_content = (
-            (existing.content + "\n\n" + knowledge_block)
-            if existing.content
+            f"{existing_content}\n\n{knowledge_block}"
+            if existing_content
             else knowledge_block
         )
         new_msg_list[sys_idx] = SystemMessage(content=new_content)
@@ -400,6 +407,29 @@ class AgentError(OrbiterError):
     """Raised for agent-level errors (duplicate tools, invalid config, etc.)."""
 
 
+def _normalize_hitl_tools(hitl_tools: list[str] | None) -> list[str]:
+    """Validate and normalize HITL tool names.
+
+    Args:
+        hitl_tools: Tool names that should require approval.
+
+    Returns:
+        A shallow copy of the configured tool names.
+
+    Raises:
+        AgentError: If any entry is empty or not a string.
+    """
+    if hitl_tools is None:
+        return []
+
+    normalized: list[str] = []
+    for tool_name in hitl_tools:
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            raise AgentError("hitl_tools entries must be non-empty strings")
+        normalized.append(tool_name)
+    return normalized
+
+
 class Agent:
     """An autonomous LLM-powered agent with tools and lifecycle hooks.
 
@@ -422,6 +452,20 @@ class Agent:
         max_steps: Maximum LLM-tool round-trips before stopping.
         temperature: LLM sampling temperature.
         max_tokens: Maximum output tokens per LLM call.
+        planning_enabled: When ``True``, the runtime may execute a planner
+            phase before the main executor phase.
+        planning_model: Optional planner model override. When unset, planning
+            uses the main agent model.
+        planning_instructions: Optional planner-only instructions.
+        budget_awareness: Optional context-budget mode. Valid values are
+            ``"per-message"`` and ``"limit:<0-100>"``.
+        hitl_tools: Tool names that require human approval before execution.
+        emit_mcp_progress: Whether MCP progress events should be emitted.
+        injected_tool_args: Schema-only tool arguments exposed to the LLM.
+        allow_parallel_subagents: Enables the future parallel-subagent tool
+            contract without changing current defaults.
+        max_parallel_subagents: Maximum child jobs allowed per parallel
+            sub-agent call.
         memory: Optional memory store for persistent memory across sessions.
         context: Optional context engine for hierarchical state and prompt building.
         allow_self_spawn: When ``True``, automatically adds a ``spawn_self(task)``
@@ -444,6 +488,15 @@ class Agent:
         max_steps: int = 10,
         temperature: float = 1.0,
         max_tokens: int | None = None,
+        planning_enabled: bool = False,
+        planning_model: str | None = None,
+        planning_instructions: str = "",
+        budget_awareness: str | None = None,
+        hitl_tools: list[str] | None = None,
+        emit_mcp_progress: bool = True,
+        injected_tool_args: dict[str, str] | None = None,
+        allow_parallel_subagents: bool = False,
+        max_parallel_subagents: int = 3,
         memory: Any = _MEMORY_UNSET,
         context_mode: Any = _CONTEXT_UNSET,
         context: Any = _CONTEXT_UNSET,
@@ -460,6 +513,15 @@ class Agent:
         self.max_steps = max_steps
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.planning_enabled = planning_enabled
+        self.planning_model = validate_planning_model(planning_model)
+        self.planning_instructions = planning_instructions
+        self.budget_awareness = validate_budget_awareness(budget_awareness)
+        self.emit_mcp_progress = emit_mcp_progress
+        self.injected_tool_args = validate_injected_tool_args(injected_tool_args)
+        self.allow_parallel_subagents = allow_parallel_subagents
+        self.max_parallel_subagents = validate_max_parallel_subagents(max_parallel_subagents)
+        normalized_hitl_tools = _normalize_hitl_tools(hitl_tools)
         # Self-spawn: opt-in parallel sub-task spawning
         self.allow_self_spawn: bool = allow_self_spawn
         self.max_spawn_depth: int = max_spawn_depth
@@ -519,6 +581,9 @@ class Agent:
         # Auto-register spawn_self tool when opt-in self-spawn is enabled
         if allow_self_spawn:
             self._register_tool(self._make_spawn_self_tool())
+
+        self.hitl_tools = normalized_hitl_tools
+        self._validate_hitl_tools()
 
         # Lifecycle hooks
         self.hook_manager = HookManager()
@@ -595,6 +660,14 @@ class Agent:
         self.tools["retrieve_artifact"] = FunctionTool(
             retrieve_artifact, name="retrieve_artifact"
         )
+
+    def _validate_hitl_tools(self) -> None:
+        """Ensure all HITL tool names reference registered tools."""
+        missing = sorted({tool_name for tool_name in self.hitl_tools if tool_name not in self.tools})
+        if missing:
+            raise AgentError(
+                f"hitl_tools contains unknown tool names for agent '{self.name}': {', '.join(missing)}"
+            )
 
     def _auto_load_context_tools(self) -> None:
         """Auto-load, bind, and register context tools when orbiter-context is installed.
@@ -912,6 +985,9 @@ class Agent:
             "handoffs": list(self.handoffs.keys()),
             "max_steps": self.max_steps,
             "output_type": (self.output_type.__name__ if self.output_type else None),
+            "planning_enabled": self.planning_enabled,
+            "budget_awareness": self.budget_awareness,
+            "emit_mcp_progress": self.emit_mcp_progress,
         }
 
     async def run(
@@ -1382,6 +1458,15 @@ class Agent:
             "max_steps": self.max_steps,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            "planning_enabled": self.planning_enabled,
+            "planning_model": self.planning_model,
+            "planning_instructions": self.planning_instructions,
+            "budget_awareness": self.budget_awareness,
+            "hitl_tools": list(self.hitl_tools),
+            "emit_mcp_progress": self.emit_mcp_progress,
+            "injected_tool_args": dict(self.injected_tool_args),
+            "allow_parallel_subagents": self.allow_parallel_subagents,
+            "max_parallel_subagents": self.max_parallel_subagents,
         }
 
         # Serialize tools as importable dotted paths.
@@ -1441,6 +1526,15 @@ class Agent:
             max_steps=data.get("max_steps", 10),
             temperature=data.get("temperature", 1.0),
             max_tokens=data.get("max_tokens"),
+            planning_enabled=data.get("planning_enabled", False),
+            planning_model=data.get("planning_model"),
+            planning_instructions=data.get("planning_instructions", ""),
+            budget_awareness=data.get("budget_awareness"),
+            hitl_tools=data.get("hitl_tools"),
+            emit_mcp_progress=data.get("emit_mcp_progress", True),
+            injected_tool_args=data.get("injected_tool_args"),
+            allow_parallel_subagents=data.get("allow_parallel_subagents", False),
+            max_parallel_subagents=data.get("max_parallel_subagents", 3),
         )
 
     def __repr__(self) -> str:
@@ -1485,7 +1579,8 @@ def _serialize_tool(t: Tool) -> str | dict[str, Any]:
         from orbiter.mcp.tools import MCPToolWrapper  # pyright: ignore[reportMissingImports]
 
         if isinstance(t, MCPToolWrapper):
-            return t.to_dict()
+            mcp_tool: Any = t
+            return mcp_tool.to_dict()
     except ImportError:
         pass
 

@@ -105,6 +105,15 @@ Configuration for an Agent. Immutable (frozen Pydantic model).
 | `temperature` | `float` | `1.0` | LLM sampling temperature. Must be between 0.0 and 2.0. |
 | `max_tokens` | `int \| None` | `None` | Maximum output tokens per LLM call. |
 | `max_steps` | `int` | `10` | Maximum LLM-tool round-trips. Must be >= 1. |
+| `planning_enabled` | `bool` | `False` | Enables the planner phase contract. |
+| `planning_model` | `str \| None` | `None` | Optional planner model override. |
+| `planning_instructions` | `str` | `""` | Optional planner-only instructions. |
+| `budget_awareness` | `str \| None` | `None` | Either `per-message` or `limit:<0-100>`. |
+| `hitl_tools` | `list[str]` | `[]` | Tool names that require approval before execution. |
+| `emit_mcp_progress` | `bool` | `True` | Controls MCP progress-event emission. |
+| `injected_tool_args` | `dict[str, str]` | `{}` | Schema-only tool arguments exposed to the model. |
+| `allow_parallel_subagents` | `bool` | `False` | Enables the parallel sub-agent contract. |
+| `max_parallel_subagents` | `int` | `3` | Maximum child jobs per parallel call. Must be `1..7`. |
 
 ### Example
 
@@ -117,6 +126,11 @@ config = AgentConfig(
     instructions="You are a research assistant.",
     temperature=0.7,
     max_steps=20,
+    planning_enabled=True,
+    planning_model="openai:gpt-4o-mini",
+    budget_awareness="limit:70",
+    hitl_tools=["search_documents"],
+    injected_tool_args={"ui_request_id": "Opaque UI correlation id"},
 )
 ```
 

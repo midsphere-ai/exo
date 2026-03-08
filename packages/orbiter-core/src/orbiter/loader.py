@@ -100,6 +100,19 @@ def _build_agent(name: str, spec: dict[str, Any]) -> Any:
         kwargs["max_tokens"] = int(spec["max_tokens"])
     if "max_steps" in spec:
         kwargs["max_steps"] = int(spec["max_steps"])
+    for field in (
+        "planning_enabled",
+        "planning_model",
+        "planning_instructions",
+        "budget_awareness",
+        "hitl_tools",
+        "emit_mcp_progress",
+        "injected_tool_args",
+        "allow_parallel_subagents",
+        "max_parallel_subagents",
+    ):
+        if field in spec:
+            kwargs[field] = spec[field]
     return Agent(**kwargs)
 
 
