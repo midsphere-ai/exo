@@ -94,5 +94,6 @@ from orbiter.context import Context, ContextConfig, PromptBuilder
 - [Execution Flow](./execution-flow.md) -- What happens when you call `run()`
 - [Dependency Graph](./dependency-graph.md) -- Package dependencies and internal modules
 - [Design Decisions](./design-decisions.md) -- Why Orbiter is structured the way it is
+- [Agent Runtime Control Contracts](./agent-runtime-control-contracts.md) -- Decision memo for planning, HITL, injected args, sub-agents, and progress controls
 - [Async Patterns](./async-patterns.md) -- Async-first design and sync bridge
 - [Error Handling](./error-handling.md) -- Exception hierarchy and propagation

@@ -121,6 +121,7 @@ nav:
     - architecture/index.md
     - Dependency Graph: architecture/dependency-graph.md
     - Design Decisions: architecture/design-decisions.md
+    - Agent Runtime Control Contracts: architecture/agent-runtime-control-contracts.md
     - Execution Flow: architecture/execution-flow.md
     - Async Patterns: architecture/async-patterns.md
     - Error Handling: architecture/error-handling.md
