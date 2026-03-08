@@ -49,6 +49,25 @@ All parameters are keyword-only. Only `name` is required.
 | `memory` | `Any` | `None` | Optional memory store for persistent memory |
 | `context` | `Any` | `None` | Optional context engine for hierarchical state |
 
+## Planner Phase
+
+When `planning_enabled=True`, Orbiter runs an ephemeral planner pass before the executor phase. The planner sees the same tool set as the executor, but its transcript stays separate from the executor conversation. Only the final planner text is injected back into the executor context together with the original task.
+
+If you set `planning_model` or `planning_instructions`, those values apply only to the planner. When they are unset, Orbiter falls back to the executor model and instructions.
+
+```python
+from orbiter.agent import Agent
+
+agent = Agent(
+    name="researcher",
+    model="openai:gpt-4o",
+    instructions="Execute the task.",
+    planning_enabled=True,
+    planning_model="openai:gpt-4o-mini",
+    planning_instructions="Return a short numbered plan before acting.",
+)
+```
+
 ## Dynamic Instructions
 
 The `instructions` parameter can be a callable. This is useful when the system prompt needs to change based on runtime context:

@@ -34,3 +34,5 @@
 [2026-03-09 00:57:29] ITERATION 4 end (duration=915s)
 [2026-03-09 00:57:32] ITERATION 5 start (mode=build story=US-018)
 [2026-03-09 00:59:37] US-018: audited planner routing path and identified missing pre-pass in core runner
+[2026-03-09 01:11:44] US-018: implemented planner pre-pass helper, routed run/stream execution through it, and added focused core tests
+[2026-03-09 01:12:24] US-018: verification complete - orbiter-core pytest passed; focused ruff/pyright passed; package-wide ruff/pyright still report unrelated backlog; docs build passed

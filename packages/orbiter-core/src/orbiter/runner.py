@@ -57,7 +57,6 @@ from orbiter.types import (
     UserMessage,
 )
 
-
 _log = get_logger(__name__)
 
 
@@ -281,7 +280,10 @@ async def _stream(
             _active_conv = str(_uuid.uuid4())
             if conversation_id is None:
                 agent.conversation_id = _active_conv
-        from orbiter.memory.base import HumanMemory, MemoryMetadata  # pyright: ignore[reportMissingImports]
+        from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+            HumanMemory,
+            MemoryMetadata,
+        )
         _persistence.metadata = MemoryMetadata(
             agent_id=agent.name,
             task_id=_active_conv,
@@ -332,7 +334,9 @@ async def _stream(
     _agent_memory_lt = getattr(agent, "memory", None)
     if _agent_memory_lt is not None:
         try:
-            from orbiter.agent import _inject_long_term_knowledge  # pyright: ignore[reportMissingImports]
+            from orbiter.agent import (
+                _inject_long_term_knowledge,  # pyright: ignore[reportMissingImports]
+            )
             msg_list = await _inject_long_term_knowledge(_agent_memory_lt, input, msg_list)
         except ImportError:
             pass
@@ -350,7 +354,9 @@ async def _stream(
                 _get_context_window_tokens,
                 _update_system_token_info,
             )
-            from orbiter.context.token_tracker import TokenTracker  # pyright: ignore[reportMissingImports]
+            from orbiter.context.token_tracker import (
+                TokenTracker,  # pyright: ignore[reportMissingImports]
+            )
 
             _stream_context_window = _get_context_window_tokens(_model_name_only)
             _stream_token_tracker = TokenTracker()
@@ -618,7 +624,9 @@ async def _stream(
                     )
                     if _passes_filter(_tb_ev):
                         yield _tb_ev
-                    from orbiter.agent import _apply_context_windowing as _acw  # pyright: ignore[reportMissingImports]
+                    from orbiter.agent import (
+                        _apply_context_windowing as _acw,  # pyright: ignore[reportMissingImports]
+                    )
                     msg_list, _budget_actions = await _acw(
                         msg_list, _agent_context, resolved, force_summarize=True,
                     )

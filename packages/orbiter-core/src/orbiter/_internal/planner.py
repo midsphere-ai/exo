@@ -10,7 +10,6 @@ from orbiter.config import parse_model_string
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.types import Message, MessageContent, SystemMessage
 
-
 _log = get_logger(__name__)
 
 _PLANNER_INPUT_TEMPLATE = (
@@ -162,7 +161,9 @@ def _clone_provider_for_model(provider: Any, model: str) -> Any | None:
 
     update_fields: dict[str, Any] = {"provider": provider_name, "model_name": model_name}
     try:
-        from orbiter.models.context_windows import MODEL_CONTEXT_WINDOWS  # pyright: ignore[reportMissingImports]
+        from orbiter.models.context_windows import (  # pyright: ignore[reportMissingImports]
+            MODEL_CONTEXT_WINDOWS,
+        )
 
         update_fields["context_window_tokens"] = MODEL_CONTEXT_WINDOWS.get(model_name)
     except Exception:

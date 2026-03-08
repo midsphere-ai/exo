@@ -7335,6 +7335,60 @@
 <td><code>10</code></td>
 <td>Maximum LLM-tool round-trips. Must be &gt;= 1.</td>
 </tr>
+<tr>
+<td><code>planning_enabled</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Enables an ephemeral planner pass before execution.</td>
+</tr>
+<tr>
+<td><code>planning_model</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Optional planner model override. Falls back to the executor model when unset.</td>
+</tr>
+<tr>
+<td><code>planning_instructions</code></td>
+<td><code>str</code></td>
+<td><code>""</code></td>
+<td>Optional planner-only instructions. Falls back to the executor instructions when unset.</td>
+</tr>
+<tr>
+<td><code>budget_awareness</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Either <code>per-message</code> or <code>limit:&lt;0-100&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>hitl_tools</code></td>
+<td><code>list[str]</code></td>
+<td><code>[]</code></td>
+<td>Tool names that require approval before execution.</td>
+</tr>
+<tr>
+<td><code>emit_mcp_progress</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Controls MCP progress-event emission.</td>
+</tr>
+<tr>
+<td><code>injected_tool_args</code></td>
+<td><code>dict[str, str]</code></td>
+<td><code>{}</code></td>
+<td>Schema-only tool arguments exposed to the model.</td>
+</tr>
+<tr>
+<td><code>allow_parallel_subagents</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Enables the parallel sub-agent contract.</td>
+</tr>
+<tr>
+<td><code>max_parallel_subagents</code></td>
+<td><code>int</code></td>
+<td><code>3</code></td>
+<td>Maximum child jobs per parallel call. Must be <code>1..7</code>.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="example_2">Example<a class="headerlink" href="#example_2" title="Permanent link">&para;</a></h3>
@@ -7346,7 +7400,12 @@
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;You are a research assistant.&quot;</span><span class="p">,</span>
 </span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">temperature</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">max_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">planning_enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">planning_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o-mini&quot;</span><span class="p">,</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">budget_awareness</span><span class="o">=</span><span class="s2">&quot;limit:70&quot;</span><span class="p">,</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">hitl_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;search_documents&quot;</span><span class="p">],</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">injected_tool_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;ui_request_id&quot;</span><span class="p">:</span> <span class="s2">&quot;Opaque UI correlation id&quot;</span><span class="p">},</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="p">)</span>
 </span></code></pre></div>
 <hr />
 <h2 id="taskconfig">TaskConfig<a class="headerlink" href="#taskconfig" title="Permanent link">&para;</a></h2>

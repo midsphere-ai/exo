@@ -19,6 +19,7 @@ from orbiter.observability.logging import get_logger  # pyright: ignore[reportMi
 from orbiter.types import (
     AgentOutput,
     Message,
+    MessageContent,
     OrbiterError,
     RunResult,
 )
@@ -32,7 +33,7 @@ class CallRunnerError(OrbiterError):
 
 async def call_runner(
     agent: Any,
-    input: str,
+    input: MessageContent,
     *,
     state: RunState | None = None,
     messages: Sequence[Message] | None = None,
@@ -49,7 +50,7 @@ async def call_runner(
 
     Args:
         agent: An ``Agent`` instance with a ``run()`` method.
-        input: User query string.
+        input: User query — a string or list of ContentBlock objects.
         state: Optional pre-existing ``RunState``.  A new one is
             created if not provided.
         messages: Prior conversation history.

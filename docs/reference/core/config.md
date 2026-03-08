@@ -105,9 +105,9 @@ Configuration for an Agent. Immutable (frozen Pydantic model).
 | `temperature` | `float` | `1.0` | LLM sampling temperature. Must be between 0.0 and 2.0. |
 | `max_tokens` | `int \| None` | `None` | Maximum output tokens per LLM call. |
 | `max_steps` | `int` | `10` | Maximum LLM-tool round-trips. Must be >= 1. |
-| `planning_enabled` | `bool` | `False` | Enables the planner phase contract. |
-| `planning_model` | `str \| None` | `None` | Optional planner model override. |
-| `planning_instructions` | `str` | `""` | Optional planner-only instructions. |
+| `planning_enabled` | `bool` | `False` | Enables an ephemeral planner pass before execution. |
+| `planning_model` | `str \| None` | `None` | Optional planner model override. Falls back to the executor model when unset. |
+| `planning_instructions` | `str` | `""` | Optional planner-only instructions. Falls back to the executor instructions when unset. |
 | `budget_awareness` | `str \| None` | `None` | Either `per-message` or `limit:<0-100>`. |
 | `hitl_tools` | `list[str]` | `[]` | Tool names that require approval before execution. |
 | `emit_mcp_progress` | `bool` | `True` | Controls MCP progress-event emission. |

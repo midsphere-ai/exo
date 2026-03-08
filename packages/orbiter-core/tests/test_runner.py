@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock
 
 import pytest
 
 from orbiter.agent import Agent
+from orbiter.config import ModelConfig
 from orbiter.runner import run
 from orbiter.tool import tool
 from orbiter.types import (
@@ -51,6 +52,27 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
     mock = AsyncMock()
     mock.complete = complete
     return mock
+
+
+class _RecordingProvider:
+    """Provider stub that records completion inputs for assertions."""
+
+    def __init__(self, responses: list[AgentOutput]) -> None:
+        self._responses = responses
+        self._call_count = 0
+        self.calls: list[dict[str, Any]] = []
+
+    async def complete(self, messages: Any, **kwargs: Any) -> Any:
+        self.calls.append({"messages": list(messages), "kwargs": kwargs})
+        resp = self._responses[min(self._call_count, len(self._responses) - 1)]
+        self._call_count += 1
+
+        class FakeResponse:
+            content = resp.text
+            tool_calls = resp.tool_calls
+            usage = resp.usage
+
+        return FakeResponse()
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +138,110 @@ class TestRunAsync:
         result = await run(agent, "Greet Alice", provider=provider)
 
         assert result.output == "I greeted Alice for you!"
+
+    async def test_planning_enabled_runs_planner_before_executor(self) -> None:
+        """Planner-enabled agents inject a plan before executor tool use."""
+
+        @tool
+        def lookup(topic: str) -> str:
+            """Look up a topic."""
+            return f"Facts about {topic}"
+
+        agent = Agent(
+            name="researcher",
+            instructions="Execute the task.",
+            tools=[lookup],
+            planning_enabled=True,
+            planning_instructions="Return a short numbered plan.",
+        )
+        provider = _RecordingProvider(
+            [
+                AgentOutput(text="1. Look up the facts.\n2. Summarize them."),
+                AgentOutput(
+                    text="",
+                    tool_calls=[ToolCall(id="tc1", name="lookup", arguments='{"topic":"orbiter"}')],
+                ),
+                AgentOutput(text="Summary ready."),
+            ]
+        )
+
+        result = await run(agent, "Research orbiter", provider=provider)
+
+        assert result.output == "Summary ready."
+        assert len(provider.calls) == 3
+
+        planner_call = provider.calls[0]
+        executor_call = provider.calls[1]
+        planner_tools = {
+            schema["function"]["name"] for schema in planner_call["kwargs"]["tools"]
+        }
+        executor_tools = {
+            schema["function"]["name"] for schema in executor_call["kwargs"]["tools"]
+        }
+
+        assert planner_call["messages"][0].content == "Return a short numbered plan."
+        assert planner_tools == executor_tools
+        assert executor_call["messages"][-1].role == "user"
+        assert "Original task:\nResearch orbiter" in executor_call["messages"][-1].content
+        assert "Planner output:\n1. Look up the facts.\n2. Summarize them." in (
+            executor_call["messages"][-1].content
+        )
+
+    async def test_planner_defaults_to_executor_instructions(self) -> None:
+        """Empty planner instructions fall back to the executor instructions."""
+        agent = Agent(
+            name="planner-bot",
+            instructions="Break the work down before acting.",
+            planning_enabled=True,
+        )
+        provider = _RecordingProvider(
+            [
+                AgentOutput(text="1. Break the task down."),
+                AgentOutput(text="Done."),
+            ]
+        )
+
+        result = await run(agent, "Handle the task", provider=provider)
+
+        assert result.output == "Done."
+        assert provider.calls[0]["messages"][0].content == "Break the work down before acting."
+
+    async def test_planner_uses_planning_model_override(self) -> None:
+        """Planner model overrides clone the executor provider when possible."""
+        call_log: list[str] = []
+        responses_by_model = {
+            "gpt-4o-mini": [AgentOutput(text="1. Prepare the work.")],
+            "gpt-4o": [AgentOutput(text="Finished.")],
+        }
+
+        class CloneableProvider:
+            def __init__(self, config: ModelConfig) -> None:
+                self.config = config
+
+            async def complete(self, messages: Any, **kwargs: Any) -> Any:
+                call_log.append(self.config.model_name)
+                resp = responses_by_model[self.config.model_name].pop(0)
+
+                class FakeResponse:
+                    content = resp.text
+                    tool_calls = resp.tool_calls
+                    usage = resp.usage
+
+                return FakeResponse()
+
+        provider = CloneableProvider(ModelConfig(provider="openai", model_name="gpt-4o"))
+        agent = Agent(
+            name="planner-bot",
+            model="openai:gpt-4o",
+            instructions="Do the task.",
+            planning_enabled=True,
+            planning_model="openai:gpt-4o-mini",
+        )
+
+        result = await run(agent, "Handle the task", provider=provider)
+
+        assert result.output == "Finished."
+        assert call_log == ["gpt-4o-mini", "gpt-4o"]
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +321,18 @@ class TestRunMultiTurn:
         provider2 = _make_provider([AgentOutput(text="Count: 2")])
         r2 = await run(agent, "Next", messages=r1.messages, provider=provider2)
         assert r2.output == "Count: 2"
+
+    async def test_planning_disabled_bypasses_planner(self) -> None:
+        """Agents with planning disabled keep the existing execution path."""
+        agent = Agent(name="bot", instructions="Just answer directly.")
+        provider = _RecordingProvider([AgentOutput(text="Done.")])
+
+        result = await run(agent, "Handle the task", provider=provider)
+
+        assert result.output == "Done."
+        assert len(provider.calls) == 1
+        assert provider.calls[0]["messages"][-1].content == "Handle the task"
+        assert "Planner output" not in provider.calls[0]["messages"][-1].content
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +502,42 @@ class TestRunStream:
         assert len(events) == 1
         assert isinstance(events[0], TextEvent)
         assert events[0].text == "data"
+
+    async def test_stream_planning_enabled_injects_plan_before_streaming(self) -> None:
+        """run.stream() performs the planner pre-pass before executor streaming."""
+        plan_calls: list[dict[str, Any]] = []
+        stream_calls: list[dict[str, Any]] = []
+
+        class PlanningStreamProvider:
+            async def complete(self, messages: Any, **kwargs: Any) -> Any:
+                plan_calls.append({"messages": list(messages), "kwargs": kwargs})
+
+                class FakeResponse:
+                    content = "1. Gather the facts."
+                    tool_calls: ClassVar[list[ToolCall]] = []
+                    usage = Usage()
+
+                return FakeResponse()
+
+            async def stream(self, messages: Any, **kwargs: Any) -> AsyncIterator[Any]:
+                stream_calls.append({"messages": list(messages), "kwargs": kwargs})
+                yield _FakeStreamChunk(delta="Done.", finish_reason="stop")
+
+        agent = Agent(
+            name="stream-bot",
+            instructions="Execute the task.",
+            planning_enabled=True,
+            planning_instructions="Return a short numbered plan.",
+        )
+        provider = PlanningStreamProvider()
+
+        events = [ev async for ev in run.stream(agent, "Handle the task", provider=provider)]
+
+        assert len(events) == 1
+        assert isinstance(events[0], TextEvent)
+        assert events[0].text == "Done."
+        assert plan_calls[0]["messages"][0].content == "Return a short numbered plan."
+        assert "Planner output:\n1. Gather the facts." in stream_calls[0]["messages"][-1].content
 
 
 class TestRunStreamToolCalls:
