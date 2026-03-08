@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-09 00:29:22 | run=20260308-234806-741576 | iter=2 | mode=build | story=US-003 | duration=1680s | status=success
 - 2026-03-09 00:01:20 | run=20260308-234806-741576 | iter=1 | mode=build | story=US-002 | duration=794s | status=success
 
 ## Events
@@ -17,3 +18,8 @@
 [2026-03-09 00:25:24] US-003: added context-management decision memo and architecture nav links
 [2026-03-09 00:27:05] US-003: verification completed (focused pytest pass, repo-wide lint/typecheck failures noted, mkdocs build checked)
 [2026-03-09 00:28:28] US-003: updated progress log with commit and verification details
+[2026-03-09 00:29:22] ITERATION 2 end (duration=1680s)
+[2026-03-09 00:29:24] ITERATION 3 start (mode=build story=US-004)
+[2026-03-09 00:36:22] US-004 audit complete: confirmed local stream contract, Temporal final-text-only behavior, and missing event/memory/cancellation parity
+[2026-03-09 00:38:43] US-004 docs updated: added Temporal parity memo and wired it into architecture docs navigation
+[2026-03-09 00:40:11] US-004 verification completed: focused pytest passed; ruff and pyright reported pre-existing package issues; mkdocs strict failed on pre-existing docs warnings; non-strict build passed

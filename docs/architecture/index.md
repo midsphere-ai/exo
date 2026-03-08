@@ -96,5 +96,6 @@ from orbiter.context import Context, ContextConfig, PromptBuilder
 - [Design Decisions](./design-decisions.md) -- Why Orbiter is structured the way it is
 - [Agent Runtime Control Contracts](./agent-runtime-control-contracts.md) -- Decision memo for planning, HITL, injected args, sub-agents, and progress controls
 - [Context Management and Infinite Context Stages](./context-management-infinite-context-stages.md) -- Decision memo for persisted summaries, checkpoints, retrieval-aware compaction, and branch-scoped context
+- [Temporal Parity Gaps](./temporal-parity-gaps.md) -- Decision memo for bringing durable execution to the same observable contract as local execution
 - [Async Patterns](./async-patterns.md) -- Async-first design and sync bridge
 - [Error Handling](./error-handling.md) -- Exception hierarchy and propagation
