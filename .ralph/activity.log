@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-09 00:57:29 | run=20260308-234806-741576 | iter=4 | mode=build | story=US-017 | duration=915s | status=success
 - 2026-03-09 00:42:12 | run=20260308-234806-741576 | iter=3 | mode=build | story=US-004 | duration=768s | status=success
 - 2026-03-09 00:29:22 | run=20260308-234806-741576 | iter=2 | mode=build | story=US-003 | duration=1680s | status=success
 - 2026-03-09 00:01:20 | run=20260308-234806-741576 | iter=1 | mode=build | story=US-002 | duration=794s | status=success
@@ -30,3 +31,6 @@
 [2026-03-09 00:50:51] US-017: extended core agent/config schema, loader passthrough, tests, and docs for runtime controls
 [2026-03-09 00:53:19] US-017: verification complete - orbiter-core pytest passed; targeted ruff and pyright passed; package-wide ruff/pyright show unrelated backlog; mkdocs unavailable in uv env
 [2026-03-09 00:56:34] US-017: updated progress log with commit and verification details
+[2026-03-09 00:57:29] ITERATION 4 end (duration=915s)
+[2026-03-09 00:57:32] ITERATION 5 start (mode=build story=US-018)
+[2026-03-09 00:59:37] US-018: audited planner routing path and identified missing pre-pass in core runner
