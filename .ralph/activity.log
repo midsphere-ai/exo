@@ -1,0 +1,12 @@
+# Activity Log
+
+## Run Summary
+
+## Events
+
+[2026-03-08 23:47:39] ITERATION 1 start (mode=build story=US-001)
+[2026-03-08 23:48:06] ITERATION 1 start (mode=build story=US-002)
+[2026-03-08 23:48:58] Start US-002 audit and repo context review
+[2026-03-08 23:56:35] Added US-002 agent-runtime control contracts decision memo and docs navigation links
+[2026-03-08 23:57:42] Completed US-002 verification: focused pytest passed; mkdocs build passed non-strict; ruff and pyright reported pre-existing repo failures
+[2026-03-09 00:00:23] Updated US-002 progress log
