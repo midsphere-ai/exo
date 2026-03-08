@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-09 00:42:12 | run=20260308-234806-741576 | iter=3 | mode=build | story=US-004 | duration=768s | status=success
 - 2026-03-09 00:29:22 | run=20260308-234806-741576 | iter=2 | mode=build | story=US-003 | duration=1680s | status=success
 - 2026-03-09 00:01:20 | run=20260308-234806-741576 | iter=1 | mode=build | story=US-002 | duration=794s | status=success
 
@@ -24,3 +25,8 @@
 [2026-03-09 00:38:43] US-004 docs updated: added Temporal parity memo and wired it into architecture docs navigation
 [2026-03-09 00:40:11] US-004 verification completed: focused pytest passed; ruff and pyright reported pre-existing package issues; mkdocs strict failed on pre-existing docs warnings; non-strict build passed
 [2026-03-09 00:41:36] US-004 progress updated: recorded commit, verification results, and parity memo outcomes in .ralph/progress.md
+[2026-03-09 00:42:12] ITERATION 3 end (duration=768s)
+[2026-03-09 00:42:14] ITERATION 4 start (mode=build story=US-017)
+[2026-03-09 00:50:51] US-017: extended core agent/config schema, loader passthrough, tests, and docs for runtime controls
+[2026-03-09 00:53:19] US-017: verification complete - orbiter-core pytest passed; targeted ruff and pyright passed; package-wide ruff/pyright show unrelated backlog; mkdocs unavailable in uv env
+[2026-03-09 00:56:34] US-017: updated progress log with commit and verification details

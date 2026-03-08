@@ -5,6 +5,45 @@ Started: Sun Mar  8 11:47:39 PM IST 2026
 - (add reusable patterns here)
 
 ---
+## [2026-03-09 00:55:24 IST] - US-017: Extend serializable agent-definition schema
+Thread: 
+Run: 20260308-234806-741576 (iteration 4)
+Run log: /home/atg/Github/orbiter-ai/.ralph/runs/run-20260308-234806-741576-iter-4.log
+Run summary: /home/atg/Github/orbiter-ai/.ralph/runs/run-20260308-234806-741576-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d243982d feat(agent-config): extend runtime control schema
+- Post-commit status: remaining pre-existing/unrelated files in worktree: `.ralph/activity.log`, `packages/orbiter-memory/*`, `packages/orbiter-models/src/orbiter/models/context_windows.py`, `packages/orbiter-web/.astro/data-store.json`, `tasks/prd-orbiter-framework.md`, `tasks/prd-orbiter-observability.md`, `tasks/prd-orbiter-web.md`, `tasks/prd-sukuna-compat.md`, `tasks/prd-agents-roadmap.json`, `AGENTS.md`, `assets/`, `audit.md`, `examples/distributed/mcp_sse_workers.py`, `uv.lock`, `.ralph/guardrails.md`, `.ralph/runs/`, `site/`
+- Verification:
+  - Command: `uv run pytest packages/orbiter-core/tests/ -q` -> PASS
+  - Command: `uv run ruff check packages/orbiter-core` -> FAIL (pre-existing repo lint issues in untouched files)
+  - Command: `uv run pyright packages/orbiter-core` -> FAIL (pre-existing repo type issues in untouched files)
+  - Command: `uv run ruff check packages/orbiter-core/src/orbiter/config.py packages/orbiter-core/src/orbiter/loader.py packages/orbiter-core/tests/test_config.py packages/orbiter-core/tests/test_loader.py packages/orbiter-core/tests/test_serialization.py` -> PASS
+  - Command: `uv run pyright packages/orbiter-core/src/orbiter/config.py packages/orbiter-core/src/orbiter/loader.py` -> PASS
+  - Command: `uv run mkdocs build` -> FAIL (`mkdocs` is not installed in the workspace tool env)
+- Files changed:
+  - packages/orbiter-core/src/orbiter/agent.py
+  - packages/orbiter-core/src/orbiter/config.py
+  - packages/orbiter-core/src/orbiter/loader.py
+  - packages/orbiter-core/tests/test_config.py
+  - packages/orbiter-core/tests/test_loader.py
+  - packages/orbiter-core/tests/test_serialization.py
+  - docs/reference/core/config.md
+  - docs/guides/agents.md
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added the new runtime-control fields to `Agent` and `AgentConfig`, with defaults that preserve current behavior and validation for planner overrides, budget-awareness strings, injected tool args, HITL tool names, and bounded parallel-subagent counts.
+  - Extended `Agent.to_dict()` and `Agent.from_dict()` so the runtime-control contract round-trips cleanly, including a full-field example and the required negative deserialization cases.
+  - Updated the YAML loader plus the agent/config docs so serialized configs and documented examples expose the same field set.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The cleanest way to keep constructor and serialized-config behavior aligned is to centralize validation helpers in `orbiter.config` and reuse them from `Agent`.
+  - Gotchas encountered
+    - `hitl_tools` validation has to run after auto-registration of built-in/context tools, otherwise valid tool names can fail construction.
+  - Useful context
+    - Package-wide `ruff` and `pyright` still report older backlog in untouched `orbiter-core` files, so focused file-level checks are useful for isolating this story's signal.
+---
 ## [2026-03-08 23:59:43 IST] - US-002: Research agent-runtime control contracts
 Thread: 
 Run: 20260308-234806-741576 (iteration 1)
