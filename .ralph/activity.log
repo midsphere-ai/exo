@@ -23,3 +23,4 @@
 [2026-03-09 00:36:22] US-004 audit complete: confirmed local stream contract, Temporal final-text-only behavior, and missing event/memory/cancellation parity
 [2026-03-09 00:38:43] US-004 docs updated: added Temporal parity memo and wired it into architecture docs navigation
 [2026-03-09 00:40:11] US-004 verification completed: focused pytest passed; ruff and pyright reported pre-existing package issues; mkdocs strict failed on pre-existing docs warnings; non-strict build passed
+[2026-03-09 00:41:36] US-004 progress updated: recorded commit, verification results, and parity memo outcomes in .ralph/progress.md

@@ -74,3 +74,37 @@ Run summary: /home/atg/Github/orbiter-ai/.ralph/runs/run-20260308-234806-741576-
   - Useful context
     - Current summaries are transient system messages, current tool-result offloads are process-local workspace artifacts, and current branch isolation stops short of long-term-memory and workspace isolation.
 ---
+## [2026-03-09 00:41:08 IST] - US-004: Research Temporal parity gaps
+Thread: 
+Run: 20260308-234806-741576 (iteration 3)
+Run log: /home/atg/Github/orbiter-ai/.ralph/runs/run-20260308-234806-741576-iter-3.log
+Run summary: /home/atg/Github/orbiter-ai/.ralph/runs/run-20260308-234806-741576-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3f36e0e4 docs(temporal): add parity gap memo
+- Post-commit status: remaining pre-existing/unrelated files in worktree: `packages/orbiter-memory/*`, `packages/orbiter-models/src/orbiter/models/context_windows.py`, `packages/orbiter-web/.astro/data-store.json`, `tasks/prd-orbiter-framework.md`, `tasks/prd-orbiter-observability.md`, `tasks/prd-orbiter-web.md`, `tasks/prd-sukuna-compat.md`, `tasks/prd-agents-roadmap.json`, `AGENTS.md`, `assets/`, `audit.md`, `examples/distributed/mcp_sse_workers.py`, `uv.lock`, `.ralph/guardrails.md`, `.ralph/runs/`, `site/`
+- Verification:
+  - Command: `uv run pytest packages/orbiter-core/tests/test_runner.py packages/orbiter-mcp/tests/test_progress.py packages/orbiter-distributed/tests/test_worker.py packages/orbiter-distributed/tests/test_events.py packages/orbiter-distributed/tests/test_temporal.py packages/orbiter-distributed/tests/test_cancel.py -q` -> PASS
+  - Command: `uv run ruff check packages/orbiter-core packages/orbiter-distributed packages/orbiter-mcp packages/orbiter-context` -> FAIL (pre-existing repo issues in untouched files)
+  - Command: `uv run pyright packages/orbiter-core packages/orbiter-distributed packages/orbiter-mcp packages/orbiter-context` -> FAIL (pre-existing repo issues in untouched files)
+  - Command: `uv run mkdocs build --strict` -> FAIL (`mkdocs` is not installed in the workspace tool env)
+  - Command: `uv run --with mkdocs-material --with pymdown-extensions mkdocs build --strict` -> FAIL (pre-existing docs warnings outside US-004)
+  - Command: `uv run --with mkdocs-material --with pymdown-extensions mkdocs build` -> PASS
+- Files changed:
+  - docs/architecture/temporal-parity-gaps.md
+  - docs/architecture/index.md
+  - mkdocs.yml
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added a Temporal parity decision memo that compares the current local execution contract against the current Temporal path for streaming, tool execution, MCP progress, memory, context, planning, and cancellation.
+  - Defined the externally observable parity contract, including event-surface and ordering rules, cancellation boundaries, and explicit-failure requirements for unsupported Temporal capabilities.
+  - Included a canonical detailed-event trace for the same task under local and Temporal execution, plus a small-slice closure order for fixing the current gaps.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The right parity baseline is `orbiter.runner.run.stream()` plus the distributed worker setup that prepares messages and memory before the first model call.
+  - Gotchas encountered
+    - Temporal currently executes the agent internally but only returns final text, while `TaskHandle.stream()` depends on Redis terminal events that the Temporal path never publishes.
+  - Useful context
+    - `packages/orbiter-distributed/src/orbiter/distributed/events.py` still cannot deserialize `mcp_progress`, `context`, or `message_injected`, so the distributed transport needs a prerequisite fix even before full Temporal parity lands.
+---
