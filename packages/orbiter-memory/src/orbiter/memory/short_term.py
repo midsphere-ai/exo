@@ -13,7 +13,6 @@ from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
     ToolMemory,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

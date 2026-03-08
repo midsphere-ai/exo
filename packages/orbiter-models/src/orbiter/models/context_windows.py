@@ -9,4 +9,5 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "claude-haiku-4-5-20251001": 200000,
     "gemini-2.0-flash": 1048576,
     "gemini-1.5-pro": 2097152,
+    "zai-org/glm-5-maas": 128000,
 }

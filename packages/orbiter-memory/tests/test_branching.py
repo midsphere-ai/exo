@@ -6,8 +6,6 @@ Verifies that ShortTermMemory correctly isolates items by conversation_id
 
 from __future__ import annotations
 
-import pytest
-
 from orbiter.memory.base import (
     AIMemory,
     HumanMemory,
@@ -16,7 +14,6 @@ from orbiter.memory.base import (
     ToolMemory,
 )
 from orbiter.memory.short_term import ShortTermMemory
-
 
 # ---------------------------------------------------------------------------
 # Helpers

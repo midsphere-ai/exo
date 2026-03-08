@@ -5,18 +5,19 @@ from __future__ import annotations
 import math
 import sys
 import types
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
 from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
     ChromaVectorMemoryStore,
-    Embeddings,
     EmbeddingProvider,
+    Embeddings,
     OpenAIEmbeddingProvider,
     OpenAIEmbeddings,
     SentenceTransformerEmbeddingProvider,
     VectorMemoryStore,
+    VertexEmbeddings,
     _build_where_filter,
     _cosine_similarity,
 )
@@ -824,7 +825,7 @@ class TestChromaVectorMemoryStore:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         mock_client, _mock_collection = _make_chroma_mock(monkeypatch)
-        import chromadb  # noqa: PLC0415
+        import chromadb
 
         store = ChromaVectorMemoryStore(SimpleEmbeddingProvider(), path="/tmp/testdb")
         store._ensure_collection()
@@ -860,3 +861,175 @@ class TestChromaVectorMemoryStore:
         assert len(results) == 1
         assert results[0].id == item.id
         assert results[0].content == "round trip content"
+
+
+# ---------------------------------------------------------------------------
+# VertexEmbeddings
+# ---------------------------------------------------------------------------
+
+
+def _make_vertex_mocks(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
+    """Inject mock google.genai and google.oauth2.service_account modules.
+
+    Returns (mock_genai_client_instance, mock_genai_module).
+    """
+    # Build fake google.genai module tree
+    mock_genai = types.ModuleType("google.genai")
+    mock_genai_types = types.ModuleType("google.genai.types")
+
+    mock_client_instance = MagicMock()
+    mock_genai.Client = MagicMock(return_value=mock_client_instance)  # type: ignore[attr-defined]
+
+    # EmbedContentConfig mock
+    mock_embed_config = MagicMock()
+    mock_genai_types.EmbedContentConfig = MagicMock(return_value=mock_embed_config)  # type: ignore[attr-defined]
+
+    # google namespace package
+    mock_google = types.ModuleType("google")
+    mock_google.genai = mock_genai  # type: ignore[attr-defined]
+
+    # google.oauth2 / service_account
+    mock_oauth2 = types.ModuleType("google.oauth2")
+    mock_sa_mod = types.ModuleType("google.oauth2.service_account")
+    mock_sa_creds = MagicMock()
+    mock_sa_mod.Credentials = MagicMock(return_value=mock_sa_creds)  # type: ignore[attr-defined]
+    mock_oauth2.service_account = mock_sa_mod  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+    monkeypatch.setitem(sys.modules, "google.genai.types", mock_genai_types)
+    monkeypatch.setitem(sys.modules, "google.oauth2", mock_oauth2)
+    monkeypatch.setitem(sys.modules, "google.oauth2.service_account", mock_sa_mod)
+
+    return mock_client_instance, mock_genai
+
+
+class TestVertexEmbeddings:
+    """Tests for VertexEmbeddings (all mocked — no real GCP calls)."""
+
+    def test_is_embeddings_subclass(self) -> None:
+        assert issubclass(VertexEmbeddings, Embeddings)
+
+    def test_vertex_embeddings_default_params(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Defaults: model=text-embedding-005, dimension=768, output_dimensionality=None."""
+        _make_vertex_mocks(monkeypatch)
+        emb = VertexEmbeddings()
+        assert emb._model == "text-embedding-005"
+        assert emb.dimension == 768
+        assert emb._output_dimensionality is None
+
+    def test_vertex_embeddings_adc(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No service account → credentials=None passed to genai.Client."""
+        _mock_client, mock_genai = _make_vertex_mocks(monkeypatch)
+        monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_BASE64", raising=False)
+
+        VertexEmbeddings(project="my-project", location="us-east1")
+
+        call_kwargs = mock_genai.Client.call_args.kwargs
+        assert call_kwargs["credentials"] is None
+        assert call_kwargs["project"] == "my-project"
+        assert call_kwargs["location"] == "us-east1"
+        assert call_kwargs["vertexai"] is True
+
+    def test_vertex_embeddings_service_account(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Base64 SA JSON → credentials object passed to genai.Client."""
+        import base64
+        import json as _json
+
+        _mock_client, mock_genai = _make_vertex_mocks(monkeypatch)
+
+        fake_sa = {"type": "service_account", "project_id": "proj"}
+        encoded = base64.b64encode(_json.dumps(fake_sa).encode()).decode()
+
+        VertexEmbeddings(service_account_base64=encoded)
+
+        call_kwargs = mock_genai.Client.call_args.kwargs
+        assert call_kwargs["credentials"] is not None
+
+    def test_vertex_embeddings_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """project/location/SA read from GOOGLE_CLOUD_PROJECT etc."""
+        import base64
+        import json as _json
+
+        _mock_client, mock_genai = _make_vertex_mocks(monkeypatch)
+
+        fake_sa = {"type": "service_account", "project_id": "env-proj"}
+        encoded = base64.b64encode(_json.dumps(fake_sa).encode()).decode()
+
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "env-project")
+        monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "europe-west1")
+        monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_BASE64", encoded)
+
+        VertexEmbeddings()
+
+        call_kwargs = mock_genai.Client.call_args.kwargs
+        assert call_kwargs["project"] == "env-project"
+        assert call_kwargs["location"] == "europe-west1"
+        assert call_kwargs["credentials"] is not None
+
+    def test_vertex_embeddings_embed_sync(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """embed() calls models.embed_content and returns the first embedding values."""
+        mock_client, _mock_genai = _make_vertex_mocks(monkeypatch)
+
+        expected = [0.1, 0.2, 0.3]
+        mock_embedding = MagicMock()
+        mock_embedding.values = expected
+        mock_resp = MagicMock()
+        mock_resp.embeddings = [mock_embedding]
+        mock_client.models.embed_content.return_value = mock_resp
+
+        emb = VertexEmbeddings(model="text-embedding-005", dimension=3)
+        result = emb.embed("hello vertex")
+
+        assert result == expected
+        call_kwargs = mock_client.models.embed_content.call_args.kwargs
+        assert call_kwargs["model"] == "text-embedding-005"
+        assert call_kwargs["contents"] == "hello vertex"
+        assert "config" not in call_kwargs  # no output_dimensionality set
+
+    async def test_vertex_embeddings_aembed_async(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """aembed() delegates to embed() via asyncio.to_thread."""
+        mock_client, _mock_genai = _make_vertex_mocks(monkeypatch)
+
+        expected = [0.4, 0.5, 0.6]
+        mock_embedding = MagicMock()
+        mock_embedding.values = expected
+        mock_resp = MagicMock()
+        mock_resp.embeddings = [mock_embedding]
+        mock_client.models.embed_content.return_value = mock_resp
+
+        emb = VertexEmbeddings(model="text-embedding-005", dimension=3)
+        result = await emb.aembed("async hello")
+
+        assert result == expected
+
+    def test_vertex_embeddings_output_dimensionality(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When output_dimensionality is set, EmbedContentConfig is passed to the API."""
+        mock_client, _mock_genai = _make_vertex_mocks(monkeypatch)
+
+        expected = [0.1, 0.2]
+        mock_embedding = MagicMock()
+        mock_embedding.values = expected
+        mock_resp = MagicMock()
+        mock_resp.embeddings = [mock_embedding]
+        mock_client.models.embed_content.return_value = mock_resp
+
+        emb = VertexEmbeddings(output_dimensionality=512)
+        assert emb.dimension == 512  # _dimension = output_dimensionality when set
+
+        emb.embed("truncated embedding")
+
+        call_kwargs = mock_client.models.embed_content.call_args.kwargs
+        assert "config" in call_kwargs
+        # EmbedContentConfig should have been constructed with output_dimensionality=512
+        import sys as _sys
+        genai_types = _sys.modules["google.genai.types"]
+        genai_types.EmbedContentConfig.assert_called_once_with(output_dimensionality=512)

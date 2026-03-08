@@ -4,9 +4,15 @@ from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
 
+from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    Embeddings,
+    OpenAIEmbeddings,
+    VectorMemoryStore,
+    VertexEmbeddings,
+)
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
-    AIMemory,
     AgentMemory,
+    AIMemory,
     HumanMemory,
     MemoryError,
     MemoryItem,
@@ -47,19 +53,17 @@ from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
 )
 
 __all__ = [
-    # events
-    "MEMORY_ADDED",
-    "MEMORY_CLEARED",
-    "MEMORY_SEARCHED",
-    # base types
-    "AgentMemory",
     "AIMemory",
-    # long-term
+    "AgentMemory",
+    "Embeddings",
     "ExtractionTask",
     "ExtractionType",
     "Extractor",
     "HumanMemory",
     "LongTermMemory",
+    "MEMORY_ADDED",
+    "MEMORY_CLEARED",
+    "MEMORY_SEARCHED",
     "MemoryError",
     "MemoryEventEmitter",
     "MemoryItem",
@@ -68,17 +72,18 @@ __all__ = [
     "MemoryPersistence",
     "MemoryStatus",
     "MemoryStore",
+    "OpenAIEmbeddings",
     "OrchestratorConfig",
-    # short-term
     "ShortTermMemory",
     "Summarizer",
-    # summary
     "SummaryConfig",
     "SummaryResult",
     "SummaryTemplate",
     "SystemMemory",
     "TaskStatus",
     "ToolMemory",
+    "VertexEmbeddings",
+    "VectorMemoryStore",
     "check_trigger",
     "generate_summary",
 ]

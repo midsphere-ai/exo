@@ -2648,15 +2648,21 @@ sqlite = [
 vector = [
     { name = "chromadb" },
 ]
+vertex = [
+    { name = "google-auth" },
+    { name = "google-genai" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", marker = "extra == 'sqlite'", specifier = ">=0.20" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29" },
     { name = "chromadb", marker = "extra == 'vector'", specifier = ">=0.6" },
+    { name = "google-auth", marker = "extra == 'vertex'", specifier = ">=2.0" },
+    { name = "google-genai", marker = "extra == 'vertex'", specifier = ">=1.0" },
     { name = "orbiter-core", editable = "packages/orbiter-core" },
 ]
-provides-extras = ["sqlite", "postgres", "vector"]
+provides-extras = ["sqlite", "postgres", "vector", "vertex"]
 
 [[package]]
 name = "orbiter-models"

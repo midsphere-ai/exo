@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
-    AIMemory,
     AgentMemory,
+    AIMemory,
     HumanMemory,
     MemoryError,
     MemoryItem,
@@ -441,7 +441,9 @@ class TestMemoryStoreDefaultSearch:
 
 class TestAgentMemory:
     def test_creation(self) -> None:
-        from orbiter.memory.short_term import ShortTermMemory  # pyright: ignore[reportMissingImports]
+        from orbiter.memory.short_term import (
+            ShortTermMemory,  # pyright: ignore[reportMissingImports]
+        )
 
         st = ShortTermMemory()
         lt = ShortTermMemory()
@@ -455,13 +457,17 @@ class TestAgentMemory:
         assert Exported is AgentMemory
 
     def test_isinstance_check(self) -> None:
-        from orbiter.memory.short_term import ShortTermMemory  # pyright: ignore[reportMissingImports]
+        from orbiter.memory.short_term import (
+            ShortTermMemory,  # pyright: ignore[reportMissingImports]
+        )
 
         mem = AgentMemory(short_term=ShortTermMemory(), long_term=ShortTermMemory())
         assert isinstance(mem, AgentMemory)
 
     def test_fields_are_memory_stores(self) -> None:
-        from orbiter.memory.short_term import ShortTermMemory  # pyright: ignore[reportMissingImports]
+        from orbiter.memory.short_term import (
+            ShortTermMemory,  # pyright: ignore[reportMissingImports]
+        )
 
         mem = AgentMemory(short_term=ShortTermMemory(), long_term=ShortTermMemory())
         assert isinstance(mem.short_term, MemoryStore)

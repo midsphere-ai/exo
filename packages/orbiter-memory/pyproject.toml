@@ -11,6 +11,7 @@ dependencies = [
 sqlite = ["aiosqlite>=0.20"]
 postgres = ["asyncpg>=0.29"]
 vector = ["chromadb>=0.6"]
+vertex = ["google-genai>=1.0", "google-auth>=2.0"]
 
 [tool.uv.sources]
 orbiter-core = { workspace = true }

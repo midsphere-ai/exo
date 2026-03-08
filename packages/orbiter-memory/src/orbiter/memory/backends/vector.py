@@ -17,7 +17,6 @@ from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
     MemoryStatus,
 )
 
-
 # ---------------------------------------------------------------------------
 # EmbeddingProvider protocol
 # ---------------------------------------------------------------------------
@@ -83,7 +82,9 @@ class SentenceTransformerEmbeddingProvider:
     __slots__ = ("_model_name", "_st_model")
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]  # noqa: PLC0415
+        from sentence_transformers import (
+            SentenceTransformer,  # type: ignore[import-untyped]
+        )
 
         self._model_name = model_name
         self._st_model = SentenceTransformer(model_name)
@@ -170,6 +171,105 @@ class OpenAIEmbeddings(Embeddings):
         # OpenAI sync client used in thread for simplicity
         import asyncio
 
+        return await asyncio.to_thread(self.embed, text)
+
+
+class VertexEmbeddings(Embeddings):
+    """Vertex AI embedding provider.
+
+    Supports text-embedding-004, text-embedding-005,
+    text-multilingual-embedding-002, and gemini-embedding-001.
+
+    Authentication matches VertexProvider — reads from kwargs or env vars:
+
+    +-------------------------------------+------------------------------------+
+    | Constructor kwarg                   | Env-var fallback                   |
+    +=====================================+====================================+
+    | ``project``                         | ``GOOGLE_CLOUD_PROJECT``           |
+    +-------------------------------------+------------------------------------+
+    | ``location``                        | ``GOOGLE_CLOUD_LOCATION``          |
+    +-------------------------------------+------------------------------------+
+    | ``service_account_base64``          | ``GOOGLE_SERVICE_ACCOUNT_BASE64``  |
+    +-------------------------------------+------------------------------------+
+
+    Requires ``google-genai>=1.0`` and ``google-auth>=2.0`` (install the
+    ``vertex`` optional dependency: ``pip install orbiter-memory[vertex]``).
+
+    Args:
+        model: Embedding model name. Defaults to ``"text-embedding-005"``.
+        dimension: Expected output dimension. Defaults to 768.
+            Use 3072 for ``gemini-embedding-001``.
+        output_dimensionality: If set, passed to the API to truncate the
+            output vector to this size (must be <= model's native dimension).
+        project: GCP project ID.
+        location: GCP region. Defaults to ``"us-central1"``.
+        service_account_base64: Base64-encoded service account JSON.
+            Falls back to Application Default Credentials if omitted.
+    """
+
+    __slots__ = ("_client", "_dimension", "_model", "_output_dimensionality")
+
+    def __init__(
+        self,
+        *,
+        model: str = "text-embedding-005",
+        dimension: int = 768,
+        output_dimensionality: int | None = None,
+        project: str | None = None,
+        location: str | None = None,
+        service_account_base64: str | None = None,
+    ) -> None:
+        import base64
+        import json
+        import os
+
+        from google import genai  # lazy import
+
+        self._model = model
+        self._dimension = output_dimensionality or dimension
+        self._output_dimensionality = output_dimensionality
+
+        _project = project or os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+        _location = location or os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+        _sa_b64 = service_account_base64 or os.environ.get("GOOGLE_SERVICE_ACCOUNT_BASE64")
+
+        credentials = None
+        if _sa_b64:
+            from google.oauth2 import service_account  # lazy import
+
+            raw_json = base64.b64decode(_sa_b64)
+            info = json.loads(raw_json)
+            credentials = service_account.Credentials.from_service_account_info(
+                info,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+
+        self._client = genai.Client(
+            vertexai=True,
+            project=_project,
+            location=_location,
+            credentials=credentials,
+        )
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    def embed(self, text: str) -> list[float]:
+        from google.genai import types  # lazy import
+
+        config = (
+            types.EmbedContentConfig(output_dimensionality=self._output_dimensionality)
+            if self._output_dimensionality is not None
+            else None
+        )
+        kwargs: dict[str, Any] = {"model": self._model, "contents": text}
+        if config is not None:
+            kwargs["config"] = config
+        response = self._client.models.embed_content(**kwargs)
+        return list(response.embeddings[0].values)
+
+    async def aembed(self, text: str) -> list[float]:
         return await asyncio.to_thread(self.embed, text)
 
 

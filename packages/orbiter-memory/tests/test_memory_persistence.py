@@ -5,14 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
 from orbiter.hooks import HookPoint
 from orbiter.memory.base import AIMemory, HumanMemory, MemoryMetadata, SystemMemory, ToolMemory
 from orbiter.memory.persistence import MemoryPersistence
 from orbiter.memory.short_term import ShortTermMemory
 from orbiter.types import AssistantMessage, SystemMessage, ToolResult, UserMessage
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -261,7 +258,6 @@ class TestPersistenceIntegration:
 
         # Use the stream test helpers from test_runner
         from collections.abc import AsyncIterator
-
         from unittest.mock import AsyncMock
 
         call_count = 0
