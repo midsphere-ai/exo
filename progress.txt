@@ -3925,3 +3925,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Agent-core has 5 retriever types (Vector, Sparse, Hybrid, Graph, Agentic) — port all to orbiter-retrieval
   - Optional deps pattern: core types + ABCs + InMemoryVectorStore work with zero optional deps; heavy backends (chromadb, asyncpg, tiktoken) are extras
 ---
+
+## 2026-03-10 - US-034
+- What was implemented: orbiter-retrieval package scaffold with core data types
+- Files changed:
+  - packages/orbiter-retrieval/pyproject.toml (new — package config with pydantic + orbiter-core deps)
+  - packages/orbiter-retrieval/README.md (new — package readme)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (new — extend_path + public exports)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/types.py (new — Document, Chunk, RetrievalResult, RetrievalError)
+  - pyproject.toml (updated — added orbiter-retrieval to workspace members, dev deps, and sources)
+  - uv.lock (updated — new package resolved)
+- **Learnings for future iterations:**
+  - orbiter-retrieval follows same namespace pattern as orbiter-guardrail: `src/orbiter/retrieval/` with `extend_path` in `__init__.py`
+  - README.md is required by hatchling build — uv sync fails without it when pyproject.toml declares `readme = "README.md"`
+  - Use `# pyright: ignore[reportMissingImports]` on cross-namespace imports in `__init__.py` (same pattern as orbiter-guardrail)
+  - Frozen Pydantic models (`BaseModel, frozen=True`) are the standard for immutable data types in Orbiter — not Python dataclasses
+  - Root pyproject.toml needs updates in three places: workspace members, dependency-groups.dev, and tool.uv.sources
+---

@@ -15,6 +15,7 @@ members = [
     "packages/orbiter-observability",
     "packages/orbiter-distributed",
     "packages/orbiter-guardrail",
+    "packages/orbiter-retrieval",
     "packages/orbiter-eval",
     "packages/orbiter-a2a",
     "packages/orbiter-cli",
@@ -35,6 +36,7 @@ dev = [
     "orbiter-observability",
     "orbiter-distributed",
     "orbiter-guardrail",
+    "orbiter-retrieval",
     "orbiter-eval",
     "orbiter-a2a",
     "orbiter-cli",
@@ -62,6 +64,7 @@ orbiter-sandbox = { workspace = true }
 orbiter-observability = { workspace = true }
 orbiter-distributed = { workspace = true }
 orbiter-guardrail = { workspace = true }
+orbiter-retrieval = { workspace = true }
 orbiter-eval = { workspace = true }
 orbiter-a2a = { workspace = true }
 orbiter-cli = { workspace = true }
