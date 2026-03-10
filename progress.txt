@@ -4723,3 +4723,13 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - ReMeStrategy stores pattern metadata in `MemoryItem.metadata.extra` dict (when_to_use, pattern_type) rather than dedicated fields
   - Pipeline flattening is automatic — `a >> b >> c` produces a flat 3-strategy pipeline, no nesting
 ---
+
+## 2026-03-11 - US-085
+- Created docs/porting-guide/operator-optimization.md — comprehensive mapping of agent-core's agent_evolving/ system to Orbiter's operator pattern
+- Covers all 5 required sections: agent-core overview (Trainer, Operator ABC, 3-dimension evolution, checkpoint/resume), Orbiter equivalent (component mapping, architecture differences), code comparison (defining operators, running optimization loops, textual gradients, multi-domain optimization), EvolutionPipeline/SynthesisPipeline coexistence, and full migration table
+- Files changed: docs/porting-guide/operator-optimization.md (new), prd.json
+- **Learnings for future iterations:**
+  - Porting guides follow a consistent format: header with epic/date, 4-5 numbered sections, tables for component mappings, side-by-side code comparisons
+  - The operator pattern was added alongside EvolutionPipeline (not replacing it) — the two serve different paradigms (parameter optimization vs. data augmentation)
+  - orbiter-train has both operator/ subpackage (ABC + concrete operators) and optimizer.py (InstructionOptimizer, ToolOptimizer) at the package level
+---
