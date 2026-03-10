@@ -4614,3 +4614,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Checkpoint pattern: save operator states via `op.get_state()`, restore via `op.load_state()`; keyed by `op.name`
   - `runtime_checkable` Protocol classes allow isinstance checks for duck-typed interfaces
 ---
+
+## 2026-03-10 - US-076
+- Created `docs/porting-guide/rails.md` — agent-core to Orbiter rail system mapping
+- Section 1: Agent-core overview (AgentCallbackEvent, AgentRail ABC, @rail decorator, 10 events, priority ordering, cross-rail state)
+- Section 2: Orbiter equivalent with concept mapping, lifecycle event mapping, HookManager integration
+- Section 3: Side-by-side code examples (block dangerous tool, cross-rail state, agent registration)
+- Section 4: Migration table mapping every agent-core rail class/function to Orbiter import
+- Created `packages/orbiter-core/tests/test_rail_docs.py` — 4 tests verifying code examples typecheck and run
+- Files changed: docs/porting-guide/rails.md, packages/orbiter-core/tests/test_rail_docs.py, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Orbiter has no @rail decorator — only class-based Rail ABC; agent-core's decorator pattern was intentionally dropped
+  - Agent-core has 10 lifecycle events vs Orbiter's 7 HookPoint values — exception events consolidated into ERROR, ON_HANDOFF not yet ported
+  - RailManager integrates via hook_for() which creates Hook-compatible async callables
+  - Pre-existing test failures in test_runner.py/test_swarm.py (reasoning_content attribute) are unrelated to this work
+---

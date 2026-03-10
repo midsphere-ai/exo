@@ -1336,7 +1336,7 @@
         "Typecheck passes"
       ],
       "priority": 76,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 6 implementation stories complete. References agent-core's rail/ directory."
     },
     {
