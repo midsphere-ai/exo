@@ -4580,3 +4580,37 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Optimizer takes llm_fn with same signature as LLMCallOperator (system_prompt=, user_prompt=, **kw) — keeps testing easy with mock functions
   - The optimizer's train() phase runs backward+step; synthesise() is pass-through; evaluate() returns 0.0 (evaluation is external)
 ---
+
+## 2026-03-10 - US-074
+- What was implemented: Tests for ToolOptimizer beam search description optimization (22 tests)
+- Files changed:
+  - packages/orbiter-train/tests/test_tool_optimizer.py (new)
+- **Learnings for future iterations:**
+  - ToolOptimizer implementation was already complete — only tests were missing
+  - Mock providers for ToolOptimizer need to handle 3 LLM call types: generate (tool description), evaluate (numeric score), refine
+  - beam_width=N generates N candidates + N evaluations + 1 refine = 2N+1 total LLM calls per operator
+  - Non-numeric evaluation scores fall back to 0.5 — tests should cover this edge case
+---
+
+## 2026-03-10 - US-075
+- What was implemented: OperatorTrainer — training loop with checkpoint/resume (Epic 10)
+  - `OperatorTrainer(Trainer)` extends existing Trainer ABC with operator-aware training loop
+  - `check_agent()` validates agent has non-empty `operators` list of Operator instances
+  - `check_dataset()` validates train/test data are sequences of dicts with `input` key
+  - `async train()` implements epoch loop: evaluate → backward → step → validate → checkpoint
+  - `FileCheckpointStore` saves/loads JSON checkpoint files per epoch
+  - `OperatorTrainConfig(TrainConfig)` adds `checkpoint_dir` and `resume_from` fields
+  - Resume support: `resume_from` constructor param loads checkpoint and restores operator states
+  - `CheckpointStore` protocol for custom store implementations
+  - `EvalFn` protocol for evaluation function type safety
+  - Exported `OperatorTrainer`, `OperatorTrainConfig`, `FileCheckpointStore` from `orbiter.train`
+- Files changed:
+  - packages/orbiter-train/src/orbiter/train/operator_trainer.py (new)
+  - packages/orbiter-train/tests/test_operator_trainer.py (new — 38 tests)
+  - packages/orbiter-train/src/orbiter/train/__init__.py (updated exports)
+- **Learnings for future iterations:**
+  - Trainer ABC `__slots__` pattern: subclasses must declare their own `__slots__` for new instance attrs
+  - pyright needs explicit type annotation (`cfg: TrainConfig`) before narrowing conditional branches to avoid `reportAttributeAccessIssue` when fallback is `self._config`
+  - Checkpoint pattern: save operator states via `op.get_state()`, restore via `op.load_state()`; keyed by `op.name`
+  - `runtime_checkable` Protocol classes allow isinstance checks for duck-typed interfaces
+---

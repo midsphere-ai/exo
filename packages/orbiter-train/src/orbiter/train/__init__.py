@@ -10,8 +10,14 @@ from orbiter.train.evolution import (  # pyright: ignore[reportMissingImports]
     EvolutionState,
     EvolutionStrategy,
 )
+from orbiter.train.operator_trainer import (  # pyright: ignore[reportMissingImports]
+    FileCheckpointStore,
+    OperatorTrainConfig,
+    OperatorTrainer,
+)
 from orbiter.train.optimizer import (  # pyright: ignore[reportMissingImports]
     InstructionOptimizer,
+    ToolOptimizer,
 )
 from orbiter.train.operator import (  # pyright: ignore[reportMissingImports]
     LLMCallOperator,
@@ -63,6 +69,7 @@ from orbiter.train.verl import (  # pyright: ignore[reportMissingImports]
 __all__ = [
     "DataSynthesiser",
     "DefaultStrategy",
+    "FileCheckpointStore",
     "EpochResult",
     "EvolutionConfig",
     "EvolutionError",
@@ -77,6 +84,8 @@ __all__ = [
     "MemoryCallOperator",
     "MemoryCallTrace",
     "Operator",
+    "OperatorTrainConfig",
+    "OperatorTrainer",
     "RewardSpec",
     "SynthesisConfig",
     "SynthesisError",
@@ -86,6 +95,7 @@ __all__ = [
     "TemplateSynthesiser",
     "ToolCallOperator",
     "ToolCallTrace",
+    "ToolOptimizer",
     "TrainConfig",
     "TrainMetrics",
     "Trainer",
