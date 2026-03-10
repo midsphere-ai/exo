@@ -4696,3 +4696,30 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - TaskLoopQueue is an Orbiter-only addition not present in agent-core — document it as "no equivalent" in the agent-core column
   - agent-core analysis doc at `agent-core-vs-orbiter-analysis.md` is the authoritative reference for original openjiuwen architecture
 ---
+
+## 2026-03-11 - US-083
+- Created docs/porting-guide/deep-agent-toolkit.md mapping agent-core's deep_agent/ toolkit to Orbiter
+- Covers: file tools (FileReader/FileEditor → FilesystemTool), shell execution (BashTool → ShellTool/TerminalTool), sandboxed code (PythonInterpreterTool → CodeTool), todo CRUD (TodoTool → TaskManager), priority event queue (EventQueue → TaskLoopQueue)
+- Includes side-by-side code comparisons for tool registration and shell command execution
+- Full migration table with 22 entries mapping agent-core paths to Orbiter imports
+- Files changed: docs/porting-guide/deep-agent-toolkit.md, prd.json
+- **Learnings for future iterations:**
+  - DeepSearch tools live in examples/advanced/deepsearch/tools/ — 15 tool files total
+  - Orbiter sandbox tools (FilesystemTool, ShellTool, TerminalTool, CodeTool) are in orbiter-sandbox package, not orbiter-core
+  - Many deep_agent tools have no direct Orbiter equivalent (BrowserTool, MdifyTool, ToolGeneratorTool, ReformulatorTool, DeepResearcherTool)
+  - Pyright doesn't meaningfully check .md files — the "typecheck passes" criterion means no regressions in Python packages
+---
+
+## 2026-03-11 - US-084
+- Created docs/porting-guide/context-evolver.md mapping agent-core's context_evolver/ to Orbiter's orbiter-memory evolution package
+- Section 1: Agent-core overview covering ACE (playbook counters), ReasoningBank (structured entries + semantic recall), ReMe (pattern extraction), and >> / | composition operators
+- Section 2: Orbiter equivalents — ACEStrategy, ReasoningBankStrategy, ReMeStrategy, MemoryEvolutionPipeline
+- Section 3: Side-by-side code comparisons for pipeline composition, ACE reflection, and ReasoningBank recall
+- Section 4: Full migration table with 16 symbol mappings
+- Files changed: docs/porting-guide/context-evolver.md (new), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Evolution strategies are in orbiter-memory (not orbiter-core) at `packages/orbiter-memory/src/orbiter/memory/evolution/`
+  - LLM protocols (ReflectionModel, PatternModel) both use `async (prompt: str) -> str` — same signature, different names for clarity
+  - ReMeStrategy stores pattern metadata in `MemoryItem.metadata.extra` dict (when_to_use, pattern_type) rather than dedicated fields
+  - Pipeline flattening is automatic — `a >> b >> c` produces a flat 3-strategy pipeline, no nesting
+---
