@@ -3792,3 +3792,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Only workflow mode gets WorkflowState — handoff (conversation-driven) and team (tool-based) modes are unchanged
   - 206 pyright errors are pre-existing across workspace; 0 errors in swarm/graph/nested/agent_group files
 ---
+
+## 2026-03-10 - US-026
+- Implemented safe AST-based expression evaluator in `_internal/expression.py` (194 lines)
+- `evaluate_expression(expr, variables)` with AST parsing via `ast.parse(mode='eval')`
+- Security: blocks dunder access, imports, dangerous function calls, lambda, comprehensions, walrus, starred
+- Limits: MAX_EXPRESSION_LENGTH=500, MAX_AST_DEPTH=10, MAX_COLLECTION_SIZE=1000
+- JS normalisation: `&&`→`and`, `||`→`or`, `===`→`==`, `!==`→`!=`, `true`/`false`/`null`/`undefined`
+- Supports: comparisons, boolean ops, arithmetic, string ops, dict/list indexing, ternary, builtins (len, abs, min, max, etc.)
+- 71 tests covering valid expressions, JS normalisation, security attack vectors, DOS limits, edge cases
+- Files changed: `packages/orbiter-core/src/orbiter/_internal/expression.py` (new), `packages/orbiter-core/tests/test_expression.py` (new)
+- **Learnings for future iterations:**
+  - `ast.walk()` visits nodes in BFS order — if a Call wraps a Lambda, the Call node is visited first; order validation checks accordingly
+  - Parenthesised constants like `(((1)))` don't increase AST depth — use nested ternaries or binary ops to test depth limits
+  - `__builtins__` can be either a dict or a module depending on context — use conditional access pattern
+  - ruff SIM210 flags `True if x else False` — use `bool(x)` instead
+---
