@@ -60,6 +60,10 @@ from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     check_trigger,
     generate_summary,
 )
+from orbiter.memory.evolution import (  # pyright: ignore[reportMissingImports]
+    MemoryEvolutionPipeline,
+    MemoryEvolutionStrategy,
+)
 
 __all__ = [
     # encryption
@@ -109,4 +113,7 @@ __all__ = [
     "ToolMemory",
     "check_trigger",
     "generate_summary",
+    # evolution
+    "MemoryEvolutionPipeline",
+    "MemoryEvolutionStrategy",
 ]
