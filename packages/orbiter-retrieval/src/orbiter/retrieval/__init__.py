@@ -14,6 +14,7 @@ from orbiter.retrieval.embeddings import Embeddings  # pyright: ignore[reportMis
 from orbiter.retrieval.http_embeddings import HTTPEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.hybrid_retriever import HybridRetriever  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.query_rewriter import QueryRewriter  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.parsers import (  # pyright: ignore[reportMissingImports]
     JSONParser,
     MarkdownParser,
@@ -58,6 +59,7 @@ __all__ = [
     "ParagraphChunker",
     "Parser",
     "PDFParser",
+    "QueryRewriter",
     "Reranker",
     "Retriever",
     "RetrievalError",
