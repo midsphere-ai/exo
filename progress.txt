@@ -3731,3 +3731,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Keyword search on encrypted content won't work since inner store sees ciphertext — metadata/type/status filters work normally
   - `cryptography` package is already available in the workspace venv (no extra install needed for dev)
 ---
+
+## 2026-03-10 - US-022
+- What was implemented: LLM-based memory deduplication (`MemUpdateChecker`) with UpdateDecision, MergeResult, and LongTermMemory integration
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/dedup.py (new — UpdateDecision StrEnum, MergeResult dataclass, MemUpdateChecker class, _parse_llm_response helper)
+  - packages/orbiter-memory/src/orbiter/memory/long_term.py (added optional update_checker param to LongTermMemory, add() delegates to checker when present)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (added MemUpdateChecker, MergeResult, UpdateDecision exports)
+  - packages/orbiter-memory/tests/test_dedup.py (new — 32 tests covering enum values, exact-match fallback, LLM-based dedup, JSON parsing edge cases, LongTermMemory integration)
+- **Learnings for future iterations:**
+  - MemUpdateChecker takes optional `checker: Callable[[str], Awaitable[str]]` — same LLM-agnostic pattern as Extractor protocol
+  - When no checker provided, falls back to exact content+type match (preserves original LongTermMemory behavior)
+  - LLM response parsed with safe fallback: unparseable JSON defaults to ADD (safe — never loses data)
+  - Markdown code fences in LLM responses are stripped before JSON parsing
+  - MergeResult.delete_ids lists IDs to remove from store for DELETE and MERGE decisions
+  - MERGE with merged_content=None preserves the original item content unchanged
+  - First add with empty store skips checker entirely (returns ADD without calling LLM)
+---

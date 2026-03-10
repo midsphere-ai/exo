@@ -20,6 +20,10 @@ from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
     MemoryMetadata,
     MemoryStatus,
 )
+from orbiter.memory.dedup import (  # pyright: ignore[reportMissingImports]
+    MemUpdateChecker,
+    UpdateDecision,
+)
 
 # ---------------------------------------------------------------------------
 # Extraction types
@@ -137,19 +141,48 @@ class LongTermMemory:
         namespace: Isolation namespace for multi-tenant usage.
     """
 
-    __slots__ = ("_items", "namespace")
+    __slots__ = ("_items", "_update_checker", "namespace")
 
-    def __init__(self, *, namespace: str = "default") -> None:
+    def __init__(
+        self,
+        *,
+        namespace: str = "default",
+        update_checker: MemUpdateChecker | None = None,
+    ) -> None:
         self.namespace = namespace
         self._items: dict[str, MemoryItem] = {}
+        self._update_checker = update_checker
 
     async def add(self, item: MemoryItem) -> None:
-        """Persist a memory item, deduplicating by content."""
-        # Check for duplicate content
-        for existing in self._items.values():
-            if existing.content == item.content and existing.memory_type == item.memory_type:
-                return  # Skip duplicate
-        self._items[item.id] = item
+        """Persist a memory item, deduplicating by content.
+
+        When an ``update_checker`` is configured, delegates deduplication to it.
+        Otherwise falls back to exact content + type matching.
+        """
+        if self._update_checker is not None:
+            existing = list(self._items.values())
+            result = await self._update_checker.check(item, existing)
+
+            if result.decision == UpdateDecision.SKIP:
+                return
+            if result.decision == UpdateDecision.DELETE:
+                for del_id in result.delete_ids:
+                    self._items.pop(del_id, None)
+                self._items[item.id] = item
+            elif result.decision == UpdateDecision.MERGE:
+                for del_id in result.delete_ids:
+                    self._items.pop(del_id, None)
+                if result.merged_content:
+                    item = item.model_copy(update={"content": result.merged_content})
+                self._items[item.id] = item
+            else:  # ADD
+                self._items[item.id] = item
+        else:
+            # Original exact-match dedup behavior
+            for existing_item in self._items.values():
+                if existing_item.content == item.content and existing_item.memory_type == item.memory_type:
+                    return  # Skip duplicate
+            self._items[item.id] = item
 
     async def get(self, item_id: str) -> MemoryItem | None:
         """Retrieve a memory item by ID."""

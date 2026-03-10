@@ -38,6 +38,11 @@ from orbiter.memory.encrypted import (  # pyright: ignore[reportMissingImports]
     EncryptedMemoryStore,
     derive_key,
 )
+from orbiter.memory.dedup import (  # pyright: ignore[reportMissingImports]
+    MemUpdateChecker,
+    MergeResult,
+    UpdateDecision,
+)
 from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     Summarizer,
     SummaryConfig,
@@ -51,6 +56,10 @@ __all__ = [
     # encryption
     "EncryptedMemoryStore",
     "derive_key",
+    # dedup
+    "MemUpdateChecker",
+    "MergeResult",
+    "UpdateDecision",
     # events
     "MEMORY_ADDED",
     "MEMORY_CLEARED",
