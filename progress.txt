@@ -4066,3 +4066,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - HybridRetriever accepts generic Retriever types (not specifically VectorRetriever/SparseRetriever) for flexibility
   - vector_weight controls balance: 0.5 = equal, >0.5 favours dense, <0.5 favours sparse; sparse_weight = 1 - vector_weight
 ---
+
+## 2026-03-10 - US-043
+- Implemented Reranker ABC with `async rerank(query, results, *, top_k=5) -> list[RetrievalResult]`
+- Implemented LLMReranker: sends query + passage texts to LLM via `get_provider()`, parses JSON ranking response, reorders results with descending scores
+- Configurable `model: str` and `prompt_template: str` with `{query}` and `{passages}` placeholders
+- Robust `_parse_ranking()` with fallback to original order on malformed LLM output
+- Original scores preserved in `metadata["original_score"]`
+- Files changed:
+  - `packages/orbiter-retrieval/src/orbiter/retrieval/reranker.py` (new)
+  - `packages/orbiter-retrieval/tests/test_reranker.py` (new, 19 tests)
+  - `packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py` (exports)
+- **Learnings for future iterations:**
+  - Lazy imports inside methods (e.g., `from orbiter.models import get_provider`) can't be monkeypatched via `module.attr` — monkeypatch the source module instead (`orbiter.models.get_provider`)
+  - Reranker follows same ABC pattern as Retriever: single abstract async method, concrete impl in same or sibling file
+  - RetrievalResult is frozen — must create new instances when changing score/metadata
+---
