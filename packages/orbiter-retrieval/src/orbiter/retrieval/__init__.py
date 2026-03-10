@@ -13,6 +13,10 @@ from orbiter.retrieval.types import (  # pyright: ignore[reportMissingImports]
     RetrievalError,
     RetrievalResult,
 )
+from orbiter.retrieval.vector_store import (  # pyright: ignore[reportMissingImports]
+    InMemoryVectorStore,
+    VectorStore,
+)
 from orbiter.retrieval.vertex_embeddings import VertexEmbeddings  # pyright: ignore[reportMissingImports]
 
 __all__ = [
@@ -20,8 +24,10 @@ __all__ = [
     "Document",
     "Embeddings",
     "HTTPEmbeddings",
+    "InMemoryVectorStore",
     "OpenAIEmbeddings",
     "RetrievalError",
     "RetrievalResult",
+    "VectorStore",
     "VertexEmbeddings",
 ]
