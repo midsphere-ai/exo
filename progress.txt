@@ -4052,3 +4052,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `index()` replaces previous data entirely (not incremental) — keeps implementation simple
   - Only chunks with positive BM25 scores are returned (no-match chunks excluded automatically)
 ---
+
+## 2026-03-10 - US-042
+- What was implemented: HybridRetriever combining dense (vector) and sparse (BM25) results via Reciprocal Rank Fusion
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/hybrid_retriever.py (new — HybridRetriever with weighted RRF fusion)
+  - packages/orbiter-retrieval/tests/test_hybrid_retriever.py (new — 15 tests covering basic behaviour, RRF fusion ranking, deduplication, defaults)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — export HybridRetriever)
+- **Learnings for future iterations:**
+  - RRF formula: score = sum(weight * 1/(k + rank)) per result across both lists; k=60 is the standard constant
+  - Dedup key is (document_id, index) since Chunk is frozen Pydantic model — same chunk from both retrievers merges into one result
+  - asyncio.gather runs both retrievers concurrently — no sequential bottleneck
+  - HybridRetriever accepts generic Retriever types (not specifically VectorRetriever/SparseRetriever) for flexibility
+  - vector_weight controls balance: 0.5 = equal, >0.5 favours dense, <0.5 favours sparse; sparse_weight = 1 - vector_weight
+---
