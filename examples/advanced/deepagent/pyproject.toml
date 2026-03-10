@@ -1,28 +1,26 @@
 [project]
-name = "jiuwen-opensource"
+name = "deepagent-example"
 version = "0.1.0"
-description = "Add your description here"
+description = "DeepAgent — multi-agent ReAct research system built on Orbiter"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    # --- Orbiter framework packages ---
+    # orbiter-core: Agent, Swarm, Tool, Runner, HookManager — the agent execution backbone
+    "orbiter-core",
+    # orbiter-models: ModelProvider protocol, model registry, streaming — LLM abstraction layer
+    "orbiter-models",
+    # --- Third-party dependencies ---
     "aiohttp==3.11.12",
-    "langgraph==0.6.3",
     "mcp>=1.24.0",
     "pydantic>=2.11.7",
     "python-dateutil==2.9.0.post0",
-    "sqlalchemy==2.0.41",
     "openai==1.108.0",
     "cacheout==0.16.0",
-    "mermaid-py==0.8.0",
-    "openjiuwen==0.1.3",
 ]
 
 [tool.uv]
 default-groups = ['dev']
-
-[[tool.uv.index]]
-name = "aliyun"
-url = "https://mirrors.aliyun.com/pypi/simple/"
 
 [dependency-groups]
 dev = [
