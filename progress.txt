@@ -4462,3 +4462,23 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - File persistence uses _save() on every record() call for durability
   - Tests use MockModel with optional per-content mapping for varied classification results
 ---
+
+## 2026-03-10 - US-067
+- Implemented ReasoningBankStrategy with ReasoningEntry dataclass (title/description/content/item_id)
+- evolve() deduplicates by semantic similarity (embeddings) or keyword Jaccard fallback
+- recall(query, top_k=5) returns top-k ReasoningEntry objects by similarity
+- Keeps longer/more detailed entry when deduplicating
+- MemoryItem content parsed as JSON {"title","description","content"} with plain-text fallback
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/evolution/reasoning_bank.py (new)
+  - packages/orbiter-memory/tests/test_reasoning_bank.py (new, 37 tests)
+  - packages/orbiter-memory/src/orbiter/memory/evolution/__init__.py (exports)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (exports)
+- **Learnings for future iterations:**
+  - ReasoningBank stores structured entries internally in _entries list, populated during evolve()
+  - recall() only works after evolve() has been called (entries must be loaded)
+  - _cosine_similarity and _keyword_similarity are module-level helpers, importable for testing
+  - Duck-typed embeddings: any object with `async embed(text: str) -> list[float]` works
+  - Embedding results are cached in _vector_cache dict keyed by text string
+  - JSON parsing in _parse_entry handles non-dict JSON (arrays, primitives) by falling back to plain text
+---

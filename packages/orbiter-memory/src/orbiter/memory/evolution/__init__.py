@@ -136,9 +136,15 @@ class MemoryEvolutionPipeline(MemoryEvolutionStrategy):
 
 
 from orbiter.memory.evolution.ace import ACEStrategy  # pyright: ignore[reportMissingImports]
+from orbiter.memory.evolution.reasoning_bank import (  # pyright: ignore[reportMissingImports]
+    ReasoningBankStrategy,
+    ReasoningEntry,
+)
 
 __all__ = [
     "ACEStrategy",
     "MemoryEvolutionPipeline",
     "MemoryEvolutionStrategy",
+    "ReasoningBankStrategy",
+    "ReasoningEntry",
 ]

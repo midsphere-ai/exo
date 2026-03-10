@@ -64,6 +64,8 @@ from orbiter.memory.evolution import (  # pyright: ignore[reportMissingImports]
     ACEStrategy,
     MemoryEvolutionPipeline,
     MemoryEvolutionStrategy,
+    ReasoningBankStrategy,
+    ReasoningEntry,
 )
 
 __all__ = [
@@ -118,4 +120,6 @@ __all__ = [
     "ACEStrategy",
     "MemoryEvolutionPipeline",
     "MemoryEvolutionStrategy",
+    "ReasoningBankStrategy",
+    "ReasoningEntry",
 ]
