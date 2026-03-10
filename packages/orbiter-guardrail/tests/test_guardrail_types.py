@@ -1,10 +1,17 @@
-"""Tests for guardrail core types: RiskLevel, RiskAssessment, GuardrailError."""
+"""Tests for guardrail core types: RiskLevel, RiskAssessment, GuardrailError,
+GuardrailBackend, GuardrailResult."""
 
 from __future__ import annotations
 
 import pytest
 
-from orbiter.guardrail.types import GuardrailError, RiskAssessment, RiskLevel
+from orbiter.guardrail.types import (
+    GuardrailBackend,
+    GuardrailError,
+    GuardrailResult,
+    RiskAssessment,
+    RiskLevel,
+)
 from orbiter.types import OrbiterError
 
 
@@ -104,3 +111,110 @@ class TestGuardrailError:
     def test_raises(self) -> None:
         with pytest.raises(GuardrailError, match="blocked"):
             raise GuardrailError("blocked", risk_level=RiskLevel.HIGH)
+
+
+class TestGuardrailBackend:
+    def test_is_abstract(self) -> None:
+        """GuardrailBackend cannot be instantiated directly."""
+        with pytest.raises(TypeError):
+            GuardrailBackend()  # type: ignore[abstract]
+
+    def test_subclass_must_implement_analyze(self) -> None:
+        """A subclass without analyze() cannot be instantiated."""
+
+        class Incomplete(GuardrailBackend):
+            pass
+
+        with pytest.raises(TypeError):
+            Incomplete()  # type: ignore[abstract]
+
+    @pytest.mark.asyncio
+    async def test_subclass_analyze(self) -> None:
+        """A concrete subclass can be instantiated and called."""
+
+        class SafeBackend(GuardrailBackend):
+            async def analyze(self, data: dict) -> RiskAssessment:
+                return RiskAssessment(has_risk=False, risk_level=RiskLevel.SAFE)
+
+        backend = SafeBackend()
+        result = await backend.analyze({"messages": []})
+        assert result.has_risk is False
+        assert result.risk_level == RiskLevel.SAFE
+
+    @pytest.mark.asyncio
+    async def test_subclass_risky(self) -> None:
+        """A backend can return a risky assessment."""
+
+        class RiskyBackend(GuardrailBackend):
+            async def analyze(self, data: dict) -> RiskAssessment:
+                return RiskAssessment(
+                    has_risk=True,
+                    risk_level=RiskLevel.HIGH,
+                    risk_type="test_risk",
+                    confidence=0.9,
+                    details={"reason": "test"},
+                )
+
+        backend = RiskyBackend()
+        result = await backend.analyze({"input": "bad stuff"})
+        assert result.has_risk is True
+        assert result.risk_level == RiskLevel.HIGH
+        assert result.risk_type == "test_risk"
+
+
+class TestGuardrailResult:
+    def test_safe_factory(self) -> None:
+        result = GuardrailResult.safe()
+        assert result.is_safe is True
+        assert result.risk_level == RiskLevel.SAFE
+        assert result.risk_type is None
+        assert result.details == {}
+        assert result.modified_data is None
+
+    def test_block_factory(self) -> None:
+        result = GuardrailResult.block(
+            risk_level=RiskLevel.CRITICAL,
+            risk_type="prompt_injection",
+            details={"pattern": "ignore previous"},
+        )
+        assert result.is_safe is False
+        assert result.risk_level == RiskLevel.CRITICAL
+        assert result.risk_type == "prompt_injection"
+        assert result.details == {"pattern": "ignore previous"}
+        assert result.modified_data is None
+
+    def test_block_default_details(self) -> None:
+        result = GuardrailResult.block(
+            risk_level=RiskLevel.HIGH,
+            risk_type="pii_leak",
+        )
+        assert result.details == {}
+
+    def test_frozen(self) -> None:
+        result = GuardrailResult.safe()
+        with pytest.raises(Exception):  # noqa: B017
+            result.is_safe = False  # type: ignore[misc]
+
+    def test_create_with_modified_data(self) -> None:
+        result = GuardrailResult(
+            is_safe=True,
+            risk_level=RiskLevel.LOW,
+            risk_type="sanitized",
+            modified_data={"messages": ["cleaned"]},
+        )
+        assert result.is_safe is True
+        assert result.risk_level == RiskLevel.LOW
+        assert result.modified_data == {"messages": ["cleaned"]}
+
+    def test_details_default_factory(self) -> None:
+        """Each instance gets its own details dict."""
+        a = GuardrailResult.safe()
+        b = GuardrailResult.safe()
+        assert a.details is not b.details
+
+    def test_block_returns_guardrail_result(self) -> None:
+        result = GuardrailResult.block(
+            risk_level=RiskLevel.MEDIUM,
+            risk_type="content_filter",
+        )
+        assert isinstance(result, GuardrailResult)
