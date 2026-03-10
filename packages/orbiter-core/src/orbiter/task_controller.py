@@ -1,12 +1,16 @@
 """Public re-exports for the task controller module."""
 
 from orbiter._internal.task_controller import (
+    TASK_ACTIONS,
     Intent,
     IntentRecognizer,
     InvalidTransitionError,
-    TASK_ACTIONS,
     Task,
     TaskError,
+    TaskEvent,
+    TaskEventBus,
+    TaskEventHandler,
+    TaskEventType,
     TaskManager,
     TaskNotFoundError,
     TaskScheduler,
@@ -14,12 +18,16 @@ from orbiter._internal.task_controller import (
 )
 
 __all__ = [
+    "TASK_ACTIONS",
     "Intent",
     "IntentRecognizer",
     "InvalidTransitionError",
-    "TASK_ACTIONS",
     "Task",
     "TaskError",
+    "TaskEvent",
+    "TaskEventBus",
+    "TaskEventHandler",
+    "TaskEventType",
     "TaskManager",
     "TaskNotFoundError",
     "TaskScheduler",

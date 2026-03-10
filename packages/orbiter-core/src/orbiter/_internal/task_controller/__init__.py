@@ -1,9 +1,15 @@
 """Task controller — hierarchical task management for agent workflows."""
 
+from orbiter._internal.task_controller.event_bus import (
+    TaskEvent,
+    TaskEventBus,
+    TaskEventHandler,
+    TaskEventType,
+)
 from orbiter._internal.task_controller.intent_recognizer import (
+    TASK_ACTIONS,
     Intent,
     IntentRecognizer,
-    TASK_ACTIONS,
 )
 from orbiter._internal.task_controller.manager import TaskManager, TaskNotFoundError
 from orbiter._internal.task_controller.scheduler import TaskScheduler
@@ -15,12 +21,16 @@ from orbiter._internal.task_controller.types import (
 )
 
 __all__ = [
+    "TASK_ACTIONS",
     "Intent",
     "IntentRecognizer",
     "InvalidTransitionError",
-    "TASK_ACTIONS",
     "Task",
     "TaskError",
+    "TaskEvent",
+    "TaskEventBus",
+    "TaskEventHandler",
+    "TaskEventType",
     "TaskManager",
     "TaskNotFoundError",
     "TaskScheduler",

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from typing import TYPE_CHECKING, Any
 
 from orbiter._internal.task_controller.types import (
     Task,
@@ -10,6 +11,9 @@ from orbiter._internal.task_controller.types import (
     TaskStatus,
     _now,
 )
+
+if TYPE_CHECKING:
+    from orbiter._internal.task_controller.event_bus import TaskEventBus
 
 
 class TaskNotFoundError(TaskError):
@@ -22,13 +26,47 @@ class TaskManager:
     Args:
         auto_complete_parent: When ``True``, a parent task auto-transitions
             to COMPLETED when all of its children reach COMPLETED.
+        event_bus: Optional ``TaskEventBus`` for emitting lifecycle events.
     """
 
-    def __init__(self, *, auto_complete_parent: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        auto_complete_parent: bool = False,
+        event_bus: TaskEventBus | None = None,
+    ) -> None:
         self._tasks: dict[str, Task] = {}
         self._auto_complete_parent = auto_complete_parent
+        self._event_bus = event_bus
+        self._pending_event_tasks: set[asyncio.Task[None]] = set()
 
     # -- helpers --------------------------------------------------------------
+
+    def _emit_sync(self, event_type_str: str, task: Task) -> None:
+        """Queue an event emission if an event_bus is configured.
+
+        Since ``TaskManager`` methods are synchronous, the event is emitted
+        lazily via ``asyncio`` if a running loop exists, otherwise stored
+        for later.  Callers who need guaranteed delivery should use
+        ``await event_bus.emit(...)`` directly.
+        """
+        if self._event_bus is None:
+            return
+        from orbiter._internal.task_controller.event_bus import TaskEvent, TaskEventType
+
+        evt = TaskEvent(
+            event_type=TaskEventType(event_type_str),
+            task_id=task.id,
+            data={"name": task.name, "status": str(task.status)},
+        )
+        try:
+            loop = asyncio.get_running_loop()
+            bg = loop.create_task(self._event_bus.emit(evt))
+            self._pending_event_tasks.add(bg)
+            bg.add_done_callback(self._pending_event_tasks.discard)
+        except RuntimeError:
+            # No running loop — skip async emission.
+            pass
 
     def _require(self, task_id: str) -> Task:
         task = self._tasks.get(task_id)
@@ -74,6 +112,7 @@ class TaskManager:
             metadata=metadata or {},
         )
         self._tasks[task.id] = task
+        self._emit_sync("task.created", task)
         return task
 
     def get(self, task_id: str) -> Task | None:
@@ -127,6 +166,19 @@ class TaskManager:
         if metadata is not None:
             task.metadata = metadata
             task.updated_at = _now()
+
+        # Emit event for status transitions
+        if status is not None:
+            event_map = {
+                TaskStatus.WORKING: "task.started",
+                TaskStatus.COMPLETED: "task.completed",
+                TaskStatus.FAILED: "task.failed",
+                TaskStatus.PAUSED: "task.paused",
+                TaskStatus.CANCELED: "task.canceled",
+            }
+            evt_type = event_map.get(status)
+            if evt_type:
+                self._emit_sync(evt_type, task)
 
         # Cascading side-effects
         if status == TaskStatus.CANCELED:
