@@ -4270,3 +4270,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Re-check task status after semaphore acquisition and after executor completion to handle concurrent pause/cancel
   - asyncio.Semaphore `_value` attribute is internal — use `# noqa: SLF001` if accessing for tests
 ---
+
+## 2026-03-10 - US-055
+- What was implemented: IntentRecognizer with LLM-powered intent classification for routing user input to task actions (create_task, pause_task, resume_task, cancel_task, list_tasks, get_task_status, update_task, unknown)
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/intent_recognizer.py (new — Intent dataclass, IntentRecognizer class, TASK_ACTIONS, JSON extraction/parsing)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/__init__.py (updated — export Intent, IntentRecognizer, TASK_ACTIONS)
+  - packages/orbiter-core/src/orbiter/task_controller.py (updated — public re-exports for new symbols)
+  - packages/orbiter-core/tests/test_intent_recognizer.py (new — 20 tests with MockProvider)
+- **Learnings for future iterations:**
+  - IntentRecognizer accepts optional `provider` parameter (same pattern as Agent.run) — avoids need for monkeypatching in tests, just pass MockProvider directly
+  - MockProvider for task_controller tests uses a simple `@dataclass _MockResponse` with `content: str` — no need for full ModelResponse from orbiter-models
+  - JSON extraction from LLM output needs 3 fallback strategies: direct parse, code fence extraction, bare JSON object regex
+  - pyright ignore comment must go on the `from` line, not on the imported symbol line — ruff's I001 auto-fix can move it to the wrong spot
+  - Pre-existing test_runner.py failure (test_stream_tool_call_events) is unrelated to this change — _FakeToolCallDelta missing thought_signature attribute
+---
