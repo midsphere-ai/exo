@@ -4380,3 +4380,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Subprocess approach avoids GIL contention and gives true process isolation for untrusted code
   - Blocked names work by filtering `vars(builtins)` — this blocks `import` statements (which need `__import__`) and direct use of blocked functions
 ---
+
+## 2026-03-10 - US-062
+- What was implemented: Enhanced todo management tools with 3 new context tools: update_todo (edit item text), remove_todo (delete items), set_todo_status (PENDING/IN_PROGRESS/COMPLETED status tracking)
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/tools.py (added _update_todo, _remove_todo, _set_todo_status functions + tool instances; updated get_planning_tools to return 6 tools)
+  - packages/orbiter-context/tests/test_context_tools.py (added TestUpdateTodo, TestRemoveTodo, TestSetTodoStatus test classes with schema + behavior tests; updated factory counts)
+- **Learnings for future iterations:**
+  - _ContextTool pattern: define async function with ctx param, wrap in _ContextTool(fn, name=, description=); ctx is auto-stripped from JSON schema
+  - Todo state uses list[dict] in ctx.state["todos"]; each dict has "item", "done", and optionally "status" keys — backward compatible
+  - Defensive copy pattern: `todos = [dict(t) for t in todos]` before mutation to avoid aliasing issues with state
+  - Factory function tests (get_planning_tools, get_context_tools) count total tools — update counts when adding new tools
+---
