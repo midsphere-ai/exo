@@ -3633,3 +3633,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `offloaded_messages` is a `dict[str, str]` in context state, keyed by 12-char hex handle IDs created by `MessageOffloader`
   - Empty dict `{}` is falsy in Python — `not offloaded` handles both `None` and `{}` cases
 ---
+
+## 2026-03-10 - US-016
+- What was implemented: DialogueCompressor context processor that compresses long tool-call chains into system message summaries
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/processor.py — added DialogueCompressor class
+  - packages/orbiter-context/src/orbiter/context/__init__.py — exported DialogueCompressor
+  - packages/orbiter-context/tests/test_context_processor.py — 18 tests for DialogueCompressor
+- **Learnings for future iterations:**
+  - ContextProcessor pattern: subclass with `__slots__` including `_event` and `_name`, pass event to `super().__init__()`, implement `async process(self, ctx, payload)`
+  - Tool chain detection: assistant messages with `tool_calls` and messages with `role="tool"` form the chain; plain assistant messages break the chain
+  - Pyright requires explicit `str()` wrapping when appending values that could be `None` to `list[str]` — even if logically impossible
+  - History mutation: modify `ctx.state['history']` list in-place (slice assignment) rather than creating new lists for consistent behavior with other processors
+  - All 483 context tests pass, 0 pyright errors
+---
