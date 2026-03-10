@@ -4565,3 +4565,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - System messages without a preceding user message form their own segment (they don't merge with the next user turn)
   - Extracted items are appended to the underlying TrajectoryDataset, so they accumulate across multiple extract() calls
 ---
+
+## 2026-03-10 - US-073
+- What was implemented: InstructionOptimizer class for improving system prompts via LLM-generated textual gradients
+- Files changed:
+  - packages/orbiter-train/src/orbiter/train/optimizer.py (new)
+  - packages/orbiter-train/src/orbiter/train/__init__.py (updated exports)
+  - packages/orbiter-train/tests/test_instruction_optimizer.py (new, 32 tests)
+- **Learnings for future iterations:**
+  - InstructionOptimizer implements EvolutionStrategy ABC so it plugs directly into EvolutionPipeline
+  - backward() analyzes weak cases (score < 1.0 or status == "failed"); if none fail, all cases are analyzed
+  - step() rewrites system_prompt via meta-LLM then runs _preserve_templates() to guarantee {{...}} variables survive
+  - _preserve_templates() uses regex `\{\{[^}]+\}\}` to find template vars in original and appends any missing ones to the rewrite
+  - Optimizer takes llm_fn with same signature as LLMCallOperator (system_prompt=, user_prompt=, **kw) — keeps testing easy with mock functions
+  - The optimizer's train() phase runs backward+step; synthesise() is pass-through; evaluate() returns 0.0 (evaluation is external)
+---

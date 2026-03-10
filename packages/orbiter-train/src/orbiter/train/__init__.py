@@ -10,6 +10,9 @@ from orbiter.train.evolution import (  # pyright: ignore[reportMissingImports]
     EvolutionState,
     EvolutionStrategy,
 )
+from orbiter.train.optimizer import (  # pyright: ignore[reportMissingImports]
+    InstructionOptimizer,
+)
 from orbiter.train.operator import (  # pyright: ignore[reportMissingImports]
     LLMCallOperator,
     LLMCallTrace,
@@ -68,6 +71,7 @@ __all__ = [
     "EvolutionResult",
     "EvolutionState",
     "EvolutionStrategy",
+    "InstructionOptimizer",
     "LLMCallOperator",
     "LLMCallTrace",
     "MemoryCallOperator",
