@@ -3,6 +3,8 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 ---
 
 ## Codebase Patterns
+- orbiter-retrieval: use relative imports within the package (from .embeddings import ...) + `# pyright: ignore[reportMissingImports]` for namespace package compat
+- orbiter-retrieval: httpx is the HTTP client for embedding/retrieval providers (not provider-specific SDKs) — keeps deps lightweight
 - BranchNode duck-type: `is_branch = True`; Swarm detects via `getattr(agent, "is_branch", False)`; routes to in-flow target (skip_until) or out-of-flow target (direct execution + stop)
 - Agent hook `messages` param contains Pydantic models (UserMessage, AssistantMessage), not dicts — use `getattr(msg, "role", None)` alongside `msg.get("role")` when extracting message content in guardrail backends
 - GuardrailError bypasses agent retry loop: add to `except (RailAbortError, GuardrailError): raise` in agent.py `_call_llm()`; without this, guardrail blocks get retried 3x and wrapped in AgentError
@@ -3941,4 +3943,21 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use `# pyright: ignore[reportMissingImports]` on cross-namespace imports in `__init__.py` (same pattern as orbiter-guardrail)
   - Frozen Pydantic models (`BaseModel, frozen=True`) are the standard for immutable data types in Orbiter — not Python dataclasses
   - Root pyproject.toml needs updates in three places: workspace members, dependency-groups.dev, and tool.uv.sources
+---
+
+## 2026-03-10 - US-035
+- What was implemented: Embeddings ABC + OpenAI embeddings provider for orbiter-retrieval
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/embeddings.py (new — Embeddings ABC with embed, embed_batch, dimension)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/openai_embeddings.py (new — OpenAIEmbeddings wrapping OpenAI API via httpx)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — exports Embeddings, OpenAIEmbeddings)
+  - packages/orbiter-retrieval/pyproject.toml (updated — added httpx>=0.27 dependency)
+  - packages/orbiter-retrieval/tests/test_embeddings.py (new — 13 tests with mock HTTP responses)
+  - uv.lock (updated)
+- **Learnings for future iterations:**
+  - Use relative imports (from .embeddings import ...) within orbiter-retrieval to avoid pyright namespace resolution errors
+  - Add `# pyright: ignore[reportMissingImports]` even on relative imports within namespace packages if pyright complains
+  - httpx is the HTTP client for retrieval providers (not the openai SDK) — keeps deps lightweight
+  - OpenAI embeddings API returns data with index field; sort by index to guarantee order matches input
+  - Batch embedding: send all texts in a single API call for efficiency; handle empty list as early return
 ---
