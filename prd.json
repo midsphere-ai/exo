@@ -8,7 +8,7 @@
       "title": "Research rails architecture (Epic 6)",
       "description": "As a developer, I want a design document for the typed rails system so that it extends HookManager without breaking existing hook behavior.",
       "acceptanceCriteria": [
-        "Read agent-core's rail/base.py — AgentCallbackEvent, typed inputs, AgentRail ABC, @rail decorator",
+        "Read agent-core's rail/base.py \u2014 AgentCallbackEvent, typed inputs, AgentRail ABC, @rail decorator",
         "Read Orbiter's hooks.py (HookPoint, HookManager, Hook type alias) and how hooks are called in agent.py",
         "Produce docs/design/rails-design.md covering: typed event inputs, priority ordering, cross-rail state, retry mechanism, integration with existing HookManager",
         "Key decision documented: Rails extend hooks (new optional typed interface) vs. parallel system",
@@ -17,7 +17,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Epic 6 is foundational — guardrails (Epic 1) depend on this hook extension. Research phase only, no code changes."
+      "notes": "Epic 6 is foundational \u2014 guardrails (Epic 1) depend on this hook extension. Research phase only, no code changes."
     },
     {
       "id": "US-002",
@@ -29,7 +29,7 @@
         "ModelCallInputs model: messages: list[Any], tools: list[dict] | None, response: Any | None, usage: Any | None",
         "ToolCallInputs model: tool_name: str, arguments: dict[str, Any], result: Any | None, metadata: Any | None",
         "RailContext model: agent: Any, event: HookPoint, inputs: InvokeInputs | ModelCallInputs | ToolCallInputs, extra: dict[str, Any]",
-        "All are Pydantic models (not frozen — hooks may need to mutate inputs)",
+        "All are Pydantic models (not frozen \u2014 hooks may need to mutate inputs)",
         "Tests in test_rail_types.py for model creation and validation",
         "Google docstrings on all public classes",
         "Typecheck passes",
@@ -109,7 +109,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Research phase only — no code changes."
+      "notes": "Research phase only \u2014 no code changes."
     },
     {
       "id": "US-007",
@@ -158,7 +158,7 @@
         "detach(agent) method: removes hooks",
         "async detect(event, **data) -> GuardrailResult: calls backend.analyze() if backend set, else returns safe",
         "When GuardrailResult.is_safe is False and risk_level >= HIGH, raises GuardrailError",
-        "Existing hooks on agent are NOT disturbed — guardrail hooks append to the list",
+        "Existing hooks on agent are NOT disturbed \u2014 guardrail hooks append to the list",
         "Tests with mock agent + mock backend verifying hook registration and detection flow",
         "All ~2,900 existing orbiter tests still pass",
         "Typecheck passes",
@@ -263,7 +263,7 @@
         "reload_offloaded(handle: str) -> str tool function added to tools.py",
         "Looks up handle in context state's offloaded_messages dict",
         "Returns full original content if found, error message if not",
-        "Added to get_context_tools() return list (backward compatible — existing tools still returned)",
+        "Added to get_context_tools() return list (backward compatible \u2014 existing tools still returned)",
         "Tests verifying reload of offloaded content and error for unknown handle",
         "Typecheck passes",
         "Tests pass"
@@ -299,7 +299,7 @@
         "Constructor: max_rounds: int = 20",
         "process() parses history into rounds (user message -> assistant response, including tool calls)",
         "Keeps last max_rounds complete rounds plus all system messages",
-        "Complements existing ContextConfig.history_rounds — can be used as alternative",
+        "Complements existing ContextConfig.history_rounds \u2014 can be used as alternative",
         "Tests with mixed message sequences, verifying round boundary detection",
         "Typecheck passes",
         "Tests pass"
@@ -314,7 +314,7 @@
       "description": "As a developer, I want accurate token counting via tiktoken so that context budgeting is precise.",
       "acceptanceCriteria": [
         "TiktokenCounter class in new file token_counter.py in orbiter-context",
-        "Constructor: model: str = 'gpt-4o' — auto-selects encoding (cl100k_base, o200k_base)",
+        "Constructor: model: str = 'gpt-4o' \u2014 auto-selects encoding (cl100k_base, o200k_base)",
         "count(text: str) -> int for exact token count",
         "count_messages(messages: list[dict]) -> int for message list with per-message overhead",
         "Optional dependency: tiktoken declared as extra [tiktoken] in pyproject.toml",
@@ -337,7 +337,7 @@
         "Produce docs/design/memory-enhancement-design.md",
         "Key decision documented: memory_type taxonomy as StrEnum on MemoryItem (backward-compatible via default value)",
         "Key decision documented: encryption wraps MemoryStore (decorator pattern) vs. built into each backend",
-        "Confirm all changes are additive — existing APIs unchanged",
+        "Confirm all changes are additive \u2014 existing APIs unchanged",
         "Typecheck passes"
       ],
       "priority": 19,
@@ -352,7 +352,7 @@
         "MemoryCategory StrEnum: USER_PROFILE, SEMANTIC, EPISODIC, VARIABLE, SUMMARY, CONVERSATION",
         "New optional field on MemoryItem: category: MemoryCategory | None = None (backward compatible)",
         "ShortTermMemory.search() and LongTermMemory.search() support optional category filter parameter",
-        "Existing memory_type field (str: human, ai, tool, system) is unchanged — category is orthogonal",
+        "Existing memory_type field (str: human, ai, tool, system) is unchanged \u2014 category is orthogonal",
         "All existing memory tests pass unchanged",
         "Tests for category-based filtering",
         "Typecheck passes",
@@ -392,7 +392,7 @@
         "MergeResult dataclass: decision, merged_content: str | None, delete_ids: list[str]",
         "If model provided: sends new + top-5 similar to LLM for comparison",
         "If no model: falls back to exact content match (matching existing LongTermMemory behavior)",
-        "Integration with LongTermMemory.add() — optional checker parameter",
+        "Integration with LongTermMemory.add() \u2014 optional checker parameter",
         "Tests with MockProvider for LLM-based dedup and fallback behavior",
         "Typecheck passes",
         "Tests pass"
@@ -500,7 +500,7 @@
         "LoopNode class in new file _internal/loop_node.py",
         "Three modes: count: int, items: str (state key for array), condition: str (expression while loop)",
         "max_iterations: int = 100 safety limit",
-        "body: str | list[str] — agent name(s) to execute in the loop",
+        "body: str | list[str] \u2014 agent name(s) to execute in the loop",
         "Break support: if body agent output contains '[BREAK]', loop terminates",
         "Duck-type marker: is_loop: bool = True",
         "Tests for count-based, array-based, expression-based, and break scenarios",
@@ -519,7 +519,7 @@
         "WorkflowState class: data: dict[str, Any], set(key, value), get(key, default), to_dict()",
         "Passed through workflow execution; each agent's output stored as state.set(agent_name, output)",
         "BranchNode and LoopNode read from this state for condition evaluation",
-        "Existing Swarm workflow mode updated to create and pass WorkflowState (backward-compatible — state is optional)",
+        "Existing Swarm workflow mode updated to create and pass WorkflowState (backward-compatible \u2014 state is optional)",
         "Tests verifying state propagation through linear, branching, and looping flows",
         "Typecheck passes",
         "Tests pass"
@@ -573,7 +573,7 @@
         "Test: BranchNode + LoopNode combined flow",
         "Test: LoopNode with nested SwarmNode",
         "Test: Mermaid output for complex topology",
-        "Run full uv run pytest packages/orbiter-core/tests/ — all pass",
+        "Run full uv run pytest packages/orbiter-core/tests/ \u2014 all pass",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -596,7 +596,7 @@
       ],
       "priority": 33,
       "passes": true,
-      "notes": "Research phase only. Largest epic — 17 implementation stories follow."
+      "notes": "Research phase only. Largest epic \u2014 17 implementation stories follow."
     },
     {
       "id": "US-034",
@@ -784,7 +784,7 @@
     },
     {
       "id": "US-045",
-      "title": "Document parsers — PDF, Markdown, JSON (Epic 3)",
+      "title": "Document parsers \u2014 PDF, Markdown, JSON (Epic 3)",
       "description": "As a developer, I want document parsers that extract text from common formats.",
       "acceptanceCriteria": [
         "Parser ABC: def parse(self, source: str | bytes | Path) -> Document",
@@ -819,7 +819,7 @@
     },
     {
       "id": "US-047",
-      "title": "AgenticRetriever — multi-round LLM-driven (Epic 3)",
+      "title": "AgenticRetriever \u2014 multi-round LLM-driven (Epic 3)",
       "description": "As a developer, I want an agentic retriever that iteratively refines queries and retrieves until satisfied.",
       "acceptanceCriteria": [
         "AgenticRetriever(Retriever): takes base_retriever, rewriter, model",
@@ -836,7 +836,7 @@
     },
     {
       "id": "US-048",
-      "title": "Knowledge graph — triple extraction (Epic 3)",
+      "title": "Knowledge graph \u2014 triple extraction (Epic 3)",
       "description": "As a developer, I want to extract subject-predicate-object triples from text for knowledge graph construction.",
       "acceptanceCriteria": [
         "Triple frozen dataclass: subject, predicate, object, confidence, source_chunk_id",
@@ -853,7 +853,7 @@
     },
     {
       "id": "US-049",
-      "title": "Knowledge graph — graph retriever (Epic 3)",
+      "title": "Knowledge graph \u2014 graph retriever (Epic 3)",
       "description": "As a developer, I want a graph-based retriever that expands search results via knowledge graph traversal.",
       "acceptanceCriteria": [
         "GraphRetriever(Retriever): takes base_retriever, triples: list[Triple]",
@@ -890,7 +890,7 @@
       "title": "Research task controller architecture (Epic 7)",
       "description": "As a developer, I want a design document for task management so that it integrates with Orbiter's agent execution model.",
       "acceptanceCriteria": [
-        "Read agent-core's controller/modules/ — TaskManager, TaskScheduler, EventQueue, IntentRecognizer",
+        "Read agent-core's controller/modules/ \u2014 TaskManager, TaskScheduler, EventQueue, IntentRecognizer",
         "Read Orbiter's agent.py (Agent.run loop), _internal/state.py (RunState, RunNode), _internal/background.py",
         "Produce docs/design/task-controller-design.md",
         "Key decision: task controller as module in orbiter-core _internal/task_controller/",
@@ -1009,7 +1009,7 @@
       "title": "Research deep agent toolkit architecture (Epic 8)",
       "description": "As a developer, I want a design document for built-in agent tools so that they extend existing orbiter-context tools safely.",
       "acceptanceCriteria": [
-        "Read agent-core's deepagents/tools/ — CodeTool, ShellTool, FileSystemTool, TodoTool",
+        "Read agent-core's deepagents/tools/ \u2014 CodeTool, ShellTool, FileSystemTool, TodoTool",
         "Read Orbiter's orbiter-context/tools.py (existing planning, knowledge, file tools)",
         "Read Orbiter's orbiter-sandbox/ (Sandbox ABC, LocalSandbox, SandboxBuilder)",
         "Produce docs/design/deep-agent-tools-design.md",
@@ -1027,11 +1027,11 @@
       "description": "As a developer, I want comprehensive file tools (write, edit, glob, grep) so that agents can manipulate files autonomously.",
       "acceptanceCriteria": [
         "write_file(path, content) -> str tool in orbiter-context tools.py",
-        "edit_file(path, old_text, new_text) -> str tool — find-and-replace",
-        "glob_files(pattern) -> str tool — glob search, returns matched paths",
-        "grep_files(pattern, path) -> str tool — regex search in files",
+        "edit_file(path, old_text, new_text) -> str tool \u2014 find-and-replace",
+        "glob_files(pattern) -> str tool \u2014 glob search, returns matched paths",
+        "grep_files(pattern, path) -> str tool \u2014 regex search in files",
         "All tools enforce path safety via is_relative_to() (like existing read_file)",
-        "Added to get_file_tools() return list (backward compatible — existing read_file unchanged)",
+        "Added to get_file_tools() return list (backward compatible \u2014 existing read_file unchanged)",
         "Tests for each tool with temp directories",
         "Typecheck passes",
         "Tests pass"
@@ -1061,7 +1061,7 @@
     },
     {
       "id": "US-061",
-      "title": "Code execution tool — sandboxed (Epic 8)",
+      "title": "Code execution tool \u2014 sandboxed (Epic 8)",
       "description": "As a developer, I want a sandboxed code execution tool so that agents can run Python code safely.",
       "acceptanceCriteria": [
         "code_tool(sandbox: Sandbox | None = None) -> Tool factory function",
@@ -1085,7 +1085,7 @@
         "Existing add_todo, complete_todo, get_todo kept unchanged",
         "New update_todo(index, item) -> str tool for editing todo text",
         "New remove_todo(index) -> str tool for deleting todo items",
-        "New set_todo_status(index, status) -> str tool — PENDING, IN_PROGRESS, COMPLETED",
+        "New set_todo_status(index, status) -> str tool \u2014 PENDING, IN_PROGRESS, COMPLETED",
         "Status tracking via ctx.state['todos'] entries with 'status' key (backward compatible)",
         "Tests for new tools, existing todo tests unchanged",
         "Typecheck passes",
@@ -1097,7 +1097,7 @@
     },
     {
       "id": "US-063",
-      "title": "Task loop architecture — priority event queue (Epic 8)",
+      "title": "Task loop architecture \u2014 priority event queue (Epic 8)",
       "description": "As a developer, I want a priority event queue for managing agent task iterations with ABORT, STEER, and FOLLOWUP events.",
       "acceptanceCriteria": [
         "TaskLoopEvent dataclass: type (ABORT, STEER, FOLLOWUP), priority, content, metadata",
@@ -1119,7 +1119,7 @@
       "title": "Research context evolver architecture (Epic 9)",
       "description": "As a developer, I want a design document for memory evolution algorithms so that ACE, ReasoningBank, and ReMe integrate with existing orbiter-memory.",
       "acceptanceCriteria": [
-        "Read agent-core's context_evolver/ — ACE, ReasoningBank, ReMe implementations",
+        "Read agent-core's context_evolver/ \u2014 ACE, ReasoningBank, ReMe implementations",
         "Read Orbiter's long_term.py (LongTermMemory, ExtractionType, MemoryOrchestrator)",
         "Read Orbiter's base.py (MemoryItem, MemoryStore protocol)",
         "Produce docs/design/memory-evolution-design.md",
@@ -1150,7 +1150,7 @@
     },
     {
       "id": "US-066",
-      "title": "ACE — Adaptive Context Engine strategy (Epic 9)",
+      "title": "ACE \u2014 Adaptive Context Engine strategy (Epic 9)",
       "description": "As a developer, I want the ACE memory evolution algorithm with playbook-based scoring.",
       "acceptanceCriteria": [
         "ACEStrategy(MemoryEvolutionStrategy): per-memory counters (helpful, harmful, neutral)",
@@ -1185,7 +1185,7 @@
     },
     {
       "id": "US-068",
-      "title": "ReMe — Relevant Memory strategy (Epic 9)",
+      "title": "ReMe \u2014 Relevant Memory strategy (Epic 9)",
       "description": "As a developer, I want the ReMe evolution strategy that extracts success/failure patterns with when-to-use metadata.",
       "acceptanceCriteria": [
         "ReMeStrategy(MemoryEvolutionStrategy): stores memories with when_to_use: str metadata",
@@ -1205,8 +1205,8 @@
       "title": "Research operator & self-optimization architecture (Epic 10)",
       "description": "As a developer, I want a design document for the operator pattern and self-optimization so that it coexists with existing orbiter-train features.",
       "acceptanceCriteria": [
-        "Read agent-core's agent_evolving/ — Trainer, optimizers, operators, trajectory extraction, checkpointing",
-        "Read Orbiter's orbiter-train/ — EvolutionPipeline, SynthesisPipeline, VeRLTrainer, TrajectoryDataset",
+        "Read agent-core's agent_evolving/ \u2014 Trainer, optimizers, operators, trajectory extraction, checkpointing",
+        "Read Orbiter's orbiter-train/ \u2014 EvolutionPipeline, SynthesisPipeline, VeRLTrainer, TrajectoryDataset",
         "Produce docs/design/operator-optimization-design.md",
         "Key decision: operator pattern adds alongside existing EvolutionStrategy (not replace)",
         "Document: existing EvolutionPipeline, SynthesisPipeline, VeRLTrainer, TrajectoryDataset remain functional",
@@ -1268,14 +1268,14 @@
     },
     {
       "id": "US-073",
-      "title": "InstructionOptimizer — textual gradients (Epic 10)",
+      "title": "InstructionOptimizer \u2014 textual gradients (Epic 10)",
       "description": "As a developer, I want an optimizer that improves system prompts via LLM-generated textual gradients from failure analysis.",
       "acceptanceCriteria": [
         "InstructionOptimizer: takes model: str, operators: list[LLMCallOperator]",
         "async backward(evaluated_cases) -> list[str] generates textual gradients",
         "async step() -> dict[str, str] generates improved prompts from gradients",
         "Preserves template variables (e.g., {{query}}) across optimization",
-        "Integrates with existing EvolutionStrategy ABC — can be used as a strategy",
+        "Integrates with existing EvolutionStrategy ABC \u2014 can be used as a strategy",
         "Tests with MockProvider",
         "Typecheck passes",
         "Tests pass"
@@ -1286,7 +1286,7 @@
     },
     {
       "id": "US-074",
-      "title": "ToolOptimizer — description beam search (Epic 10)",
+      "title": "ToolOptimizer \u2014 description beam search (Epic 10)",
       "description": "As a developer, I want an optimizer that improves tool descriptions via beam search over candidates.",
       "acceptanceCriteria": [
         "ToolOptimizer: takes model: str, operators: list[ToolCallOperator]",
@@ -1303,13 +1303,13 @@
     },
     {
       "id": "US-075",
-      "title": "OperatorTrainer — training loop with checkpoint/resume (Epic 10)",
+      "title": "OperatorTrainer \u2014 training loop with checkpoint/resume (Epic 10)",
       "description": "As a developer, I want a training loop that orchestrates operators + optimizers with checkpoint support.",
       "acceptanceCriteria": [
         "OperatorTrainer(Trainer) extends existing Trainer ABC from orbiter-train",
         "check_agent() validates agent has operators",
         "check_dataset() validates train/test data",
-        "async train() -> TrainMetrics: epoch loop — evaluate -> backward -> step -> apply -> validate",
+        "async train() -> TrainMetrics: epoch loop \u2014 evaluate -> backward -> step -> apply -> validate",
         "Checkpoint: after each epoch, saves operator + optimizer states to FileCheckpointStore",
         "Resume: resume_from constructor param loads checkpoint",
         "Existing Trainer ABC interface unchanged",
@@ -1324,14 +1324,14 @@
     },
     {
       "id": "US-076",
-      "title": "Documentation: Agent Rails — agent-core to Orbiter mapping (Epic 6)",
+      "title": "Documentation: Agent Rails \u2014 agent-core to Orbiter mapping (Epic 6)",
       "description": "As a developer, I want reference documentation that maps agent-core's rail system to Orbiter's new typed rails so that contributors familiar with either framework can navigate both.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/rails.md",
-        "Section 1: Agent-core overview — describe rail/base.py, AgentCallbackEvent, AgentRail ABC, @rail decorator, 10 lifecycle events, priority ordering, cross-rail state dict",
-        "Section 2: Orbiter equivalent — map each agent-core concept to its Orbiter counterpart (RailEvent → typed event models, AgentRail → Rail ABC, @rail → @rail decorator, AgentCallbackEvent.extra → RailContext.shared)",
+        "Section 1: Agent-core overview \u2014 describe rail/base.py, AgentCallbackEvent, AgentRail ABC, @rail decorator, 10 lifecycle events, priority ordering, cross-rail state dict",
+        "Section 2: Orbiter equivalent \u2014 map each agent-core concept to its Orbiter counterpart (RailEvent \u2192 typed event models, AgentRail \u2192 Rail ABC, @rail \u2192 @rail decorator, AgentCallbackEvent.extra \u2192 RailContext.shared)",
         "Section 3: Side-by-side code examples showing the same guard written in agent-core vs Orbiter",
-        "Section 4: Migration table — two-column table mapping every agent-core rail class/function to its Orbiter path",
+        "Section 4: Migration table \u2014 two-column table mapping every agent-core rail class/function to its Orbiter path",
         "All code examples typecheck (verified by including them in a test or doctest)",
         "Typecheck passes"
       ],
@@ -1341,14 +1341,14 @@
     },
     {
       "id": "US-077",
-      "title": "Documentation: Guardrails — agent-core to Orbiter mapping (Epic 1)",
+      "title": "Documentation: Guardrails \u2014 agent-core to Orbiter mapping (Epic 1)",
       "description": "As a developer, I want reference documentation that maps agent-core's security guardrail system to orbiter-guardrail so that the Chinese framework's approach is preserved and discoverable.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/guardrails.md",
-        "Section 1: Agent-core overview — describe security/guardrail/ directory: GuardrailBackend ABC, RiskAssessment model, RiskLevel enum, UserInputGuardrail, event-driven monitoring (user_input, llm_input, llm_output, tool_call events)",
-        "Section 2: Orbiter equivalent — map GuardrailBackend → GuardrailBackend ABC, RiskAssessment → RiskAssessment model, risk levels, UserInputGuardrail → UserInputGuardrail, event integration via HookManager",
-        "Section 3: Side-by-side code examples — custom guardrail backend in agent-core vs Orbiter",
-        "Section 4: Migration table — agent-core path → Orbiter import path for every public symbol",
+        "Section 1: Agent-core overview \u2014 describe security/guardrail/ directory: GuardrailBackend ABC, RiskAssessment model, RiskLevel enum, UserInputGuardrail, event-driven monitoring (user_input, llm_input, llm_output, tool_call events)",
+        "Section 2: Orbiter equivalent \u2014 map GuardrailBackend \u2192 GuardrailBackend ABC, RiskAssessment \u2192 RiskAssessment model, risk levels, UserInputGuardrail \u2192 UserInputGuardrail, event integration via HookManager",
+        "Section 3: Side-by-side code examples \u2014 custom guardrail backend in agent-core vs Orbiter",
+        "Section 4: Migration table \u2014 agent-core path \u2192 Orbiter import path for every public symbol",
         "Typecheck passes"
       ],
       "priority": 77,
@@ -1357,14 +1357,14 @@
     },
     {
       "id": "US-078",
-      "title": "Documentation: Context Engine — agent-core to Orbiter mapping (Epic 4)",
+      "title": "Documentation: Context Engine \u2014 agent-core to Orbiter mapping (Epic 4)",
       "description": "As a developer, I want reference documentation that maps agent-core's context engine to Orbiter's enhanced orbiter-context so that the offloading, compression, and windowing features are documented with their origins.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/context-engine.md",
-        "Section 1: Agent-core overview — describe context/ directory: ContextManager, OffloadManager with [[OFFLOAD: handle=<id>]] markers, CompressManager (LLM-based dialogue compression), RoundManager (round-level windowing), TokenBudgetManager (tiktoken cl100k_base/o200k_base)",
-        "Section 2: Orbiter equivalent — ToolResultOffloader enhancement, DialogueCompressor processor, RoundWindow processor, TokenBudget with tiktoken integration",
-        "Section 3: Configuration comparison — agent-core's ContextConfig vs Orbiter's ContextConfig showing equivalent fields",
-        "Section 4: Migration table — agent-core class → Orbiter class for every context feature",
+        "Section 1: Agent-core overview \u2014 describe context/ directory: ContextManager, OffloadManager with [[OFFLOAD: handle=<id>]] markers, CompressManager (LLM-based dialogue compression), RoundManager (round-level windowing), TokenBudgetManager (tiktoken cl100k_base/o200k_base)",
+        "Section 2: Orbiter equivalent \u2014 ToolResultOffloader enhancement, DialogueCompressor processor, RoundWindow processor, TokenBudget with tiktoken integration",
+        "Section 3: Configuration comparison \u2014 agent-core's ContextConfig vs Orbiter's ContextConfig showing equivalent fields",
+        "Section 4: Migration table \u2014 agent-core class \u2192 Orbiter class for every context feature",
         "Typecheck passes"
       ],
       "priority": 78,
@@ -1373,14 +1373,14 @@
     },
     {
       "id": "US-079",
-      "title": "Documentation: Memory System — agent-core to Orbiter mapping (Epic 5)",
+      "title": "Documentation: Memory System \u2014 agent-core to Orbiter mapping (Epic 5)",
       "description": "As a developer, I want reference documentation that maps agent-core's 5-type memory system to Orbiter's enhanced orbiter-memory so that encryption, dedup, and taxonomy features are traced back to their origin.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/memory-system.md",
-        "Section 1: Agent-core overview — describe memory/ directory: MemoryType taxonomy (USER_PROFILE, SEMANTIC_MEMORY, EPISODIC_MEMORY, VARIABLE, SUMMARY), AES-256 encryption at rest, MemUpdateChecker (LLM dedup: ADD/DELETE/MERGE), migration system, unified SearchManager",
-        "Section 2: Orbiter equivalent — MemoryCategory enum, EncryptedMemoryStore wrapper, MemoryDeduplicator, MemoryMigrationRunner, UnifiedSearchManager",
-        "Section 3: Side-by-side examples — storing an encrypted memory in agent-core vs Orbiter, running dedup in both",
-        "Section 4: Migration table — every agent-core memory class → Orbiter counterpart",
+        "Section 1: Agent-core overview \u2014 describe memory/ directory: MemoryType taxonomy (USER_PROFILE, SEMANTIC_MEMORY, EPISODIC_MEMORY, VARIABLE, SUMMARY), AES-256 encryption at rest, MemUpdateChecker (LLM dedup: ADD/DELETE/MERGE), migration system, unified SearchManager",
+        "Section 2: Orbiter equivalent \u2014 MemoryCategory enum, EncryptedMemoryStore wrapper, MemoryDeduplicator, MemoryMigrationRunner, UnifiedSearchManager",
+        "Section 3: Side-by-side examples \u2014 storing an encrypted memory in agent-core vs Orbiter, running dedup in both",
+        "Section 4: Migration table \u2014 every agent-core memory class \u2192 Orbiter counterpart",
         "Typecheck passes"
       ],
       "priority": 79,
@@ -1389,14 +1389,14 @@
     },
     {
       "id": "US-080",
-      "title": "Documentation: Workflow Engine — agent-core to Orbiter mapping (Epic 2)",
+      "title": "Documentation: Workflow Engine \u2014 agent-core to Orbiter mapping (Epic 2)",
       "description": "As a developer, I want reference documentation that maps agent-core's Pregel graph engine to Orbiter's extended Swarm so that LoopNode, BranchNode, and checkpointing features are traceable.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/workflow-engine.md",
-        "Section 1: Agent-core overview — describe Pregel engine: PregelNode, channels, LoopNode (array/count/expression iteration), BranchNode (conditional routing with safe expression eval), SubWorkflowNode, checkpoint/resume, Mermaid visualization",
-        "Section 2: Orbiter equivalent — LoopNode, BranchNode, SubSwarmNode extending Swarm's existing node system, SwarmCheckpoint, MermaidRenderer",
-        "Section 3: Code comparison — define the same branching workflow in agent-core vs Orbiter",
-        "Section 4: Key differences — Pregel's channel-based messaging vs Orbiter's Swarm transfer functions",
+        "Section 1: Agent-core overview \u2014 describe Pregel engine: PregelNode, channels, LoopNode (array/count/expression iteration), BranchNode (conditional routing with safe expression eval), SubWorkflowNode, checkpoint/resume, Mermaid visualization",
+        "Section 2: Orbiter equivalent \u2014 LoopNode, BranchNode, SubSwarmNode extending Swarm's existing node system, SwarmCheckpoint, MermaidRenderer",
+        "Section 3: Code comparison \u2014 define the same branching workflow in agent-core vs Orbiter",
+        "Section 4: Key differences \u2014 Pregel's channel-based messaging vs Orbiter's Swarm transfer functions",
         "Section 5: Migration table",
         "Typecheck passes"
       ],
@@ -1406,14 +1406,14 @@
     },
     {
       "id": "US-081",
-      "title": "Documentation: RAG/Retrieval Pipeline — agent-core to Orbiter mapping (Epic 3)",
+      "title": "Documentation: RAG/Retrieval Pipeline \u2014 agent-core to Orbiter mapping (Epic 3)",
       "description": "As a developer, I want reference documentation that maps agent-core's RAG pipeline to orbiter-retrieval so that all retriever types, embeddings, and vector store abstractions are documented with their Chinese framework origins.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/rag-retrieval.md",
-        "Section 1: Agent-core overview — describe rag/ directory: EmbeddingProvider ABC (OpenAI, Vertex, custom HTTP), VectorStore ABC (pgvector, ChromaDB, Milvus), 5 retriever types (VectorRetriever, SparseRetriever/BM25, HybridRetriever/RRF, AgenticRetriever, KnowledgeGraphRetriever), reranker ABC, document processing pipeline, query rewriter",
-        "Section 2: Orbiter equivalent — map each to orbiter-retrieval's EmbeddingProvider, VectorStore, Retriever hierarchy, Reranker ABC, DocumentProcessor, QueryRewriter",
-        "Section 3: End-to-end RAG pipeline comparison — building a hybrid retrieval pipeline in both frameworks",
-        "Section 4: Migration table — every agent-core RAG class → Orbiter import",
+        "Section 1: Agent-core overview \u2014 describe rag/ directory: EmbeddingProvider ABC (OpenAI, Vertex, custom HTTP), VectorStore ABC (pgvector, ChromaDB, Milvus), 5 retriever types (VectorRetriever, SparseRetriever/BM25, HybridRetriever/RRF, AgenticRetriever, KnowledgeGraphRetriever), reranker ABC, document processing pipeline, query rewriter",
+        "Section 2: Orbiter equivalent \u2014 map each to orbiter-retrieval's EmbeddingProvider, VectorStore, Retriever hierarchy, Reranker ABC, DocumentProcessor, QueryRewriter",
+        "Section 3: End-to-end RAG pipeline comparison \u2014 building a hybrid retrieval pipeline in both frameworks",
+        "Section 4: Migration table \u2014 every agent-core RAG class \u2192 Orbiter import",
         "Typecheck passes"
       ],
       "priority": 81,
@@ -1422,13 +1422,13 @@
     },
     {
       "id": "US-082",
-      "title": "Documentation: Task Management — agent-core to Orbiter mapping (Epic 7)",
+      "title": "Documentation: Task Management \u2014 agent-core to Orbiter mapping (Epic 7)",
       "description": "As a developer, I want reference documentation that maps agent-core's controller/task system to Orbiter's task management so that CRUD, scheduling, intent routing, and event queue features are documented.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/task-management.md",
-        "Section 1: Agent-core overview — describe controller/ directory: TaskManager (CRUD, parent-child hierarchy, priority indexing), TaskScheduler (concurrent limits, pause/cancel), TaskState enum (8 states), IntentRecognizer (LLM-driven routing), EventQueue (pub/sub, per-session topics)",
-        "Section 2: Orbiter equivalent — TaskManager, TaskScheduler, TaskState, IntentRouter, TaskEventBus",
-        "Section 3: Code comparison — creating a task hierarchy and scheduling in both frameworks",
+        "Section 1: Agent-core overview \u2014 describe controller/ directory: TaskManager (CRUD, parent-child hierarchy, priority indexing), TaskScheduler (concurrent limits, pause/cancel), TaskState enum (8 states), IntentRecognizer (LLM-driven routing), EventQueue (pub/sub, per-session topics)",
+        "Section 2: Orbiter equivalent \u2014 TaskManager, TaskScheduler, TaskState, IntentRouter, TaskEventBus",
+        "Section 3: Code comparison \u2014 creating a task hierarchy and scheduling in both frameworks",
         "Section 4: Migration table",
         "Typecheck passes"
       ],
@@ -1438,13 +1438,13 @@
     },
     {
       "id": "US-083",
-      "title": "Documentation: DeepAgent Toolkit — agent-core to Orbiter mapping (Epic 8)",
+      "title": "Documentation: DeepAgent Toolkit \u2014 agent-core to Orbiter mapping (Epic 8)",
       "description": "As a developer, I want reference documentation that maps agent-core's DeepAgent tools to Orbiter's built-in toolkit so that file I/O, shell, code execution, and todo tools are documented.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/deep-agent-toolkit.md",
-        "Section 1: Agent-core overview — describe deep_agent/ directory: file tools (read/write/edit/glob/list/grep), shell execution with command allowlist, sandboxed code execution, todo CRUD system, priority event queue (ABORT > STEER > FOLLOWUP)",
-        "Section 2: Orbiter equivalent — FileTools, ShellTool, CodeExecutionTool, TodoManager, PriorityEventQueue",
-        "Section 3: Code comparison — registering built-in tools and running a shell command in both frameworks",
+        "Section 1: Agent-core overview \u2014 describe deep_agent/ directory: file tools (read/write/edit/glob/list/grep), shell execution with command allowlist, sandboxed code execution, todo CRUD system, priority event queue (ABORT > STEER > FOLLOWUP)",
+        "Section 2: Orbiter equivalent \u2014 FileTools, ShellTool, CodeExecutionTool, TodoManager, PriorityEventQueue",
+        "Section 3: Code comparison \u2014 registering built-in tools and running a shell command in both frameworks",
         "Section 4: Migration table",
         "Typecheck passes"
       ],
@@ -1454,13 +1454,13 @@
     },
     {
       "id": "US-084",
-      "title": "Documentation: Context Evolver — agent-core to Orbiter mapping (Epic 9)",
+      "title": "Documentation: Context Evolver \u2014 agent-core to Orbiter mapping (Epic 9)",
       "description": "As a developer, I want reference documentation that maps agent-core's context evolution algorithms (ACE, ReasoningBank, ReMe) to Orbiter so that these memory evolution strategies are documented with their origins.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/context-evolver.md",
-        "Section 1: Agent-core overview — describe context_evolver/ directory: ACE (Adaptive Context Engine with playbooks, helpful/harmful/neutral counters), ReasoningBank (title/description/content memories with query embeddings), ReMe (when-to-use based memories, success/failure extraction), composable pipeline operators (>> sequential, | parallel)",
-        "Section 2: Orbiter equivalent — ACEStrategy, ReasoningBankStrategy, ReMeStrategy, EvolutionPipeline composition operators",
-        "Section 3: Code comparison — composing a multi-strategy evolution pipeline in both frameworks",
+        "Section 1: Agent-core overview \u2014 describe context_evolver/ directory: ACE (Adaptive Context Engine with playbooks, helpful/harmful/neutral counters), ReasoningBank (title/description/content memories with query embeddings), ReMe (when-to-use based memories, success/failure extraction), composable pipeline operators (>> sequential, | parallel)",
+        "Section 2: Orbiter equivalent \u2014 ACEStrategy, ReasoningBankStrategy, ReMeStrategy, EvolutionPipeline composition operators",
+        "Section 3: Code comparison \u2014 composing a multi-strategy evolution pipeline in both frameworks",
         "Section 4: Migration table",
         "Typecheck passes"
       ],
@@ -1470,13 +1470,13 @@
     },
     {
       "id": "US-085",
-      "title": "Documentation: Operator Pattern & Self-Optimization — agent-core to Orbiter mapping (Epic 10)",
+      "title": "Documentation: Operator Pattern & Self-Optimization \u2014 agent-core to Orbiter mapping (Epic 10)",
       "description": "As a developer, I want reference documentation that maps agent-core's agent_evolving system to Orbiter's operator pattern so that prompt/tool/memory optimization is documented with its origins.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/operator-optimization.md",
-        "Section 1: Agent-core overview — describe agent_evolving/ directory: Trainer, Operator abstraction (LLMCallOperator, ToolCallOperator, MemoryCallOperator), TunableSpec, trajectory extraction, 3-dimension evolution (prompt via textual gradients, tool via beam search, memory config), checkpoint/resume",
-        "Section 2: Orbiter equivalent — Operator ABC, concrete operators, TunableSpec, TrajectoryExtractor, InstructionOptimizer, ToolOptimizer, OperatorTrainer",
-        "Section 3: Code comparison — defining operators and running an optimization loop in both frameworks",
+        "Section 1: Agent-core overview \u2014 describe agent_evolving/ directory: Trainer, Operator abstraction (LLMCallOperator, ToolCallOperator, MemoryCallOperator), TunableSpec, trajectory extraction, 3-dimension evolution (prompt via textual gradients, tool via beam search, memory config), checkpoint/resume",
+        "Section 2: Orbiter equivalent \u2014 Operator ABC, concrete operators, TunableSpec, TrajectoryExtractor, InstructionOptimizer, ToolOptimizer, OperatorTrainer",
+        "Section 3: Code comparison \u2014 defining operators and running an optimization loop in both frameworks",
         "Section 4: How Orbiter's existing EvolutionPipeline/SynthesisPipeline coexist with the new operator pattern",
         "Section 5: Migration table",
         "Typecheck passes"
@@ -1491,12 +1491,12 @@
       "description": "As a developer, I want a top-level porting guide index that provides a complete architectural comparison between agent-core and Orbiter, linking to all per-epic guides.",
       "acceptanceCriteria": [
         "Create docs/porting-guide/index.md",
-        "Section 1: Introduction — what agent-core (openJiuwen) is, why features were ported, link to agent-core-vs-orbiter-analysis.md",
-        "Section 2: Architecture comparison — agent-core's single-package structure vs Orbiter's 15+ package monorepo, diagram showing which agent-core directories map to which Orbiter packages",
-        "Section 3: Design philosophy differences — agent-core's inheritance-heavy + Pregel channels vs Orbiter's composition + Swarm transfers",
-        "Section 4: Package mapping table — every agent-core top-level directory → Orbiter package(s)",
-        "Section 5: Per-epic guide links — table linking to all 10 docs/porting-guide/*.md files with one-line summaries",
-        "Section 6: Acknowledgments — credit to the openJiuwen project and its contributors",
+        "Section 1: Introduction \u2014 what agent-core (openJiuwen) is, why features were ported, link to agent-core-vs-orbiter-analysis.md",
+        "Section 2: Architecture comparison \u2014 agent-core's single-package structure vs Orbiter's 15+ package monorepo, diagram showing which agent-core directories map to which Orbiter packages",
+        "Section 3: Design philosophy differences \u2014 agent-core's inheritance-heavy + Pregel channels vs Orbiter's composition + Swarm transfers",
+        "Section 4: Package mapping table \u2014 every agent-core top-level directory \u2192 Orbiter package(s)",
+        "Section 5: Per-epic guide links \u2014 table linking to all 10 docs/porting-guide/*.md files with one-line summaries",
+        "Section 6: Acknowledgments \u2014 credit to the openJiuwen project and its contributors",
         "Typecheck passes"
       ],
       "priority": 86,
@@ -1505,7 +1505,7 @@
     },
     {
       "id": "US-087",
-      "title": "Research: DeepAgent example — inventory and porting plan (Epic 11)",
+      "title": "Research: DeepAgent example \u2014 inventory and porting plan (Epic 11)",
       "description": "As a developer, I want a detailed inventory of all openjiuwen imports in examples/advanced/deepagent/ and a file-by-file porting plan so that subsequent stories have clear scope and no surprises.",
       "acceptanceCriteria": [
         "Read every Python file in examples/advanced/deepagent/ (agent/, llm/, tool/, test/ subdirectories)",
@@ -1517,7 +1517,7 @@
       ],
       "priority": 87,
       "passes": true,
-      "notes": "Epic 11 — research phase only, no code changes to deepagent. Depends on US-086 (porting guide index). The porting guides are essential references for mapping openjiuwen concepts to Orbiter."
+      "notes": "Epic 11 \u2014 research phase only, no code changes to deepagent. Depends on US-086 (porting guide index). The porting guides are essential references for mapping openjiuwen concepts to Orbiter."
     },
     {
       "id": "US-088",
@@ -1533,11 +1533,11 @@
       ],
       "priority": 88,
       "passes": true,
-      "notes": "Epic 11 — minimal config-only change. Refer to docs/design/deepagent-port-plan.md and deepsearch's structure as reference."
+      "notes": "Epic 11 \u2014 minimal config-only change. Refer to docs/design/deepagent-port-plan.md and deepsearch's structure as reference."
     },
     {
       "id": "US-089",
-      "title": "Port deepagent agent/utils.py — logging to Orbiter (Epic 11)",
+      "title": "Port deepagent agent/utils.py \u2014 logging to Orbiter (Epic 11)",
       "description": "As a developer, I want agent/utils.py to use Python standard logging instead of openjiuwen's logger so that the utility layer has zero openjiuwen imports.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md for context",
@@ -1549,11 +1549,11 @@
       ],
       "priority": 89,
       "passes": true,
-      "notes": "Epic 11 — leaf dependency, no other deepagent files depend on openjiuwen logger through this file. Simple 1:1 replacement."
+      "notes": "Epic 11 \u2014 leaf dependency, no other deepagent files depend on openjiuwen logger through this file. Simple 1:1 replacement."
     },
     {
       "id": "US-090",
-      "title": "Port deepagent llm/openrouter_llm.py — ModelProvider interface (Epic 11)",
+      "title": "Port deepagent llm/openrouter_llm.py \u2014 ModelProvider interface (Epic 11)",
       "description": "As a developer, I want the OpenRouter LLM client to implement Orbiter's ModelProvider protocol instead of extending openjiuwen's BaseModelClient so that it integrates with Orbiter's provider system.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md and docs/porting-guide/index.md for context",
@@ -1568,11 +1568,11 @@
       ],
       "priority": 90,
       "passes": true,
-      "notes": "Epic 11 — this is the most complex single-file port. The openrouter_llm.py file is ~485 lines; focus on replacing the 5 openjiuwen imports and adapting the class interface. Refer to OpenAIProvider in orbiter-models as a pattern."
+      "notes": "Epic 11 \u2014 this is the most complex single-file port. The openrouter_llm.py file is ~485 lines; focus on replacing the 5 openjiuwen imports and adapting the class interface. Refer to OpenAIProvider in orbiter-models as a pattern."
     },
     {
       "id": "US-091",
-      "title": "Port deepagent agent/context_manager.py — Orbiter message types (Epic 11)",
+      "title": "Port deepagent agent/context_manager.py \u2014 Orbiter message types (Epic 11)",
       "description": "As a developer, I want ContextManager to use Orbiter's message types (UserMessage, AssistantMessage, ToolResult) instead of raw dicts with openjiuwen logger so that it integrates with Orbiter's type system.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md for context",
@@ -1585,12 +1585,12 @@
         "Max 150 lines changed"
       ],
       "priority": 91,
-      "passes": false,
-      "notes": "Epic 11 — ContextManager has only 1 openjiuwen import (logger). The message type alignment is optional but recommended for consistency with Orbiter's type system."
+      "passes": true,
+      "notes": "Epic 11 \u2014 ContextManager has only 1 openjiuwen import (logger). The message type alignment is optional but recommended for consistency with Orbiter's type system."
     },
     {
       "id": "US-092",
-      "title": "Port deepagent agent/qa_handler.py — Orbiter logging (Epic 11)",
+      "title": "Port deepagent agent/qa_handler.py \u2014 Orbiter logging (Epic 11)",
       "description": "As a developer, I want QAHandler to use standard Python logging instead of openjiuwen's logger so that the reasoning model integration layer has zero openjiuwen imports.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md for context",
@@ -1602,11 +1602,11 @@
       ],
       "priority": 92,
       "passes": false,
-      "notes": "Epic 11 — QAHandler has only 1 openjiuwen import (logger). Simple replacement."
+      "notes": "Epic 11 \u2014 QAHandler has only 1 openjiuwen import (logger). Simple replacement."
     },
     {
       "id": "US-093",
-      "title": "Port deepagent agent/tool_call_handler.py — Orbiter Tool types (Epic 11)",
+      "title": "Port deepagent agent/tool_call_handler.py \u2014 Orbiter Tool types (Epic 11)",
       "description": "As a developer, I want ToolCallHandler to use Orbiter's Tool and FunctionTool instead of openjiuwen's Runtime, LocalFunction, and Param so that tool execution integrates with Orbiter's tool system.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md and docs/porting-guide/deep-agent-toolkit.md for context",
@@ -1621,11 +1621,11 @@
       ],
       "priority": 93,
       "passes": false,
-      "notes": "Epic 11 — ToolCallHandler has 4 openjiuwen imports. This is a moderate-complexity port that changes how tools are wrapped and executed."
+      "notes": "Epic 11 \u2014 ToolCallHandler has 4 openjiuwen imports. This is a moderate-complexity port that changes how tools are wrapped and executed."
     },
     {
       "id": "US-094",
-      "title": "Port deepagent agent/super_config.py — Orbiter Agent config (Epic 11)",
+      "title": "Port deepagent agent/super_config.py \u2014 Orbiter Agent config (Epic 11)",
       "description": "As a developer, I want SuperAgentConfig to use Pydantic BaseModel instead of extending openjiuwen's ReActAgentConfig so that agent configuration is framework-independent.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md for context",
@@ -1639,11 +1639,11 @@
       ],
       "priority": 94,
       "passes": false,
-      "notes": "Epic 11 — super_config.py has 3 openjiuwen imports (ReActAgentConfig, PluginSchema/WorkflowSchema, ModelConfig). Pattern: follow deepsearch/config.py style."
+      "notes": "Epic 11 \u2014 super_config.py has 3 openjiuwen imports (ReActAgentConfig, PluginSchema/WorkflowSchema, ModelConfig). Pattern: follow deepsearch/config.py style."
     },
     {
       "id": "US-095",
-      "title": "Port deepagent agent/super_factory.py — Orbiter Agent construction (Epic 11)",
+      "title": "Port deepagent agent/super_factory.py \u2014 Orbiter Agent construction (Epic 11)",
       "description": "As a developer, I want the agent factory functions to construct orbiter.agent.Agent instances instead of openjiuwen agents so that agent creation uses Orbiter's API.",
       "acceptanceCriteria": [
         "Read docs/design/deepagent-port-plan.md for context",
@@ -1657,7 +1657,7 @@
       ],
       "priority": 95,
       "passes": false,
-      "notes": "Epic 11 — super_factory.py has 5 openjiuwen imports. Depends on US-094 (config port). This is a significant rewrite following the deepsearch/agents.py pattern."
+      "notes": "Epic 11 \u2014 super_factory.py has 5 openjiuwen imports. Depends on US-094 (config port). This is a significant rewrite following the deepsearch/agents.py pattern."
     },
     {
       "id": "US-096",
@@ -1667,16 +1667,16 @@
         "Read docs/design/deepagent-port-plan.md for the overall plan",
         "Read agent/super_react_agent.py in full (~1,223 lines)",
         "Read orbiter.agent.Agent, orbiter.runner, and orbiter.hooks to understand what Orbiter provides out of the box vs. what must be custom",
-        "Create docs/design/super-react-agent-port.md with: (1) list of all 9 openjiuwen imports and their replacements, (2) which SuperReActAgent methods map to built-in Orbiter Agent behavior (e.g., tool loop, LLM calls), (3) which methods must remain as custom logic (e.g., PlanTracker, context overflow retry), (4) proposed class hierarchy — extend Agent or compose around it, (5) splitting strategy for the next 2-3 stories",
+        "Create docs/design/super-react-agent-port.md with: (1) list of all 9 openjiuwen imports and their replacements, (2) which SuperReActAgent methods map to built-in Orbiter Agent behavior (e.g., tool loop, LLM calls), (3) which methods must remain as custom logic (e.g., PlanTracker, context overflow retry), (4) proposed class hierarchy \u2014 extend Agent or compose around it, (5) splitting strategy for the next 2-3 stories",
         "Typecheck passes"
       ],
       "priority": 96,
       "passes": false,
-      "notes": "Epic 11 — research phase for the largest file. SuperReActAgent is too large to port in one story. This plan will scope US-097 through US-099."
+      "notes": "Epic 11 \u2014 research phase for the largest file. SuperReActAgent is too large to port in one story. This plan will scope US-097 through US-099."
     },
     {
       "id": "US-097",
-      "title": "Port SuperReActAgent Part 1 — PlanTracker standalone extraction (Epic 11)",
+      "title": "Port SuperReActAgent Part 1 \u2014 PlanTracker standalone extraction (Epic 11)",
       "description": "As a developer, I want PlanTracker extracted as a standalone class with zero openjiuwen imports so that it can be used with Orbiter agents.",
       "acceptanceCriteria": [
         "Read docs/design/super-react-agent-port.md for the splitting strategy",
@@ -1691,17 +1691,17 @@
       ],
       "priority": 97,
       "passes": false,
-      "notes": "Epic 11 — safe extraction, no behavioral changes. PlanTracker is ~200 lines within super_react_agent.py. Extraction reduces the main file's complexity."
+      "notes": "Epic 11 \u2014 safe extraction, no behavioral changes. PlanTracker is ~200 lines within super_react_agent.py. Extraction reduces the main file's complexity."
     },
     {
       "id": "US-098",
-      "title": "Port SuperReActAgent Part 2 — MCP and tool registration to Orbiter (Epic 11)",
+      "title": "Port SuperReActAgent Part 2 \u2014 MCP and tool registration to Orbiter (Epic 11)",
       "description": "As a developer, I want SuperReActAgent's MCP tool registration and tool execution to use Orbiter's Tool system instead of openjiuwen's Runtime and LocalFunction.",
       "acceptanceCriteria": [
         "Read docs/design/super-react-agent-port.md for the splitting strategy",
         "Replace openjiuwen.core.utils.tool.base.Tool with orbiter.tool.Tool",
         "Replace openjiuwen.core.utils.tool.function.function.LocalFunction with orbiter.tool.FunctionTool",
-        "Replace openjiuwen.core.utils.tool.param.Param — use type hints and @tool decorator instead",
+        "Replace openjiuwen.core.utils.tool.param.Param \u2014 use type hints and @tool decorator instead",
         "Replace openjiuwen.core.utils.tool.mcp.base.ToolServerConfig with a plain Pydantic model or dict",
         "Update _make_mcp_call_coroutine and _normalize_mcp_server_config to work without openjiuwen",
         "Add docstrings for all modified methods",
@@ -1710,16 +1710,16 @@
       ],
       "priority": 98,
       "passes": false,
-      "notes": "Epic 11 — replaces 4 of the 9 openjiuwen imports in super_react_agent.py. Depends on US-093 (ToolCallHandler port) and US-097 (PlanTracker extraction)."
+      "notes": "Epic 11 \u2014 replaces 4 of the 9 openjiuwen imports in super_react_agent.py. Depends on US-093 (ToolCallHandler port) and US-097 (PlanTracker extraction)."
     },
     {
       "id": "US-099",
-      "title": "Port SuperReActAgent Part 3 — Agent base class and runner to Orbiter (Epic 11)",
+      "title": "Port SuperReActAgent Part 3 \u2014 Agent base class and runner to Orbiter (Epic 11)",
       "description": "As a developer, I want SuperReActAgent to extend or compose with orbiter.agent.Agent instead of openjiuwen's BaseAgent, using Orbiter's runner for execution.",
       "acceptanceCriteria": [
         "Read docs/design/super-react-agent-port.md for the splitting strategy",
         "Replace openjiuwen.core.agent.agent.BaseAgent with orbiter.agent.Agent (extend or compose)",
-        "Replace openjiuwen.core.runtime.runtime.Runtime/Workflow — use Orbiter's built-in step loop or custom run method",
+        "Replace openjiuwen.core.runtime.runtime.Runtime/Workflow \u2014 use Orbiter's built-in step loop or custom run method",
         "Replace openjiuwen.core.runner.runner.Runner/resource_mgr with orbiter.runner",
         "Replace openjiuwen.core.utils.llm.messages.AIMessage with orbiter.types.AssistantMessage",
         "Replace openjiuwen logger with standard Python logging",
@@ -1730,7 +1730,7 @@
       ],
       "priority": 99,
       "passes": false,
-      "notes": "Epic 11 — final port of the remaining 5 openjiuwen imports. This is the most architecturally significant change. Depends on US-097 and US-098."
+      "notes": "Epic 11 \u2014 final port of the remaining 5 openjiuwen imports. This is the most architecturally significant change. Depends on US-097 and US-098."
     },
     {
       "id": "US-100",
@@ -1747,11 +1747,11 @@
       ],
       "priority": 100,
       "passes": false,
-      "notes": "Epic 11 — depends on all prior porting stories (US-088 through US-099). This validates the full port works end-to-end."
+      "notes": "Epic 11 \u2014 depends on all prior porting stories (US-088 through US-099). This validates the full port works end-to-end."
     },
     {
       "id": "US-101",
-      "title": "Port deepagent — remove openjiuwen, final cleanup and validation (Epic 11)",
+      "title": "Port deepagent \u2014 remove openjiuwen, final cleanup and validation (Epic 11)",
       "description": "As a developer, I want to verify that zero openjiuwen imports remain in the deepagent example and that the full example runs correctly with only Orbiter dependencies.",
       "acceptanceCriteria": [
         "Run grep -r 'openjiuwen' examples/advanced/deepagent/ and confirm zero matches",
@@ -1764,7 +1764,7 @@
       ],
       "priority": 101,
       "passes": false,
-      "notes": "Epic 11 — final validation story. Depends on all prior Epic 11 stories. This is the last story in the PRD."
+      "notes": "Epic 11 \u2014 final validation story. Depends on all prior Epic 11 stories. This is the last story in the PRD."
     }
   ]
 }
