@@ -4301,3 +4301,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - contextlib.suppress(ValueError) is preferred over try/except/pass (Ruff SIM105)
   - RUF022 requires `__all__` to be sorted — ruff --fix handles it automatically
 ---
+
+## 2026-03-10 20:15 - US-057
+- What was implemented: End-to-end integration tests for the task controller combining TaskManager, TaskScheduler, and TaskEventBus
+- Files changed:
+  - packages/orbiter-core/tests/test_task_controller_integration.py (new — 13 integration tests across 4 test classes)
+- Test classes:
+  - TestCreateScheduleComplete: single task lifecycle, multiple tasks, failing executor with events
+  - TestParentAutoComplete: parent auto-completes after 3 children, stays working if incomplete, disabled auto-complete
+  - TestConcurrentSchedulingLimit: respects max_concurrent with events, serializes with max_concurrent=1
+  - TestPauseResumeCancelLifecycle: full pause/resume/complete, cancel before schedule, cascade cancel, cancel during schedule, resume and reschedule
+- **Learnings for future iterations:**
+  - `_cascade_cancel()` and `_maybe_complete_parent()` use `task.transition()` directly — no events emitted for cascade-canceled children or auto-completed parents
+  - SUBMITTED → PAUSED is NOT a valid transition; only WORKING → PAUSED is valid. To prevent a SUBMITTED task from running, cancel it (SUBMITTED → CANCELED is valid)
+  - Fire-and-forget events need `await asyncio.sleep(0)` to let the event loop process them before assertions
+  - All 14 pre-existing failures in test_runner.py and test_swarm.py are unrelated to task controller changes
+---
