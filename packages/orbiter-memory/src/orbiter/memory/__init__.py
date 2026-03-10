@@ -49,6 +49,9 @@ from orbiter.memory.migrations import (  # pyright: ignore[reportMissingImports]
     MigrationRegistry,
     run_migrations,
 )
+from orbiter.memory.search import (  # pyright: ignore[reportMissingImports]
+    SearchManager,
+)
 from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     Summarizer,
     SummaryConfig,
@@ -91,6 +94,8 @@ __all__ = [
     "MemoryOrchestrator",
     "MemoryStatus",
     "MemoryStore",
+    # search
+    "SearchManager",
     "OrchestratorConfig",
     # short-term
     "ShortTermMemory",

@@ -3763,3 +3763,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - MigrationRegistry.list_pending(current_version) returns only migrations with version > current_version
   - Duplicate migration versions raise MigrationError on register()
 ---
+
+## 2026-03-10 - US-024
+- What was implemented: Unified SearchManager that queries across multiple MemoryStore instances in parallel
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/search.py (new — SearchManager class)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (updated — export SearchManager)
+  - packages/orbiter-memory/tests/test_search.py (new — 13 tests)
+- **Learnings for future iterations:**
+  - MemoryStore.search() accepts keyword-only args (query, metadata, memory_type, category, status, limit) — pass per-store limit to prevent domination
+  - asyncio.gather() returns list in same order as input tasks — useful for correlating results with stores
+  - MemoryItem.created_at is an ISO-8601 string — string sorting works for descending date order
+  - Dedup by item.id using dict insertion order preserves first-seen occurrence across stores
+---
