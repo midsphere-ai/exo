@@ -3748,3 +3748,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - MERGE with merged_content=None preserves the original item content unchanged
   - First add with empty store skips checker entirely (returns ADD without calling LLM)
 ---
+
+## 2026-03-10 - US-023
+- What was implemented: Versioned migration system for memory store schemas
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/migrations.py (new — Migration frozen dataclass, MigrationError, MigrationRegistry, run_migrations, SQLite and Postgres backends)
+  - packages/orbiter-memory/tests/test_migrations.py (new — 19 tests covering dataclass, registry ordering/duplicates/pending, SQLite run_migrations with apply/skip/incremental/error, edge cases)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (added Migration, MigrationError, MigrationRegistry, run_migrations exports)
+- **Learnings for future iterations:**
+  - Migration system uses `_migrations` table (separate from `memory_items`) to track schema version — version INTEGER PRIMARY KEY, description, applied_at
+  - Backend detection uses class name ("SQLite" / "Postgres" in type name) then falls back to attribute check (_db vs _pool)
+  - Migrations receive raw db connection (aiosqlite.Connection or asyncpg.Connection) — not the store object
+  - Each migration is committed individually so partial progress is preserved on failure
+  - MigrationRegistry.list_pending(current_version) returns only migrations with version > current_version
+  - Duplicate migration versions raise MigrationError on register()
+---
