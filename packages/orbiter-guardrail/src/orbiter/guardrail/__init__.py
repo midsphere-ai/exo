@@ -12,6 +12,9 @@ from orbiter.guardrail.types import (  # pyright: ignore[reportMissingImports]
     RiskAssessment,
     RiskLevel,
 )
+from orbiter.guardrail.llm_backend import (  # pyright: ignore[reportMissingImports]
+    LLMGuardrailBackend,
+)
 from orbiter.guardrail.user_input import (  # pyright: ignore[reportMissingImports]
     PatternBackend,
     UserInputGuardrail,
@@ -22,6 +25,7 @@ __all__ = [
     "GuardrailBackend",
     "GuardrailError",
     "GuardrailResult",
+    "LLMGuardrailBackend",
     "PatternBackend",
     "RiskAssessment",
     "RiskLevel",
