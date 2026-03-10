@@ -3,6 +3,7 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 ---
 
 ## Codebase Patterns
+- Agent hook `messages` param contains Pydantic models (UserMessage, AssistantMessage), not dicts — use `getattr(msg, "role", None)` alongside `msg.get("role")` when extracting message content in guardrail backends
 - GuardrailError bypasses agent retry loop: add to `except (RailAbortError, GuardrailError): raise` in agent.py `_call_llm()`; without this, guardrail blocks get retried 3x and wrapped in AgentError
 - **API versioning**: All API routes use `/api/v1/` prefix. Health check at `/api/health` is unversioned. Legacy `/api/...` paths 301-redirect to `/api/v1/...` via `APIVersionRedirectMiddleware`. Frontend calls all use `/api/v1/`. Vite proxy uses `/api` which matches both.
 - Node error handling: `_get_node_error_config(node)` reads retry_count, retry_delay_ms, on_error, fallback_value, timeout_ms from `node.data`; `_execute_node_with_retry()` wraps `_execute_node` with timeout + exponential backoff + on_error strategy
@@ -3531,4 +3532,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Hook closures in loops need default arg binding (`__point: HookPoint = point`) to capture correct value
   - pyright: ignore[reportMissingImports] needed for cross-package namespace imports in orbiter-guardrail
   - Pre-existing test failures: test_agent_generation.py (2 tests), test_gemini_provider.py and test_vertex_provider.py (import errors) — not related to guardrail work
+---
+
+## 2026-03-10 - US-010
+- What was implemented: UserInputGuardrail with PatternBackend for prompt injection detection
+- Files changed:
+  - packages/orbiter-guardrail/src/orbiter/guardrail/user_input.py (new — PatternBackend + UserInputGuardrail + helper functions)
+  - packages/orbiter-guardrail/src/orbiter/guardrail/__init__.py (updated — added PatternBackend + UserInputGuardrail exports)
+  - packages/orbiter-guardrail/tests/test_user_input_guardrail.py (new — 44 tests covering PatternBackend, UserInputGuardrail, agent integration)
+  - packages/orbiter-guardrail/tests/test_base_guardrail.py (ruff auto-fix: removed unused GuardrailResult import)
+  - prd.json (US-010 passes: true)
+- **Learnings for future iterations:**
+  - Agent hook system passes Pydantic message objects (UserMessage, AssistantMessage), not plain dicts — message extraction helpers must handle both dict and object access (`.get("role")` vs `getattr(msg, "role")`)
+  - PatternBackend uses `_DEFAULT_PATTERNS` list of `(regex_str, RiskLevel, description)` tuples — easy to extend with `extra_patterns` parameter
+  - Only HIGH and CRITICAL risk levels trigger GuardrailError (blocking) — MEDIUM and below pass through via BaseGuardrail's `_BLOCKING_LEVELS` frozenset
+  - `_extract_latest_user_message()` handles string content, list-format content `[{"type": "text", "text": "..."}]`, and missing/empty messages gracefully
 ---

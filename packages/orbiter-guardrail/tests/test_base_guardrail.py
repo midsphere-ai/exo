@@ -12,7 +12,6 @@ from orbiter.guardrail.base import BaseGuardrail
 from orbiter.guardrail.types import (
     GuardrailBackend,
     GuardrailError,
-    GuardrailResult,
     RiskAssessment,
     RiskLevel,
 )
