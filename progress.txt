@@ -3479,3 +3479,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - PatternBackend DEFAULT_PATTERNS should target common injection/jailbreak phrases — test both positive detection and false-positive avoidance
   - LLMGuardrailBackend needs provider resolution via get_provider() — same pattern as agent runtime
 ---
+
+## 2026-03-10 - US-007
+- Implemented orbiter-guardrail package scaffold with core risk types
+- Created packages/orbiter-guardrail/ with standard Orbiter layout (pyproject.toml, src/orbiter/guardrail/, tests/)
+- Implemented RiskLevel StrEnum (SAFE, LOW, MEDIUM, HIGH, CRITICAL)
+- Implemented RiskAssessment frozen Pydantic model with has_risk, risk_level, risk_type, confidence, details
+- Implemented GuardrailError exception inheriting OrbiterError with risk_level, risk_type, details attributes
+- Created __init__.py with extend_path and public exports
+- Added orbiter-guardrail to workspace root pyproject.toml (members, dependency-groups, sources)
+- 14 tests passing, ruff clean, pyright clean, uv sync succeeds
+- Files changed: pyproject.toml, uv.lock, packages/orbiter-guardrail/* (new)
+- **Learnings for future iterations:**
+  - Sub-packages (not orbiter-core) do NOT have src/orbiter/__init__.py — only the guardrail/__init__.py with extend_path
+  - hatchling requires README.md to exist if declared in pyproject.toml — create it before uv sync
+  - Use `# pyright: ignore[reportMissingImports]` on cross-workspace imports in __init__.py (same pattern as orbiter-memory, orbiter-context)
+  - GuardrailError stores risk_level, risk_type, details as instance attributes (not Pydantic) since it inherits Exception → OrbiterError
+---

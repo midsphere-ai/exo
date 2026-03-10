@@ -29,6 +29,7 @@ members = [
     "orbiter-core",
     "orbiter-distributed",
     "orbiter-eval",
+    "orbiter-guardrail",
     "orbiter-mcp",
     "orbiter-memory",
     "orbiter-models",
@@ -2563,6 +2564,21 @@ dependencies = [
 requires-dist = [{ name = "orbiter-core", editable = "packages/orbiter-core" }]
 
 [[package]]
+name = "orbiter-guardrail"
+version = "0.1.0"
+source = { editable = "packages/orbiter-guardrail" }
+dependencies = [
+    { name = "orbiter-core" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "orbiter-core", editable = "packages/orbiter-core" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+
+[[package]]
 name = "orbiter-mcp"
 version = "0.1.0"
 source = { editable = "packages/orbiter-mcp" }
@@ -2755,6 +2771,7 @@ dev = [
     { name = "orbiter-core" },
     { name = "orbiter-distributed" },
     { name = "orbiter-eval" },
+    { name = "orbiter-guardrail" },
     { name = "orbiter-mcp" },
     { name = "orbiter-memory" },
     { name = "orbiter-models" },
@@ -2784,6 +2801,7 @@ dev = [
     { name = "orbiter-core", editable = "packages/orbiter-core" },
     { name = "orbiter-distributed", editable = "packages/orbiter-distributed" },
     { name = "orbiter-eval", editable = "packages/orbiter-eval" },
+    { name = "orbiter-guardrail", editable = "packages/orbiter-guardrail" },
     { name = "orbiter-mcp", editable = "packages/orbiter-mcp" },
     { name = "orbiter-memory", editable = "packages/orbiter-memory" },
     { name = "orbiter-models", editable = "packages/orbiter-models" },
