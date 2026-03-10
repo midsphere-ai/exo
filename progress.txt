@@ -4423,3 +4423,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - ReMe stores `when_to_use` in `metadata.extra["when_to_use"]` rather than extending MemoryItem
   - Evolution complements extraction (MemoryOrchestrator): extraction = conversation → knowledge, evolution = knowledge → better knowledge
 ---
+
+## 2026-03-10 - US-065
+- Implemented MemoryEvolutionStrategy ABC and MemoryEvolutionPipeline in new `evolution/` subpackage
+- MemoryEvolutionStrategy: abstract base with `name: str`, `async evolve(items, *, context=None) -> list[MemoryItem]`
+- Operator overloads: `>>` for sequential composition, `|` for parallel composition
+- MemoryEvolutionPipeline: composes strategies with sequential (chained) or parallel (asyncio.gather + merge) modes
+- Pipeline flattening: composing same-mode pipelines flattens into single pipeline (avoids nesting)
+- Parallel merge: union by item ID, last-write-wins for duplicates via `_merge_results()`
+- 23 tests covering ABC, sequential, parallel, mixed composition, and edge cases
+- Updated `orbiter.memory.__init__` exports
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/evolution/__init__.py (new — ABC + pipeline + merge helper, ~130 lines)
+  - packages/orbiter-memory/tests/test_evolution_pipeline.py (new — 23 tests)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (added evolution exports)
+- **Learnings for future iterations:**
+  - Pipeline flattening via `_flatten(mode)` method: returns `[self]` for base strategies, returns constituent list for same-mode pipelines
+  - Use `item.model_copy(update={...})` (Pydantic v2) to create modified copies without mutating originals
+  - `asyncio.gather()` returns tuple — cast to `list()` before passing to `_merge_results()`
+---
