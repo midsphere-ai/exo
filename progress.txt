@@ -3,6 +3,7 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 ---
 
 ## Codebase Patterns
+- BranchNode duck-type: `is_branch = True`; Swarm detects via `getattr(agent, "is_branch", False)`; routes to in-flow target (skip_until) or out-of-flow target (direct execution + stop)
 - Agent hook `messages` param contains Pydantic models (UserMessage, AssistantMessage), not dicts — use `getattr(msg, "role", None)` alongside `msg.get("role")` when extracting message content in guardrail backends
 - GuardrailError bypasses agent retry loop: add to `except (RailAbortError, GuardrailError): raise` in agent.py `_call_llm()`; without this, guardrail blocks get retried 3x and wrapped in AgentError
 - **API versioning**: All API routes use `/api/v1/` prefix. Health check at `/api/health` is unversioned. Legacy `/api/...` paths 301-redirect to `/api/v1/...` via `APIVersionRedirectMiddleware`. Frontend calls all use `/api/v1/`. Vite proxy uses `/api` which matches both.
@@ -3807,4 +3808,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Parenthesised constants like `(((1)))` don't increase AST depth — use nested ternaries or binary ops to test depth limits
   - `__builtins__` can be either a dict or a module depending on context — use conditional access pattern
   - ruff SIM210 flags `True if x else False` — use `bool(x)` instead
+---
+
+## 2026-03-10 - US-027
+- Implemented BranchNode class in `packages/orbiter-core/src/orbiter/_internal/branch_node.py`
+- BranchNode evaluates conditions (string via `evaluate_expression()` or callable) and routes to if_true/if_false agent
+- Duck-type marker `is_branch: bool = True` for Swarm detection
+- Integrated into `Swarm._run_workflow()` and `Swarm._stream_workflow()` with two routing strategies:
+  - Target ahead in flow_order: skip intermediate agents (skip_until pattern)
+  - Target not in remaining flow: execute directly and stop
+- Exported `BranchNode` from `orbiter/__init__.py` and `__all__`
+- 33 tests covering construction, string conditions, callable conditions, Swarm integration, streaming, and regression
+- All 968 existing tests pass unchanged
+- Files changed: `packages/orbiter-core/src/orbiter/_internal/branch_node.py` (new), `packages/orbiter-core/src/orbiter/swarm.py`, `packages/orbiter-core/src/orbiter/__init__.py`, `packages/orbiter-core/tests/test_branch_node.py` (new)
+- **Learnings for future iterations:**
+  - Swarm duck-type pattern: `is_branch`, `is_group`, `is_swarm` — always use `getattr(agent, "is_X", False)` for detection
+  - Branch targets may not be in the flow_order (e.g., `if_false` agent only in agents list) — must handle both in-flow (skip_until) and out-of-flow (direct execution) routing
+  - Stream test providers need `mock.stream = async_generator_fn` (not `mock.complete`) — use `_FakeStreamChunk` + `_make_stream_provider` pattern from test_swarm.py
+  - Callable condition type should be `Callable[[dict], Any]` not `Callable[[dict], bool]` — supports truthy/falsy evaluation
 ---
