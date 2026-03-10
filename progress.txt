@@ -4097,3 +4097,24 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - ParagraphChunker joins paragraphs with `\n\n` in output but splits on `\n\s*\n` (handles multiple blank lines)
   - Chunk offsets (start/end) must reference the original document text — verify with `text[start:end] == content`
 ---
+
+## 2026-03-10 - US-045
+- What was implemented: Document parsers for PDF, Markdown, JSON, and plain text formats
+  - Parser ABC with `parse(source: str | bytes | Path) -> Document` contract
+  - TextParser: passthrough for plain text
+  - MarkdownParser: strips formatting (headings, bold/italic, links, images, code blocks, lists, blockquotes, HTML)
+  - JSONParser: flattens JSON to readable text with dot-separated key paths and bracket array notation
+  - PDFParser: extracts text from PDF via optional pymupdf dependency
+  - Helper functions `_read_source()` and `_read_source_bytes()` for unified source handling
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/parsers.py (new — Parser ABC + 4 implementations)
+  - packages/orbiter-retrieval/tests/test_parsers.py (new — 41 tests covering all parsers)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — export Parser, TextParser, MarkdownParser, JSONParser, PDFParser)
+  - packages/orbiter-retrieval/pyproject.toml (updated — added optional `pdf` extra for pymupdf)
+- **Learnings for future iterations:**
+  - Follow existing ABC pattern: sync methods (not async) for parsers/chunkers since they do no I/O (except file reads)
+  - Use `# pyright: ignore[reportMissingImports]` for optional deps (pymupdf) and namespace package imports
+  - All parser implementations generate uuid4 IDs for Documents — consistent with existing retrieval pipeline expectations
+  - Mock pymupdf in tests with `patch.dict("sys.modules", ...)` pattern — no need to install the actual dependency
+  - MarkdownParser uses compiled regex patterns as class-level constants for performance
+---
