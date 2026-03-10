@@ -6,10 +6,13 @@ Context Manager
 Manages conversation history AND summary generation with context overflow handling
 """
 
+import logging
 from typing import List, Dict, Any, Optional
-from openjiuwen.core.common.logging import logger
+
 from llm.openrouter_llm import OpenRouterLLM, ContextLimitError
 from agent.prompt_templates import get_summary_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class ContextManager:
