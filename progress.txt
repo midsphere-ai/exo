@@ -3961,3 +3961,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - OpenAI embeddings API returns data with index field; sort by index to guarantee order matches input
   - Batch embedding: send all texts in a single API call for efficiency; handle empty list as early return
 ---
+
+## 2026-03-10 - US-036
+- What was implemented: VertexEmbeddings and HTTPEmbeddings providers for the orbiter-retrieval package
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/vertex_embeddings.py (new — VertexEmbeddings wrapping Vertex AI predict API)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/http_embeddings.py (new — HTTPEmbeddings with configurable field paths)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — exports VertexEmbeddings and HTTPEmbeddings)
+  - packages/orbiter-retrieval/tests/test_embeddings.py (updated — 19 new tests for both providers)
+- **Learnings for future iterations:**
+  - Vertex AI embedding endpoint format: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:predict`
+  - Vertex AI request body uses `instances: [{content: text}]` and `parameters: {outputDimensionality: dim}`
+  - Vertex AI response uses `predictions[].embeddings.values` for the vectors
+  - HTTPEmbeddings uses `_get_nested(obj, dotted.path)` helper for traversing nested response structures — supports both dict keys and integer list indices
+  - Follow same httpx.AsyncClient mock pattern as OpenAIEmbeddings tests: AsyncMock with __aenter__/__aexit__ + patch at module level
+---
