@@ -2683,12 +2683,14 @@ name = "orbiter-retrieval"
 version = "0.1.0"
 source = { editable = "packages/orbiter-retrieval" }
 dependencies = [
+    { name = "httpx" },
     { name = "orbiter-core" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "orbiter-core", editable = "packages/orbiter-core" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
