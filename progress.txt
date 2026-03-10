@@ -3621,3 +3621,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Messages support both dict-style (`msg.get("role")`) and Pydantic model-style (`getattr(msg, "role", None)`) access per codebase pattern
   - The `__slots__` on processor subclasses must redeclare parent slots (`_event`, `_name`) plus new ones — see ToolResultOffloader pattern
 ---
+
+## 2026-03-10 - US-015
+- What was implemented: Reload tool for offloaded content — `reload_offloaded(handle)` tool that retrieves original message content from `ctx.state['offloaded_messages']` by handle ID
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/tools.py (added `_reload_offloaded` function, `reload_tool` instance, `get_reload_tools()` factory; updated `get_context_tools()` to include reload tools)
+  - packages/orbiter-context/src/orbiter/context/__init__.py (added `get_reload_tools` export)
+  - packages/orbiter-context/tests/test_context_tools.py (added TestReloadToolSchema, TestReloadOffloaded test classes, updated factory test counts)
+- **Learnings for future iterations:**
+  - New context tools follow the `_ContextTool` pattern: async function with `ctx` first param, wrapped in `_ContextTool(fn, name=..., description=...)`, added to a `get_*_tools()` factory, included in `get_context_tools()`
+  - `offloaded_messages` is a `dict[str, str]` in context state, keyed by 12-char hex handle IDs created by `MessageOffloader`
+  - Empty dict `{}` is falsy in Python — `not offloaded` handles both `None` and `{}` cases
+---

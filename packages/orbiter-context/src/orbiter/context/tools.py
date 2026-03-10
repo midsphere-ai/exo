@@ -247,9 +247,43 @@ def get_file_tools() -> list[Tool]:
     return [file_tool_read]
 
 
+# ── Reload tool ────────────────────────────────────────────────────
+
+
+async def _reload_offloaded(ctx: Any, handle: str) -> str:
+    """Reload offloaded message content by its handle ID.
+
+    When messages are offloaded to save context space, they are replaced with
+    ``[[OFFLOAD: handle=<id>]]`` markers.  Use this tool to retrieve the
+    original content.
+
+    Args:
+        handle: The handle ID from an ``[[OFFLOAD: handle=...]]`` marker.
+    """
+    offloaded: dict[str, str] | None = ctx.state.get("offloaded_messages")
+    if not offloaded:
+        return "No offloaded messages found."
+    content = offloaded.get(handle)
+    if content is None:
+        return f"Offload handle '{handle}' not found."
+    return content
+
+
+reload_tool = _ContextTool(
+    _reload_offloaded,
+    name="reload_offloaded",
+    description="Reload offloaded message content by handle ID.",
+)
+
+
+def get_reload_tools() -> list[Tool]:
+    """Return all reload tools."""
+    return [reload_tool]
+
+
 # ── All context tools ──────────────────────────────────────────────
 
 
 def get_context_tools() -> list[Tool]:
-    """Return all context tools (planning + knowledge + file)."""
-    return get_planning_tools() + get_knowledge_tools() + get_file_tools()
+    """Return all context tools (planning + knowledge + file + reload)."""
+    return get_planning_tools() + get_knowledge_tools() + get_file_tools() + get_reload_tools()

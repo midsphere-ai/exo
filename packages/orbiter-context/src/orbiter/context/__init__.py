@@ -36,6 +36,7 @@ from orbiter.context.tools import (  # pyright: ignore[reportMissingImports]
     get_file_tools,
     get_knowledge_tools,
     get_planning_tools,
+    get_reload_tools,
 )
 from orbiter.context.workspace import (  # pyright: ignore[reportMissingImports]
     ArtifactType,
@@ -64,6 +65,7 @@ __all__ = [
     "get_file_tools",
     "get_knowledge_tools",
     "get_planning_tools",
+    "get_reload_tools",
     "make_config",
     "neuron_registry",
 ]

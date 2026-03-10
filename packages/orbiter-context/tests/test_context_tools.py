@@ -19,12 +19,14 @@ from orbiter.context.tools import (  # pyright: ignore[reportMissingImports]
     get_file_tools,
     get_knowledge_tools,
     get_planning_tools,
+    get_reload_tools,
     knowledge_tool_get,
     knowledge_tool_grep,
     knowledge_tool_search,
     planning_tool_add,
     planning_tool_complete,
     planning_tool_get,
+    reload_tool,
 )
 from orbiter.context.workspace import Workspace  # pyright: ignore[reportMissingImports]
 from orbiter.tool import ToolError
@@ -356,6 +358,69 @@ class TestContextToolBinding:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Reload tools
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestReloadToolSchema:
+    """Reload tool has correct schema (no ctx param)."""
+
+    def test_reload_offloaded_schema(self) -> None:
+        schema = reload_tool.parameters
+        assert "handle" in schema["properties"]
+        assert "ctx" not in schema["properties"]
+        assert "handle" in schema.get("required", [])
+
+    def test_tool_name(self) -> None:
+        assert reload_tool.name == "reload_offloaded"
+
+
+class TestReloadOffloaded:
+    """reload_offloaded retrieves offloaded message content."""
+
+    async def test_no_offloaded_messages(self) -> None:
+        ctx = _ctx()
+        _bind(reload_tool, ctx)
+        result = await reload_tool.execute(handle="abc123")
+        assert "No offloaded messages" in result
+
+    async def test_empty_offloaded_dict(self) -> None:
+        ctx = _ctx({"offloaded_messages": {}})
+        _bind(reload_tool, ctx)
+        result = await reload_tool.execute(handle="abc123")
+        assert "No offloaded messages" in result
+
+    async def test_handle_found(self) -> None:
+        original = "This is the original long message content that was offloaded."
+        ctx = _ctx({"offloaded_messages": {"abc123def456": original}})
+        _bind(reload_tool, ctx)
+        result = await reload_tool.execute(handle="abc123def456")
+        assert result == original
+
+    async def test_handle_not_found(self) -> None:
+        ctx = _ctx({"offloaded_messages": {"abc123def456": "some content"}})
+        _bind(reload_tool, ctx)
+        result = await reload_tool.execute(handle="unknown_handle")
+        assert "not found" in result
+        assert "unknown_handle" in result
+
+    async def test_multiple_handles(self) -> None:
+        ctx = _ctx(
+            {
+                "offloaded_messages": {
+                    "handle_aaa": "first message",
+                    "handle_bbb": "second message",
+                }
+            }
+        )
+        _bind(reload_tool, ctx)
+        result_a = await reload_tool.execute(handle="handle_aaa")
+        assert result_a == "first message"
+        result_b = await reload_tool.execute(handle="handle_bbb")
+        assert result_b == "second message"
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Factory functions
 # ═══════════════════════════════════════════════════════════════════
 
@@ -380,10 +445,16 @@ class TestFactoryFunctions:
         assert len(tools) == 1
         assert tools[0].name == "read_file"
 
+    def test_get_reload_tools(self) -> None:
+        tools = get_reload_tools()
+        assert len(tools) == 1
+        assert tools[0].name == "reload_offloaded"
+
     def test_get_context_tools(self) -> None:
         tools = get_context_tools()
-        assert len(tools) == 7
+        assert len(tools) == 8
         names = {t.name for t in tools}
         assert "add_todo" in names
         assert "get_knowledge" in names
         assert "read_file" in names
+        assert "reload_offloaded" in names
