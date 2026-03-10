@@ -4211,3 +4211,30 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - RunNodeStatus (INIT/RUNNING/SUCCESS/FAILED/TIMEOUT) tracks execution steps; task-level states need a richer lifecycle (SUBMITTED/WORKING/PAUSED/INPUT_REQUIRED/COMPLETED/CANCELED/FAILED/WAITING)
   - Pre-existing pyright errors (~698) in orbiter-web and other packages — markdown-only changes don't introduce new errors
 ---
+
+## 2026-03-10 - US-052
+- What was implemented: Task model + TaskStatus + TaskManager (Epic 7)
+  - TaskStatus StrEnum with 8 states: SUBMITTED, WORKING, PAUSED, INPUT_REQUIRED, COMPLETED, CANCELED, FAILED, WAITING
+  - Task Pydantic model with id, name, description, status, priority, parent_id, metadata, created_at, updated_at
+  - Valid status transition rules enforced via validate_transition() + InvalidTransitionError
+  - TaskManager with CRUD (create, get, update, delete, list with optional status filter)
+  - In-memory dict-based store
+  - Cancel cascade (parent cancel propagates to all descendants)
+  - Auto-complete parent (optional, configurable)
+  - Public re-exports via orbiter/task_controller.py
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/__init__.py (new)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/types.py (new — TaskStatus, Task, transition rules)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/manager.py (new — TaskManager)
+  - packages/orbiter-core/src/orbiter/task_controller.py (new — public re-exports)
+  - packages/orbiter-core/tests/test_task_types.py (new — 29 tests)
+  - packages/orbiter-core/tests/test_task_manager.py (new — 26 tests)
+- **Learnings for future iterations:**
+  - Task controller lives in `_internal/task_controller/` as a subpackage (not a single file) per design doc Option C
+  - TaskStatus transitions are defined in a `_VALID_TRANSITIONS` dict mapping source → set of valid targets; COMPLETED and CANCELED are terminal (empty target set)
+  - FAILED → SUBMITTED is the only "backwards" transition (allows retry)
+  - TaskManager._cascade_cancel() recursively cancels descendants; skips already-terminal children
+  - Auto-complete parent is opt-in via `auto_complete_parent=True` on TaskManager init
+  - `_now()` and `_uuid()` helper functions in types.py provide consistent defaults for Task fields
+  - TaskNotFoundError and InvalidTransitionError both inherit from TaskError which inherits OrbiterError
+---
