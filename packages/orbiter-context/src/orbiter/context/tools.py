@@ -11,6 +11,7 @@ JSON schema so that LLMs only see the user-facing parameters.
 
 from __future__ import annotations
 
+import glob as _glob_mod
 import re
 from pathlib import Path
 from typing import Any
@@ -213,20 +214,31 @@ def get_knowledge_tools() -> list[Tool]:
 # ── File tool ───────────────────────────────────────────────────────
 
 
+def _resolve_safe_path(ctx: Any, path: str) -> tuple[Path, Path] | str:
+    """Resolve *path* relative to the working directory and validate safety.
+
+    Returns ``(base, target)`` on success or an error message string.
+    """
+    working_dir = ctx.state.get("working_dir")
+    if working_dir is None:
+        return "No working directory set in context."
+    base = Path(working_dir).resolve()
+    target = (base / path).resolve()
+    if not str(target).startswith(str(base)):
+        return f"Access denied: '{path}' is outside the working directory."
+    return base, target
+
+
 async def _read_file(ctx: Any, path: str) -> str:
     """Read a file from the working directory.
 
     Args:
         path: Relative path to the file within the working directory.
     """
-    working_dir = ctx.state.get("working_dir")
-    if working_dir is None:
-        return "No working directory set in context."
-    base = Path(working_dir)
-    target = (base / path).resolve()
-    # Prevent path traversal outside working directory
-    if not str(target).startswith(str(base.resolve())):
-        return f"Access denied: '{path}' is outside the working directory."
+    resolved = _resolve_safe_path(ctx, path)
+    if isinstance(resolved, str):
+        return resolved
+    _base, target = resolved
     if not target.is_file():
         return f"File not found: '{path}'."
     try:
@@ -237,14 +249,143 @@ async def _read_file(ctx: Any, path: str) -> str:
         return f"Error reading '{path}': {e}"
 
 
+async def _write_file(ctx: Any, path: str, content: str) -> str:
+    """Write content to a file in the working directory.
+
+    Creates parent directories as needed.  Overwrites existing files.
+
+    Args:
+        path: Relative path to the file within the working directory.
+        content: The text content to write.
+    """
+    resolved = _resolve_safe_path(ctx, path)
+    if isinstance(resolved, str):
+        return resolved
+    _base, target = resolved
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return f"Wrote {len(content)} bytes to '{path}'."
+    except OSError as e:
+        return f"Error writing '{path}': {e}"
+
+
+async def _edit_file(ctx: Any, path: str, old_text: str, new_text: str) -> str:
+    """Find and replace text in a file.
+
+    Replaces the **first** occurrence of *old_text* with *new_text*.
+
+    Args:
+        path: Relative path to the file within the working directory.
+        old_text: The exact text to find.
+        new_text: The replacement text.
+    """
+    resolved = _resolve_safe_path(ctx, path)
+    if isinstance(resolved, str):
+        return resolved
+    _base, target = resolved
+    if not target.is_file():
+        return f"File not found: '{path}'."
+    try:
+        text = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return f"Cannot read '{path}' as text."
+    except OSError as e:
+        return f"Error reading '{path}': {e}"
+    if old_text not in text:
+        return f"Text not found in '{path}'."
+    updated = text.replace(old_text, new_text, 1)
+    try:
+        target.write_text(updated, encoding="utf-8")
+        return f"Replaced text in '{path}'."
+    except OSError as e:
+        return f"Error writing '{path}': {e}"
+
+
+async def _glob_files(ctx: Any, pattern: str) -> str:
+    """Search for files matching a glob pattern in the working directory.
+
+    Args:
+        pattern: A glob pattern (e.g. ``**/*.py``).
+    """
+    working_dir = ctx.state.get("working_dir")
+    if working_dir is None:
+        return "No working directory set in context."
+    base = Path(working_dir).resolve()
+    matches: list[str] = []
+    for hit in sorted(_glob_mod.glob(str(base / pattern), recursive=True)):
+        hit_path = Path(hit).resolve()
+        if not str(hit_path).startswith(str(base)):
+            continue
+        try:
+            matches.append(str(hit_path.relative_to(base)))
+        except ValueError:
+            continue
+    if not matches:
+        return f"No files matched pattern '{pattern}'."
+    return "\n".join(matches)
+
+
+async def _grep_files(ctx: Any, pattern: str, path: str = ".") -> str:
+    """Search file contents for lines matching a regex pattern.
+
+    Args:
+        pattern: A regex pattern to match against each line.
+        path: Relative path to a file or directory to search (default ``"."``).
+    """
+    resolved = _resolve_safe_path(ctx, path)
+    if isinstance(resolved, str):
+        return resolved
+    base, target = resolved
+    try:
+        compiled = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        return f"Invalid regex pattern: {e}"
+    results: list[str] = []
+
+    def _search_file(fpath: Path) -> None:
+        try:
+            text = fpath.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            return
+        rel = str(fpath.relative_to(base))
+        for i, line in enumerate(text.splitlines(), 1):
+            if compiled.search(line):
+                results.append(f"{rel}:{i}: {line}")
+
+    if target.is_file():
+        _search_file(target)
+    elif target.is_dir():
+        for fpath in sorted(target.rglob("*")):
+            if fpath.is_file():
+                _search_file(fpath)
+    else:
+        return f"Path not found: '{path}'."
+    if not results:
+        return f"No matches for pattern '{pattern}'."
+    return "\n".join(results)
+
+
 file_tool_read = _ContextTool(
     _read_file, name="read_file", description="Read a file from the working directory."
+)
+file_tool_write = _ContextTool(
+    _write_file, name="write_file", description="Write content to a file in the working directory."
+)
+file_tool_edit = _ContextTool(
+    _edit_file, name="edit_file", description="Find and replace text in a file."
+)
+file_tool_glob = _ContextTool(
+    _glob_files, name="glob_files", description="Search for files matching a glob pattern."
+)
+file_tool_grep = _ContextTool(
+    _grep_files, name="grep_files", description="Search file contents for regex matches."
 )
 
 
 def get_file_tools() -> list[Tool]:
     """Return all file tools."""
-    return [file_tool_read]
+    return [file_tool_read, file_tool_write, file_tool_edit, file_tool_glob, file_tool_grep]
 
 
 # ── Reload tool ────────────────────────────────────────────────────

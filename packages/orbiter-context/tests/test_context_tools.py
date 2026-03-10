@@ -14,7 +14,11 @@ from orbiter.context._internal.knowledge import (  # pyright: ignore[reportMissi
 from orbiter.context.context import Context  # pyright: ignore[reportMissingImports]
 from orbiter.context.tools import (  # pyright: ignore[reportMissingImports]
     _ContextTool,
+    file_tool_edit,
+    file_tool_glob,
+    file_tool_grep,
     file_tool_read,
+    file_tool_write,
     get_context_tools,
     get_file_tools,
     get_knowledge_tools,
@@ -328,6 +332,199 @@ class TestReadFile:
             assert result == "nested content"
 
 
+class TestWriteFile:
+    """write_file writes to the working directory."""
+
+    async def test_no_working_dir(self) -> None:
+        ctx = _ctx()
+        _bind(file_tool_write, ctx)
+        result = await file_tool_write.execute(path="test.txt", content="hello")
+        assert "No working directory" in result
+
+    async def test_write_new_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_write, ctx)
+            result = await file_tool_write.execute(path="out.txt", content="hello world")
+            assert "Wrote" in result
+            assert (Path(tmpdir) / "out.txt").read_text() == "hello world"
+
+    async def test_write_creates_parents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_write, ctx)
+            result = await file_tool_write.execute(path="a/b/c.txt", content="nested")
+            assert "Wrote" in result
+            assert (Path(tmpdir) / "a" / "b" / "c.txt").read_text() == "nested"
+
+    async def test_write_overwrites_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "exist.txt"
+            p.write_text("old", encoding="utf-8")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_write, ctx)
+            await file_tool_write.execute(path="exist.txt", content="new")
+            assert p.read_text() == "new"
+
+    async def test_write_path_traversal_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_write, ctx)
+            result = await file_tool_write.execute(path="../../../tmp/evil.txt", content="bad")
+            assert "Access denied" in result
+
+
+class TestEditFile:
+    """edit_file does find-and-replace."""
+
+    async def test_no_working_dir(self) -> None:
+        ctx = _ctx()
+        _bind(file_tool_edit, ctx)
+        result = await file_tool_edit.execute(path="f.txt", old_text="a", new_text="b")
+        assert "No working directory" in result
+
+    async def test_file_not_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_edit, ctx)
+            result = await file_tool_edit.execute(path="missing.txt", old_text="a", new_text="b")
+            assert "not found" in result
+
+    async def test_text_not_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "f.txt"
+            p.write_text("hello world", encoding="utf-8")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_edit, ctx)
+            result = await file_tool_edit.execute(path="f.txt", old_text="xyz", new_text="abc")
+            assert "Text not found" in result
+
+    async def test_replace_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "f.txt"
+            p.write_text("hello world", encoding="utf-8")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_edit, ctx)
+            result = await file_tool_edit.execute(path="f.txt", old_text="world", new_text="there")
+            assert "Replaced" in result
+            assert p.read_text() == "hello there"
+
+    async def test_replace_first_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "f.txt"
+            p.write_text("aaa", encoding="utf-8")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_edit, ctx)
+            await file_tool_edit.execute(path="f.txt", old_text="a", new_text="b")
+            assert p.read_text() == "baa"
+
+    async def test_edit_path_traversal_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_edit, ctx)
+            result = await file_tool_edit.execute(
+                path="../../etc/passwd", old_text="root", new_text="hacked"
+            )
+            assert "Access denied" in result
+
+
+class TestGlobFiles:
+    """glob_files returns matched paths."""
+
+    async def test_no_working_dir(self) -> None:
+        ctx = _ctx()
+        _bind(file_tool_glob, ctx)
+        result = await file_tool_glob.execute(pattern="*.txt")
+        assert "No working directory" in result
+
+    async def test_no_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_glob, ctx)
+            result = await file_tool_glob.execute(pattern="*.xyz")
+            assert "No files matched" in result
+
+    async def test_match_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "a.txt").write_text("a")
+            (Path(tmpdir) / "b.txt").write_text("b")
+            (Path(tmpdir) / "c.py").write_text("c")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_glob, ctx)
+            result = await file_tool_glob.execute(pattern="*.txt")
+            assert "a.txt" in result
+            assert "b.txt" in result
+            assert "c.py" not in result
+
+    async def test_recursive_glob(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sub = Path(tmpdir) / "sub"
+            sub.mkdir()
+            (sub / "deep.py").write_text("deep")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_glob, ctx)
+            result = await file_tool_glob.execute(pattern="**/*.py")
+            assert "deep.py" in result
+
+
+class TestGrepFiles:
+    """grep_files searches file contents by regex."""
+
+    async def test_no_working_dir(self) -> None:
+        ctx = _ctx()
+        _bind(file_tool_grep, ctx)
+        result = await file_tool_grep.execute(pattern="test")
+        assert "No working directory" in result
+
+    async def test_invalid_regex(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="[invalid")
+            assert "Invalid regex" in result
+
+    async def test_no_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "f.txt").write_text("hello world")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="xyz123", path="f.txt")
+            assert "No matches" in result
+
+    async def test_search_single_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "f.txt").write_text("line one\nline two test\nline three")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="test", path="f.txt")
+            assert "f.txt:2:" in result
+            assert "line two test" in result
+
+    async def test_search_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "a.txt").write_text("match here")
+            (Path(tmpdir) / "b.txt").write_text("no hit")
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="match")
+            assert "a.txt:1:" in result
+            assert "b.txt" not in result
+
+    async def test_grep_path_traversal_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="root", path="../../../etc/passwd")
+            assert "Access denied" in result
+
+    async def test_path_not_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = _ctx({"working_dir": tmpdir})
+            _bind(file_tool_grep, ctx)
+            result = await file_tool_grep.execute(pattern="test", path="nonexistent")
+            assert "not found" in result
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Context tool binding
 # ═══════════════════════════════════════════════════════════════════
@@ -442,8 +639,9 @@ class TestFactoryFunctions:
 
     def test_get_file_tools(self) -> None:
         tools = get_file_tools()
-        assert len(tools) == 1
-        assert tools[0].name == "read_file"
+        assert len(tools) == 5
+        names = {t.name for t in tools}
+        assert names == {"read_file", "write_file", "edit_file", "glob_files", "grep_files"}
 
     def test_get_reload_tools(self) -> None:
         tools = get_reload_tools()
@@ -452,7 +650,7 @@ class TestFactoryFunctions:
 
     def test_get_context_tools(self) -> None:
         tools = get_context_tools()
-        assert len(tools) == 8
+        assert len(tools) == 12
         names = {t.name for t in tools}
         assert "add_todo" in names
         assert "get_knowledge" in names
