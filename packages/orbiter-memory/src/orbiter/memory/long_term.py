@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryCategory,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
@@ -160,6 +161,7 @@ class LongTermMemory:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
@@ -167,6 +169,8 @@ class LongTermMemory:
         results: list[MemoryItem] = []
         for item in self._items.values():
             if memory_type and item.memory_type != memory_type:
+                continue
+            if category is not None and item.category != category:
                 continue
             if status and item.status != status:
                 continue

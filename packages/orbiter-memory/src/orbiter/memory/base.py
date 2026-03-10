@@ -30,6 +30,22 @@ class MemoryStatus(StrEnum):
     DISCARD = "discard"
 
 
+class MemoryCategory(StrEnum):
+    """Taxonomy for classifying memory knowledge types.
+
+    Orthogonal to ``memory_type`` (which tracks conversation roles like
+    human/ai/tool/system). Categories classify *what kind of knowledge*
+    a memory item represents.
+    """
+
+    USER_PROFILE = "user_profile"
+    SEMANTIC = "semantic"
+    EPISODIC = "episodic"
+    VARIABLE = "variable"
+    SUMMARY = "summary"
+    CONVERSATION = "conversation"
+
+
 _VALID_TRANSITIONS: dict[MemoryStatus, set[MemoryStatus]] = {
     MemoryStatus.DRAFT: {MemoryStatus.ACCEPTED, MemoryStatus.DISCARD},
     MemoryStatus.ACCEPTED: {MemoryStatus.DISCARD},
@@ -69,6 +85,7 @@ class MemoryItem(BaseModel):
         id: Unique identifier (auto-generated UUID).
         content: The stored content.
         memory_type: Discriminator for subtype dispatch.
+        category: Optional knowledge taxonomy (orthogonal to memory_type).
         status: Current lifecycle status.
         metadata: Scoping information.
         created_at: ISO-8601 creation timestamp.
@@ -78,6 +95,7 @@ class MemoryItem(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     content: str
     memory_type: str
+    category: MemoryCategory | None = None
     status: MemoryStatus = MemoryStatus.ACCEPTED
     metadata: MemoryMetadata = Field(default_factory=MemoryMetadata)
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -152,6 +170,7 @@ class MemoryStore(Protocol):
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:

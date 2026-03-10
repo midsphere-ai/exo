@@ -8,6 +8,7 @@ from typing import Any
 import aiosqlite  # pyright: ignore[reportMissingImports]
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryCategory,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
@@ -139,6 +140,7 @@ class SQLiteMemoryStore:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
@@ -150,6 +152,9 @@ class SQLiteMemoryStore:
         if memory_type:
             clauses.append("memory_type = ?")
             params.append(memory_type)
+        if category is not None:
+            clauses.append("json_extract(extra_json, '$.category') = ?")
+            params.append(category.value)
         if status:
             clauses.append("status = ?")
             params.append(status.value)
@@ -235,6 +240,8 @@ class SQLiteMemoryStore:
 def _extra_fields(item: MemoryItem) -> dict[str, Any]:
     """Extract subclass-specific fields into a JSON dict."""
     data: dict[str, Any] = {}
+    if item.category is not None:
+        data["category"] = item.category.value
     if hasattr(item, "tool_calls"):
         data["tool_calls"] = item.tool_calls  # type: ignore[attr-defined]
     if hasattr(item, "tool_call_id"):
@@ -260,6 +267,9 @@ def _row_to_item(row: Any) -> MemoryItem:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+    if "category" in extra:
+        kwargs["category"] = MemoryCategory(extra["category"])
 
     # Dispatch to subtype based on memory_type
     from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]

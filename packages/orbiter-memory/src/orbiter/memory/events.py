@@ -11,6 +11,7 @@ from typing import Any
 
 from orbiter.events import EventBus  # pyright: ignore[reportMissingImports]
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryCategory,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
@@ -57,6 +58,7 @@ class MemoryEventEmitter:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
@@ -65,6 +67,7 @@ class MemoryEventEmitter:
             query=query,
             metadata=metadata,
             memory_type=memory_type,
+            category=category,
             status=status,
             limit=limit,
         )

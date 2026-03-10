@@ -8,6 +8,7 @@ from typing import Any
 import asyncpg  # pyright: ignore[reportMissingImports]
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryCategory,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
@@ -138,6 +139,7 @@ class PostgresMemoryStore:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
@@ -150,6 +152,10 @@ class PostgresMemoryStore:
         if memory_type:
             clauses.append(f"memory_type = ${idx}")
             params.append(memory_type)
+            idx += 1
+        if category is not None:
+            clauses.append(f"extra_json->>'category' = ${idx}")
+            params.append(category.value)
             idx += 1
         if status:
             clauses.append(f"status = ${idx}")
@@ -258,6 +264,8 @@ def _parse_rowcount(result: str) -> int:
 def _extra_fields(item: MemoryItem) -> dict[str, Any]:
     """Extract subclass-specific fields into a JSON dict."""
     data: dict[str, Any] = {}
+    if item.category is not None:
+        data["category"] = item.category.value
     if hasattr(item, "tool_calls"):
         data["tool_calls"] = item.tool_calls  # type: ignore[attr-defined]
     if hasattr(item, "tool_call_id"):
@@ -286,6 +294,9 @@ def _row_to_item(row: asyncpg.Record) -> MemoryItem:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+    if "category" in extra:
+        kwargs["category"] = MemoryCategory(extra["category"])
 
     # Dispatch to subtype based on memory_type
     from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]

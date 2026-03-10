@@ -3694,3 +3694,24 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - cryptography package is already an indirect dependency via orbiter-web — no new dep needed for Fernet encryption
   - Pre-existing 206 pyright errors (none from this story — research-only, no code changes)
 ---
+
+## 2026-03-10 - US-020
+- What was implemented: Memory type taxonomy with MemoryCategory StrEnum and category-based filtering
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/base.py — added MemoryCategory StrEnum (USER_PROFILE, SEMANTIC, EPISODIC, VARIABLE, SUMMARY, CONVERSATION), added optional `category` field to MemoryItem, updated MemoryStore protocol search() with category param
+  - packages/orbiter-memory/src/orbiter/memory/short_term.py — added category filter to search() and _filter()
+  - packages/orbiter-memory/src/orbiter/memory/long_term.py — added category filter to search()
+  - packages/orbiter-memory/src/orbiter/memory/events.py — pass through category param in MemoryEventEmitter.search()
+  - packages/orbiter-memory/src/orbiter/memory/backends/sqlite.py — added category filter (via extra_json), persist/restore category in _extra_fields/_row_to_item
+  - packages/orbiter-memory/src/orbiter/memory/backends/postgres.py — added category filter (via extra_json), persist/restore category in _extra_fields/_row_to_item
+  - packages/orbiter-memory/src/orbiter/memory/backends/vector.py — added category filter to search()
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py — exported MemoryCategory
+  - packages/orbiter-memory/tests/test_memory_category.py — new test file with 18 tests for category enum, field, and filtering
+  - packages/orbiter-memory/tests/test_memory_base.py — updated InMemoryStore test helper to include category param
+  - prd.json — marked US-020 as passes: true
+- **Learnings for future iterations:**
+  - category field stored in extra_json for DB backends (SQLite/Postgres) — no schema migration needed, backward compatible with existing data
+  - Use `is not None` for category checks (not truthiness) since StrEnum values are truthy — matches the pattern for optional enum filters
+  - MemoryStore protocol's @runtime_checkable isinstance check only verifies method names exist, not signatures — adding optional params to protocol search() is safe
+  - All 264 memory tests pass, all 864 core tests pass, 0 pyright errors
+---

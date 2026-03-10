@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
     AIMemory,
+    MemoryCategory,
     MemoryError,
     MemoryItem,
     MemoryMetadata,
@@ -58,6 +59,7 @@ class ShortTermMemory:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
@@ -65,6 +67,7 @@ class ShortTermMemory:
         results = self._filter(
             metadata=metadata,
             memory_type=memory_type,
+            category=category,
             status=status,
         )
 
@@ -110,12 +113,15 @@ class ShortTermMemory:
         *,
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
     ) -> list[MemoryItem]:
         """Apply scope-based and optional filters."""
         results: list[MemoryItem] = []
         for item in self._items:
             if memory_type and item.memory_type != memory_type:
+                continue
+            if category is not None and item.category != category:
                 continue
             if status and item.status != status:
                 continue

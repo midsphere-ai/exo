@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryCategory,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
@@ -148,12 +149,13 @@ class VectorMemoryStore:
         query: str = "",
         metadata: MemoryMetadata | None = None,
         memory_type: str | None = None,
+        category: MemoryCategory | None = None,
         status: MemoryStatus | None = None,
         limit: int = 10,
     ) -> list[MemoryItem]:
         """Semantic search: embed query, rank by cosine similarity.
 
-        Metadata, memory_type, and status filters are applied as
+        Metadata, memory_type, category, and status filters are applied as
         post-filters on the candidate set before ranking.
         """
         candidates = list(self._items.values())
@@ -161,6 +163,8 @@ class VectorMemoryStore:
         # Apply filters
         if memory_type:
             candidates = [c for c in candidates if c.memory_type == memory_type]
+        if category is not None:
+            candidates = [c for c in candidates if c.category == category]
         if status:
             candidates = [c for c in candidates if c.status == status]
         if metadata:
