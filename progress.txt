@@ -5,6 +5,7 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 ## Codebase Patterns
 - orbiter-retrieval: use relative imports within the package (from .embeddings import ...) + `# pyright: ignore[reportMissingImports]` for namespace package compat
 - orbiter-retrieval: httpx is the HTTP client for embedding/retrieval providers (not provider-specific SDKs) — keeps deps lightweight
+- orbiter-retrieval backends: production vector store backends go in `backends/` subpackage; mock asyncpg pool with a class implementing `__aenter__`/`__aexit__` (not AsyncMock) since `pool.acquire()` returns sync context manager
 - BranchNode duck-type: `is_branch = True`; Swarm detects via `getattr(agent, "is_branch", False)`; routes to in-flow target (skip_until) or out-of-flow target (direct execution + stop)
 - Agent hook `messages` param contains Pydantic models (UserMessage, AssistantMessage), not dicts — use `getattr(msg, "role", None)` alongside `msg.get("role")` when extracting message content in guardrail backends
 - GuardrailError bypasses agent retry loop: add to `except (RailAbortError, GuardrailError): raise` in agent.py `_call_llm()`; without this, guardrail blocks get retried 3x and wrapped in AgentError
@@ -3991,4 +3992,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - InMemoryVectorStore uses internal int IDs (_next_id) to track chunks independently of document_id
   - Metadata filter is exact-match on all provided keys (AND semantics)
   - Frozen Chunk model means chunks are hashable but cannot be mutated after creation
+---
+
+## 2026-03-10 - US-038
+- What was implemented: PgVectorStore backend using asyncpg and pgvector extension for production vector persistence
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/backends/__init__.py (new — backends package init)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/backends/pgvector.py (new — PgVectorStore with asyncpg pool, cosine distance search, JSONB metadata)
+  - packages/orbiter-retrieval/pyproject.toml (added [pgvector] optional dependency)
+  - packages/orbiter-retrieval/tests/test_pgvector_store.py (new — 22 tests with mocked asyncpg)
+- **Learnings for future iterations:**
+  - asyncpg `pool.acquire()` returns an async context manager synchronously (not a coroutine) — mock with a class implementing `__aenter__`/`__aexit__`, not an AsyncMock
+  - pgvector embedding literals are string format `[1.0,2.0,3.0]` — cast with `$N::vector` in SQL
+  - JSONB metadata stored via `json.dumps()` on write, parsed back with `json.loads()` if returned as string
+  - Use `patch.dict("sys.modules", {"asyncpg": MagicMock()})` to test asyncpg-dependent code without installing asyncpg
+  - orbiter-retrieval uses relative imports with `# pyright: ignore[reportMissingImports]` for namespace package compatibility
 ---
