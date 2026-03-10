@@ -4958,3 +4958,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - list[FunctionTool] vs list[Tool] is invariant in Python typing — use union in function signatures or Sequence[Tool]
   - MCP_TOOL_BIN can be None when tooling venv doesn't exist — always filter before os.pathsep.join()
 ---
+
+## 2026-03-11 - US-101
+- Removed all openjiuwen references from deepagent example .py files (comments/docstrings in super_config.py, super_factory.py, super_react_agent_test_run.py)
+- Fixed pyproject.toml pythonpath from "jiuwen" to "."
+- Deleted stale uv.lock that contained openjiuwen package references
+- Updated README.md to reference Orbiter instead of openJiuwen
+- Updated docs/design/deepagent-port-plan.md with completion summary (status → Complete)
+- Added Epic 11 entry to docs/porting-guide/index.md
+- Files changed: examples/advanced/deepagent/agent/super_config.py, super_factory.py, test/super_react_agent_test_run.py, pyproject.toml, README.md, uv.lock (deleted), docs/design/deepagent-port-plan.md, docs/porting-guide/index.md
+- **Learnings for future iterations:**
+  - The deepagent example is NOT part of the UV workspace — it has its own pyproject.toml and uv.lock separate from the root
+  - When orbiter packages aren't published to a registry, deepagent's uv.lock can't be regenerated — delete it rather than leaving stale references
+  - Pre-existing typecheck errors (307) exist in tool/browser/ and tool/mcp_servers/ — these are outside the port scope
+  - grep for references should include uv.lock and other non-.py files, not just source code
+---
