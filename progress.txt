@@ -4130,3 +4130,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - When a feature has two template variants (with/without history), use a fallback strategy: if custom template has {history} placeholder use it, otherwise fall back to built-in history template
   - Empty string LLM responses should fall back to the original query to avoid silent data loss
 ---
+
+## 2026-03-10 - US-047
+- What was implemented: AgenticRetriever — multi-round LLM-driven retriever that iteratively refines queries via LLM sufficiency feedback
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/agentic_retriever.py (new — AgenticRetriever class with iterative retrieve loop and LLM sufficiency judging)
+  - packages/orbiter-retrieval/tests/test_agentic_retriever.py (new — 17 tests covering config, sufficiency parsing, early stop, retry, dedup, top_k, empty results, sorting)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — exports AgenticRetriever)
+- **Learnings for future iterations:**
+  - When monkeypatching `get_provider` for classes that use lazy imports (inside methods), patch `orbiter.models.get_provider` — NOT `module.get_provider` since it won't exist at module level
+  - For tests needing to distinguish rewriter vs judge LLM calls from a single `get_provider` mock, use a DualMockProvider that dispatches based on prompt content (e.g., check for "sufficiency" keyword)
+  - Chunk deduplication key is `(document_id, index)` tuple — this uniquely identifies a chunk across retrieval rounds
+  - `_parse_sufficiency` should clamp to [0.0, 1.0] and fall back gracefully (try JSON → bare float → 0.0)
+---
