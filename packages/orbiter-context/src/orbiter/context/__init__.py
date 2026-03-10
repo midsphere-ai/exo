@@ -22,6 +22,7 @@ from orbiter.context.processor import (  # pyright: ignore[reportMissingImports]
     DialogueCompressor,
     MessageOffloader,
     ProcessorPipeline,
+    RoundWindowProcessor,
     SummarizeProcessor,
     ToolResultOffloader,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "Neuron",
     "ProcessorPipeline",
     "PromptBuilder",
+    "RoundWindowProcessor",
     "SummarizeProcessor",
     "TokenTracker",
     "ToolResultOffloader",

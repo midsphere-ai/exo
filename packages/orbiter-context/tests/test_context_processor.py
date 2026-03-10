@@ -14,6 +14,7 @@ from orbiter.context.processor import (  # pyright: ignore[reportMissingImports]
     MessageOffloader,
     ProcessorError,
     ProcessorPipeline,
+    RoundWindowProcessor,
     SummarizeProcessor,
     ToolResultOffloader,
 )
@@ -925,3 +926,285 @@ class TestDialogueCompressor:
         # Still compresses (model param is stored but not used for actual LLM call yet)
         assert len(result) == 1
         assert result[0]["role"] == "system"
+
+
+# ── RoundWindowProcessor tests ─────────────────────────────────────
+
+
+class TestRoundWindowProcessor:
+    def test_defaults(self) -> None:
+        proc = RoundWindowProcessor()
+        assert proc.event == "pre_llm_call"
+        assert proc.name == "round_window"
+        assert proc.max_rounds == 20
+
+    def test_custom_max_rounds(self) -> None:
+        proc = RoundWindowProcessor(max_rounds=5)
+        assert proc.max_rounds == 5
+
+    def test_custom_name(self) -> None:
+        proc = RoundWindowProcessor(name="my-window")
+        assert proc.name == "my-window"
+
+    @pytest.mark.asyncio
+    async def test_no_history(self) -> None:
+        """No history — no-op."""
+        proc = RoundWindowProcessor(max_rounds=2)
+        ctx = _make_ctx()
+        await proc.process(ctx, {})
+        assert ctx.state.get("history") is None
+
+    @pytest.mark.asyncio
+    async def test_empty_history(self) -> None:
+        """Empty history list — no-op."""
+        proc = RoundWindowProcessor(max_rounds=2)
+        ctx = _make_ctx(history=[])
+        await proc.process(ctx, {})
+        assert ctx.state.get("history") == []
+
+    @pytest.mark.asyncio
+    async def test_within_limit_no_change(self) -> None:
+        """Fewer rounds than max — history unchanged."""
+        proc = RoundWindowProcessor(max_rounds=3)
+        history = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+            {"role": "user", "content": "how are you?"},
+            {"role": "assistant", "content": "good"},
+        ]
+        original = list(history)
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        assert ctx.state.get("history") == original
+
+    @pytest.mark.asyncio
+    async def test_exact_limit_no_change(self) -> None:
+        """Exactly max_rounds rounds — no trimming."""
+        proc = RoundWindowProcessor(max_rounds=2)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        original = list(history)
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        assert ctx.state.get("history") == original
+
+    @pytest.mark.asyncio
+    async def test_trims_oldest_rounds(self) -> None:
+        """Three rounds with max_rounds=2 — first round removed."""
+        proc = RoundWindowProcessor(max_rounds=2)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+            {"role": "user", "content": "q3"},
+            {"role": "assistant", "content": "a3"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 4
+        assert result[0]["content"] == "q2"
+        assert result[1]["content"] == "a2"
+        assert result[2]["content"] == "q3"
+        assert result[3]["content"] == "a3"
+
+    @pytest.mark.asyncio
+    async def test_system_messages_preserved(self) -> None:
+        """System messages are always kept, placed before rounds."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 3
+        assert result[0] == {"role": "system", "content": "You are helpful."}
+        assert result[1]["content"] == "q2"
+        assert result[2]["content"] == "a2"
+
+    @pytest.mark.asyncio
+    async def test_multiple_system_messages(self) -> None:
+        """Multiple system messages are all preserved."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "system", "content": "sys1"},
+            {"role": "system", "content": "sys2"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 4
+        assert result[0]["content"] == "sys1"
+        assert result[1]["content"] == "sys2"
+        assert result[2]["content"] == "q2"
+        assert result[3]["content"] == "a2"
+
+    @pytest.mark.asyncio
+    async def test_rounds_with_tool_calls(self) -> None:
+        """Tool-call messages between user/assistant are part of the round."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": None, "tool_calls": [{"name": "search"}]},
+            {"role": "tool", "content": "result"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 4
+        assert result[0]["content"] == "q2"
+        assert result[1]["role"] == "assistant"
+        assert result[2]["role"] == "tool"
+        assert result[3]["content"] == "a2"
+
+    @pytest.mark.asyncio
+    async def test_system_messages_interleaved(self) -> None:
+        """System messages in the middle of history are still preserved."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "system", "content": "updated instructions"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 3
+        assert result[0]["content"] == "updated instructions"
+        assert result[1]["content"] == "q2"
+        assert result[2]["content"] == "a2"
+
+    @pytest.mark.asyncio
+    async def test_single_round_max_one(self) -> None:
+        """Single round with max_rounds=1 — unchanged."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_incomplete_round_at_end(self) -> None:
+        """Trailing user message without assistant reply counts as a round."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 1
+        assert result[0]["content"] == "q2"
+
+    @pytest.mark.asyncio
+    async def test_only_system_messages(self) -> None:
+        """Only system messages — no rounds, no change."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "system", "content": "sys1"},
+            {"role": "system", "content": "sys2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # No rounds at all, so len(rounds)=0 <= max_rounds=1, no change
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_mutates_history_in_place(self) -> None:
+        """History list is mutated in-place (same object reference)."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        # Same list object
+        assert ctx.state.get("history") is history
+        assert len(history) == 2
+
+    @pytest.mark.asyncio
+    async def test_pydantic_message_objects(self) -> None:
+        """Works with Pydantic-style message objects (attribute access)."""
+
+        class FakeMsg:
+            def __init__(self, role: str, content: str) -> None:
+                self.role = role
+                self.content = content
+
+        proc = RoundWindowProcessor(max_rounds=1)
+        history = [
+            FakeMsg("user", "q1"),
+            FakeMsg("assistant", "a1"),
+            FakeMsg("user", "q2"),
+            FakeMsg("assistant", "a2"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 2
+        assert result[0].content == "q2"
+        assert result[1].content == "a2"
+
+    @pytest.mark.asyncio
+    async def test_with_pipeline(self) -> None:
+        """Works when registered in a ProcessorPipeline."""
+        proc = RoundWindowProcessor(max_rounds=1)
+        pipeline = ProcessorPipeline()
+        pipeline.register(proc)
+        history = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        ctx = _make_ctx(history=history)
+        await pipeline.fire("pre_llm_call", ctx)
+        result = ctx.state.get("history")
+        assert len(result) == 2
+        assert result[0]["content"] == "q2"
+
+    @pytest.mark.asyncio
+    async def test_many_rounds_trimmed(self) -> None:
+        """Large number of rounds trimmed correctly."""
+        proc = RoundWindowProcessor(max_rounds=2)
+        history = []
+        for i in range(10):
+            history.append({"role": "user", "content": f"q{i}"})
+            history.append({"role": "assistant", "content": f"a{i}"})
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 4
+        assert result[0]["content"] == "q8"
+        assert result[1]["content"] == "a8"
+        assert result[2]["content"] == "q9"
+        assert result[3]["content"] == "a9"

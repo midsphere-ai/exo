@@ -8,12 +8,14 @@ The :class:`ProcessorPipeline` collects processors and fires them by event.
 Processors are called sequentially in registration order for a given event.
 
 Built-in processors:
-- SummarizeProcessor  — ``pre_llm_call``: marks context for summarization
+- SummarizeProcessor    — ``pre_llm_call``: marks context for summarization
   when history exceeds the configured threshold.
-- ToolResultOffloader — ``post_tool_call``: offloads large tool results to
+- ToolResultOffloader   — ``post_tool_call``: offloads large tool results to
   workspace when they exceed a size threshold.
-- MessageOffloader    — ``pre_llm_call``: replaces oversized messages with
+- MessageOffloader      — ``pre_llm_call``: replaces oversized messages with
   ``[[OFFLOAD: handle=<id>]]`` markers to keep context within budget.
+- RoundWindowProcessor  — ``pre_llm_call``: keeps the last *N* conversation
+  rounds (user → assistant, including tool calls) plus all system messages.
 """
 
 from __future__ import annotations
@@ -461,3 +463,82 @@ class DialogueCompressor(ContextProcessor):
             f"[Tool chain compressed — called {tools_str} "
             f"({len(tool_names)} calls). Results: {results_str}]"
         )
+
+
+class RoundWindowProcessor(ContextProcessor):
+    """Keeps the last *N* conversation rounds plus all system messages.
+
+    Fires on ``"pre_llm_call"``.  A *round* is a user message followed by
+    everything up to (but not including) the next user message — typically
+    an assistant reply and any interleaved tool-call/tool-result messages.
+
+    System messages are always preserved regardless of windowing.
+
+    This processor complements :pyattr:`ContextConfig.history_rounds` and
+    can be used as an alternative round-based windowing strategy.
+
+    Parameters
+    ----------
+    max_rounds:
+        Maximum number of conversation rounds to retain.  Default ``20``.
+    name:
+        Processor name.  Default ``"round_window"``.
+    """
+
+    __slots__ = ("_event", "_max_rounds", "_name")
+
+    def __init__(self, *, max_rounds: int = 20, name: str = "round_window") -> None:
+        super().__init__("pre_llm_call", name=name)
+        self._max_rounds = max_rounds
+
+    @property
+    def max_rounds(self) -> int:
+        """Maximum number of conversation rounds to retain."""
+        return self._max_rounds
+
+    async def process(self, ctx: Context, payload: dict[str, Any]) -> None:
+        """Window history to the last *max_rounds* complete rounds.
+
+        Keeps all system messages and the last ``max_rounds`` rounds.
+        A round starts at each user message and includes all subsequent
+        non-user, non-system messages until the next user message.
+        """
+        history: list[Any] | None = ctx.state.get("history")
+        if not history:
+            return
+
+        # Separate system messages and build round structure
+        system_msgs: list[Any] = []
+        rounds: list[list[Any]] = []
+        current_round: list[Any] = []
+
+        for msg in history:
+            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+
+            if role == "system":
+                system_msgs.append(msg)
+                continue
+
+            if role == "user":
+                # Start a new round — flush any current round first
+                if current_round:
+                    rounds.append(current_round)
+                current_round = [msg]
+            else:
+                # assistant, tool, or other — part of the current round
+                current_round.append(msg)
+
+        # Flush the last round
+        if current_round:
+            rounds.append(current_round)
+
+        if len(rounds) <= self._max_rounds:
+            return
+
+        # Keep only the last max_rounds rounds
+        kept_rounds = rounds[-self._max_rounds :]
+        result: list[Any] = list(system_msgs)
+        for rnd in kept_rounds:
+            result.extend(rnd)
+
+        history[:] = result

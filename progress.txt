@@ -3647,3 +3647,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - History mutation: modify `ctx.state['history']` list in-place (slice assignment) rather than creating new lists for consistent behavior with other processors
   - All 483 context tests pass, 0 pyright errors
 ---
+
+## 2026-03-10 - US-017
+- What was implemented: RoundWindowProcessor — a pre_llm_call context processor that windows conversation history by rounds (user→assistant exchanges), keeping the last N rounds plus all system messages
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/processor.py — added RoundWindowProcessor class (~60 lines)
+  - packages/orbiter-context/src/orbiter/context/__init__.py — exported RoundWindowProcessor
+  - packages/orbiter-context/tests/test_context_processor.py — 18 tests for RoundWindowProcessor covering: defaults, no/empty history, within/exact/over limit, system message preservation (including interleaved), tool call rounds, incomplete rounds, in-place mutation, Pydantic objects, pipeline integration, many rounds
+- **Learnings for future iterations:**
+  - Round boundaries are defined by user messages — each user message starts a new round, with all subsequent non-user/non-system messages belonging to that round
+  - System messages must be collected separately and prepended to the windowed result — they exist outside the round structure
+  - In-place mutation via `history[:] = result` maintains list identity so other code holding references to the history list sees the update
+  - All 502 context tests pass, 0 pyright errors
+---
