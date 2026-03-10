@@ -4442,3 +4442,23 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use `item.model_copy(update={...})` (Pydantic v2) to create modified copies without mutating originals
   - `asyncio.gather()` returns tuple — cast to `list()` before passing to `_merge_results()`
 ---
+
+## 2026-03-10 - US-066
+- Implemented ACEStrategy (Adaptive Context Engine) memory evolution strategy
+- Per-memory counters (helpful/harmful/neutral) with ratio-based scoring
+- evolve() prunes memories with high harmful ratio
+- async reflect() classifies memories via LLM (with fallback to neutral)
+- async curate() removes memories below quality score threshold
+- File-based JSON persistence for counters (optional)
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/evolution/ace.py (new, ~200 lines)
+  - packages/orbiter-memory/tests/test_ace_strategy.py (new, 35 tests)
+  - packages/orbiter-memory/src/orbiter/memory/evolution/__init__.py (export ACEStrategy)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (export ACEStrategy)
+- **Learnings for future iterations:**
+  - Counters class uses __slots__ for efficiency; score maps [-1,1] to [0,1] via (raw+1)/2
+  - ReflectionModel is a Protocol (async callable), not a concrete class — keeps LLM dependency optional
+  - evolve() uses harmful_ratio (harmful/total), curate() uses quality score — different thresholds
+  - File persistence uses _save() on every record() call for durability
+  - Tests use MockModel with optional per-content mapping for varied classification results
+---

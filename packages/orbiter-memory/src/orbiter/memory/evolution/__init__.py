@@ -135,7 +135,10 @@ class MemoryEvolutionPipeline(MemoryEvolutionStrategy):
         return [self]
 
 
+from orbiter.memory.evolution.ace import ACEStrategy  # pyright: ignore[reportMissingImports]
+
 __all__ = [
+    "ACEStrategy",
     "MemoryEvolutionPipeline",
     "MemoryEvolutionStrategy",
 ]

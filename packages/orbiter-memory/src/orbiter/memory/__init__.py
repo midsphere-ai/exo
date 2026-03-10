@@ -61,6 +61,7 @@ from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     generate_summary,
 )
 from orbiter.memory.evolution import (  # pyright: ignore[reportMissingImports]
+    ACEStrategy,
     MemoryEvolutionPipeline,
     MemoryEvolutionStrategy,
 )
@@ -114,6 +115,7 @@ __all__ = [
     "check_trigger",
     "generate_summary",
     # evolution
+    "ACEStrategy",
     "MemoryEvolutionPipeline",
     "MemoryEvolutionStrategy",
 ]
