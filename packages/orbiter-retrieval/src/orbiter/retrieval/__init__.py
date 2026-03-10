@@ -8,6 +8,10 @@ from orbiter.retrieval.embeddings import Embeddings  # pyright: ignore[reportMis
 from orbiter.retrieval.http_embeddings import HTTPEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.hybrid_retriever import HybridRetriever  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.reranker import (  # pyright: ignore[reportMissingImports]
+    LLMReranker,
+    Reranker,
+)
 from orbiter.retrieval.retriever import (  # pyright: ignore[reportMissingImports]
     Retriever,
     VectorRetriever,
@@ -32,11 +36,13 @@ __all__ = [
     "HTTPEmbeddings",
     "HybridRetriever",
     "InMemoryVectorStore",
+    "LLMReranker",
     "OpenAIEmbeddings",
+    "Reranker",
     "Retriever",
     "RetrievalError",
-    "SparseRetriever",
     "RetrievalResult",
+    "SparseRetriever",
     "VectorRetriever",
     "VectorStore",
     "VertexEmbeddings",
