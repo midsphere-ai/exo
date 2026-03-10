@@ -4317,3 +4317,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Fire-and-forget events need `await asyncio.sleep(0)` to let the event loop process them before assertions
   - All 14 pre-existing failures in test_runner.py and test_swarm.py are unrelated to task controller changes
 ---
+
+## 2026-03-10 - US-058
+- Produced `docs/design/deep-agent-tools-design.md` for Epic 8 (Deep Agent Toolkit)
+- Researched agent-core's deepagents/tools/ (TodoTool, FileSystemTool, ShellTool, CodeTool)
+- Reviewed Orbiter's orbiter-context/tools.py and orbiter-sandbox/ (Sandbox ABC, LocalSandbox, SandboxBuilder, FilesystemTool, TerminalTool)
+- Files changed: `docs/design/deep-agent-tools-design.md` (new)
+- **Learnings for future iterations:**
+  - Orbiter already has equivalents for 3/4 agent-core deep agent tools (todo→planning tools, filesystem→FilesystemTool, shell→TerminalTool); only CodeExecutionTool is missing
+  - FilesystemTool lacks edit/glob/grep actions compared to agent-core's FileSystemTool
+  - Planning tools lack status tracking (pending/in_progress/completed) — only have done:bool
+  - `get_deep_agent_tools()` aggregator should go in orbiter-core/toolkit.py since core already depends on sandbox and context
+  - CodeExecutionTool should use AST-based import allowlist (not exec/eval blocking) per sandbox patterns
+---
