@@ -1,6 +1,9 @@
 #!/usr/bin/env python
-# coding: utf-8
+"""OpenRouter LLM provider package.
 
-from llm.openrouter_llm import OpenRouterLLM, ContextLimitError, OpenRouterConfig
+Re-exports the primary provider class and supporting types.
+"""
 
-__all__ = ["OpenRouterLLM", "ContextLimitError", "OpenRouterConfig"]
+from llm.openrouter_llm import ContextLimitError, OpenRouterConfig, OpenRouterLLM
+
+__all__ = ["ContextLimitError", "OpenRouterConfig", "OpenRouterLLM"]
