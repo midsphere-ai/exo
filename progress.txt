@@ -4792,3 +4792,21 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The openjiuwen logger was a wrapper around Python's logging; direct stdlib usage is a clean 1:1 replacement
   - Use `logging.getLogger("deepagent")` as the module-level logger for all deepagent files being ported
 ---
+
+## 2026-03-11 - US-090
+- Ported deepagent llm/openrouter_llm.py from openjiuwen BaseModelClient to Orbiter ModelProvider protocol
+- Replaced 5 openjiuwen imports: BaseModelClient → ModelProvider, AIMessage → ModelResponse, UsageMetadata → Usage, ToolCall → orbiter ToolCall, AIMessageChunk → StreamChunk
+- Replaced openjiuwen logger with standard `logging.getLogger("deepagent")`
+- Implemented `complete()` returning `ModelResponse` and `stream()` yielding `StreamChunk`
+- Added `_to_openai_messages()` helper to convert Orbiter Message types to OpenAI dict format
+- Renamed `self.config` → `self.or_config` to avoid collision with ModelProvider's `self.config` (ModelConfig)
+- Removed old BaseModelClient methods (_invoke, _ainvoke, _stream, _astream, model_provider, _convert_tools_to_openai_format)
+- Kept OpenRouterConfig, ContextLimitError, TokenUsage, cache control, provider routing, token tracking, and context management as-is
+- Updated llm/__init__.py exports
+- Files changed: examples/advanced/deepagent/llm/openrouter_llm.py, examples/advanced/deepagent/llm/__init__.py
+- **Learnings for future iterations:**
+  - OpenRouterLLM uses `self.or_config` (OpenRouterConfig) for OpenRouter-specific fields and `self.config` (ModelConfig) for the parent ABC — callers referencing `self.config` must be updated to `self.or_config`
+  - ModelProvider.complete() takes `list[Message]` (Orbiter types), not raw dicts — need `_to_openai_messages()` conversion for OpenAI-compatible APIs
+  - The `tools` param in ModelProvider is already `list[dict]` in OpenAI format — no need for ToolInfo conversion
+  - pyright: ignore[reportMissingImports] needed for orbiter namespace packages and tiktoken in deepagent examples
+---
