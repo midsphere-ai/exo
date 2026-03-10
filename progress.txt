@@ -3463,3 +3463,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - RailAbortError raised inside _execute_tools (TaskGroup) gets wrapped in ExceptionGroup on Python 3.11+ — tests need to handle this
   - The to_dict() serialization check already catches rails since they're registered as hooks on hook_manager
 ---
+
+## 2026-03-10 - US-006
+- What was implemented: Design document for the guardrail framework (docs/design/guardrail-design.md)
+- Covers: type hierarchy (RiskLevel, RiskAssessment, GuardrailBackend, GuardrailResult, BaseGuardrail), HookManager integration, event flow diagram, package layout, interaction with rails
+- Key decisions: separate orbiter-guardrail package (Option C), guardrails register as hooks not rails, dynamic attach/detach via BaseGuardrail
+- HookPoints: PRE_LLM_CALL and PRE_TOOL_CALL as primary attachment points; POST_LLM_CALL, POST_TOOL_CALL, START as secondary
+- Files changed:
+  - docs/design/guardrail-design.md (new - 298 lines)
+  - prd.json (US-006 passes: true)
+- **Learnings for future iterations:**
+  - Guardrails and rails are complementary but distinct: rails control flow (SKIP/RETRY/ABORT), guardrails assess risk and block
+  - Guardrails attach post-construction via attach(agent), not in Agent constructor — keeps Agent decoupled from security concerns
+  - GuardrailError and RailAbortError both inherit from OrbiterError and propagate identically through HookManager
+  - PatternBackend DEFAULT_PATTERNS should target common injection/jailbreak phrases — test both positive detection and false-positive avoidance
+  - LLMGuardrailBackend needs provider resolution via get_provider() — same pattern as agent runtime
+---
