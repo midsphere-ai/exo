@@ -1,14 +1,13 @@
-"""Tests for Rail ABC, RailAction, RetryRequest, and RailAbortError."""
+"""Tests for Rail ABC, RailAction, RetryRequest, RailAbortError, and RailManager."""
 
 from __future__ import annotations
 
 import pytest
 
-from orbiter.hooks import HookPoint
-from orbiter.rail import Rail, RailAbortError, RailAction, RetryRequest
+from orbiter.hooks import HookManager, HookPoint
+from orbiter.rail import Rail, RailAbortError, RailAction, RailManager, RetryRequest
 from orbiter.rail_types import InvokeInputs, ModelCallInputs, RailContext, ToolCallInputs
 from orbiter.types import OrbiterError
-
 
 # ---------------------------------------------------------------------------
 # Concrete rail subclass for testing
@@ -212,3 +211,263 @@ class TestPriorityOrdering:
         ]
         sorted_rails = sorted(rails, key=lambda r: r.priority)
         assert [r.name for r in sorted_rails] == ["first", "second", "third"]
+
+
+# ---------------------------------------------------------------------------
+# RailManager
+# ---------------------------------------------------------------------------
+
+
+class TestRailManager:
+    def test_add_and_clear(self) -> None:
+        mgr = RailManager()
+        mgr.add(EchoRail("a"))
+        mgr.add(EchoRail("b"))
+        assert len(mgr._rails) == 2
+        mgr.clear()
+        assert len(mgr._rails) == 0
+
+    def test_remove(self) -> None:
+        mgr = RailManager()
+        rail = EchoRail("a")
+        mgr.add(rail)
+        mgr.remove(rail)
+        assert len(mgr._rails) == 0
+
+    def test_remove_not_found(self) -> None:
+        mgr = RailManager()
+        with pytest.raises(ValueError):
+            mgr.remove(EchoRail("missing"))
+
+    @pytest.mark.asyncio
+    async def test_empty_manager_returns_continue(self) -> None:
+        mgr = RailManager()
+        action = await mgr.run(HookPoint.START, agent=None, input="hello")
+        assert action == RailAction.CONTINUE
+
+    @pytest.mark.asyncio
+    async def test_all_continue(self) -> None:
+        mgr = RailManager()
+        mgr.add(EchoRail("a", action=RailAction.CONTINUE))
+        mgr.add(EchoRail("b", action=RailAction.CONTINUE))
+        action = await mgr.run(HookPoint.START, agent=None, input="hello")
+        assert action == RailAction.CONTINUE
+
+    @pytest.mark.asyncio
+    async def test_none_treated_as_continue(self) -> None:
+        mgr = RailManager()
+        mgr.add(EchoRail("a", action=None))
+        action = await mgr.run(HookPoint.START, agent=None, input="hello")
+        assert action == RailAction.CONTINUE
+
+    @pytest.mark.asyncio
+    async def test_first_non_continue_returned(self) -> None:
+        mgr = RailManager()
+        mgr.add(EchoRail("a", action=RailAction.CONTINUE, priority=10))
+        mgr.add(EchoRail("b", action=RailAction.SKIP, priority=20))
+        mgr.add(EchoRail("c", action=RailAction.ABORT, priority=30))
+        action = await mgr.run(HookPoint.START, agent=None, input="hello")
+        assert action == RailAction.SKIP
+
+    # -- Priority ordering ---------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_priority_ordering(self) -> None:
+        """Rails run in ascending priority order (lower number first)."""
+        call_order: list[str] = []
+
+        class TrackingRail(Rail):
+            async def handle(self, ctx: RailContext) -> RailAction | None:
+                call_order.append(self.name)
+                return RailAction.CONTINUE
+
+        mgr = RailManager()
+        mgr.add(TrackingRail("low", priority=100))
+        mgr.add(TrackingRail("high", priority=10))
+        mgr.add(TrackingRail("mid", priority=50))
+
+        await mgr.run(HookPoint.START, agent=None, input="test")
+        assert call_order == ["high", "mid", "low"]
+
+    # -- Cross-rail extra dict -----------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_cross_rail_extra_dict(self) -> None:
+        """Rails share the same extra dict within one invocation."""
+
+        class WriterRail(Rail):
+            async def handle(self, ctx: RailContext) -> RailAction | None:
+                ctx.extra["writer_was_here"] = True
+                return RailAction.CONTINUE
+
+        class ReaderRail(Rail):
+            def __init__(self) -> None:
+                super().__init__("reader", priority=20)
+                self.saw_key = False
+
+            async def handle(self, ctx: RailContext) -> RailAction | None:
+                self.saw_key = ctx.extra.get("writer_was_here", False)
+                return RailAction.CONTINUE
+
+        reader = ReaderRail()
+        mgr = RailManager()
+        mgr.add(WriterRail("writer", priority=10))
+        mgr.add(reader)
+
+        await mgr.run(HookPoint.START, agent=None, input="test")
+        assert reader.saw_key is True
+
+    @pytest.mark.asyncio
+    async def test_extra_dict_fresh_per_invocation(self) -> None:
+        """Each run() call gets a fresh extra dict."""
+
+        class AppendRail(Rail):
+            def __init__(self) -> None:
+                super().__init__("appender", priority=10)
+                self.seen_counts: list[int] = []
+
+            async def handle(self, ctx: RailContext) -> RailAction | None:
+                count = ctx.extra.get("count", 0)
+                self.seen_counts.append(count)
+                ctx.extra["count"] = count + 1
+                return RailAction.CONTINUE
+
+        rail = AppendRail()
+        mgr = RailManager()
+        mgr.add(rail)
+
+        await mgr.run(HookPoint.START, agent=None, input="a")
+        await mgr.run(HookPoint.START, agent=None, input="b")
+        # Each invocation starts with a fresh extra, so count is always 0
+        assert rail.seen_counts == [0, 0]
+
+    # -- Abort propagation ---------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_abort_stops_subsequent_rails(self) -> None:
+        """When a rail returns ABORT, subsequent rails are NOT executed."""
+        third = EchoRail("third", action=RailAction.CONTINUE, priority=30)
+        mgr = RailManager()
+        mgr.add(EchoRail("first", action=RailAction.CONTINUE, priority=10))
+        mgr.add(EchoRail("second", action=RailAction.ABORT, priority=20))
+        mgr.add(third)
+
+        action = await mgr.run(HookPoint.START, agent=None, input="test")
+        assert action == RailAction.ABORT
+        # Third rail should not have been called
+        assert third.last_ctx is None
+
+    @pytest.mark.asyncio
+    async def test_skip_stops_subsequent_rails(self) -> None:
+        """SKIP also stops subsequent rails."""
+        second = EchoRail("second", action=RailAction.CONTINUE, priority=20)
+        mgr = RailManager()
+        mgr.add(EchoRail("first", action=RailAction.SKIP, priority=10))
+        mgr.add(second)
+
+        action = await mgr.run(HookPoint.START, agent=None, input="test")
+        assert action == RailAction.SKIP
+        assert second.last_ctx is None
+
+    # -- Input type mapping --------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_pre_llm_call_builds_model_call_inputs(self) -> None:
+        rail = EchoRail("check")
+        mgr = RailManager()
+        mgr.add(rail)
+        msgs = [{"role": "user", "content": "hi"}]
+
+        await mgr.run(HookPoint.PRE_LLM_CALL, agent=None, messages=msgs)
+        assert rail.last_ctx is not None
+        assert isinstance(rail.last_ctx.inputs, ModelCallInputs)
+        assert rail.last_ctx.inputs.messages == msgs
+
+    @pytest.mark.asyncio
+    async def test_pre_tool_call_builds_tool_call_inputs(self) -> None:
+        rail = EchoRail("check")
+        mgr = RailManager()
+        mgr.add(rail)
+
+        await mgr.run(
+            HookPoint.PRE_TOOL_CALL,
+            agent=None,
+            tool_name="my_tool",
+            arguments={"x": 1},
+        )
+        assert rail.last_ctx is not None
+        assert isinstance(rail.last_ctx.inputs, ToolCallInputs)
+        assert rail.last_ctx.inputs.tool_name == "my_tool"
+        assert rail.last_ctx.inputs.arguments == {"x": 1}
+
+    @pytest.mark.asyncio
+    async def test_start_builds_invoke_inputs(self) -> None:
+        rail = EchoRail("check")
+        mgr = RailManager()
+        mgr.add(rail)
+
+        await mgr.run(HookPoint.START, agent=None, input="hello")
+        assert rail.last_ctx is not None
+        assert isinstance(rail.last_ctx.inputs, InvokeInputs)
+        assert rail.last_ctx.inputs.input == "hello"
+
+    @pytest.mark.asyncio
+    async def test_agent_passed_to_context(self) -> None:
+        rail = EchoRail("check")
+        mgr = RailManager()
+        mgr.add(rail)
+        sentinel = object()
+
+        await mgr.run(HookPoint.START, agent=sentinel, input="test")
+        assert rail.last_ctx is not None
+        assert rail.last_ctx.agent is sentinel
+
+    # -- HookManager compatibility -------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_hook_for_registers_on_hook_manager(self) -> None:
+        """RailManager can be registered as a single hook on HookManager."""
+        mgr = RailManager()
+        mgr.add(EchoRail("pass", action=RailAction.CONTINUE))
+
+        hook_mgr = HookManager()
+        hook_mgr.add(HookPoint.PRE_LLM_CALL, mgr.hook_for(HookPoint.PRE_LLM_CALL))
+
+        # Should not raise — all rails CONTINUE
+        await hook_mgr.run(HookPoint.PRE_LLM_CALL, agent=None, messages=[])
+
+    @pytest.mark.asyncio
+    async def test_hook_for_abort_raises(self) -> None:
+        """hook_for raises RailAbortError when a rail returns ABORT."""
+        mgr = RailManager()
+        mgr.add(EchoRail("blocker", action=RailAction.ABORT))
+
+        hook_mgr = HookManager()
+        hook_mgr.add(HookPoint.PRE_LLM_CALL, mgr.hook_for(HookPoint.PRE_LLM_CALL))
+
+        with pytest.raises(RailAbortError, match="aborted"):
+            await hook_mgr.run(HookPoint.PRE_LLM_CALL, agent=None, messages=[])
+
+    @pytest.mark.asyncio
+    async def test_existing_hooks_unaffected(self) -> None:
+        """Existing hooks on HookManager still fire alongside rail hooks."""
+        call_log: list[str] = []
+
+        async def plain_hook(**_: object) -> None:
+            call_log.append("plain")
+
+        mgr = RailManager()
+
+        class LogRail(Rail):
+            async def handle(self, ctx: RailContext) -> RailAction | None:
+                call_log.append("rail")
+                return RailAction.CONTINUE
+
+        mgr.add(LogRail("logger", priority=50))
+
+        hook_mgr = HookManager()
+        hook_mgr.add(HookPoint.PRE_LLM_CALL, plain_hook)
+        hook_mgr.add(HookPoint.PRE_LLM_CALL, mgr.hook_for(HookPoint.PRE_LLM_CALL))
+
+        await hook_mgr.run(HookPoint.PRE_LLM_CALL, agent=None, messages=[])
+        assert call_log == ["plain", "rail"]

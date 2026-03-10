@@ -3433,3 +3433,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Priority sort uses `sorted(rails, key=lambda r: r.priority)` — stable sort preserves registration order for equal priorities
   - EchoRail test helper pattern: configurable action + last_ctx capture for assertions
 ---
+
+## 2026-03-10 - US-004
+- Implemented RailManager class with priority ordering and cross-rail state
+- Files changed:
+  - `packages/orbiter-core/src/orbiter/rail.py` — added `_build_inputs()` helper and `RailManager` class with `add()`, `remove()`, `clear()`, `run()`, `hook_for()` methods
+  - `packages/orbiter-core/tests/test_rail.py` — added 19 tests for RailManager covering add/remove/clear, priority ordering, cross-rail extra dict, abort/skip propagation, input type mapping, and HookManager compatibility
+- **Learnings for future iterations:**
+  - `_build_inputs()` maps HookPoint to the correct typed input model (InvokeInputs for START/FINISHED/ERROR, ModelCallInputs for PRE/POST_LLM_CALL, ToolCallInputs for PRE/POST_TOOL_CALL)
+  - `hook_for(event)` creates a Hook-compatible async callable that raises `RailAbortError` on ABORT — this is how RailManager bridges to HookManager
+  - The `extra` dict is created fresh per `run()` invocation, ensuring cross-rail state doesn't leak between calls
+  - Import the rail_types inside function bodies in `rail.py` to avoid circular imports (rail.py imports from hooks.py, rail_types.py imports from hooks.py)
+---
