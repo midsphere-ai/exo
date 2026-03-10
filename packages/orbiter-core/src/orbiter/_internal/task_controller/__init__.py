@@ -1,6 +1,7 @@
 """Task controller — hierarchical task management for agent workflows."""
 
 from orbiter._internal.task_controller.manager import TaskManager, TaskNotFoundError
+from orbiter._internal.task_controller.scheduler import TaskScheduler
 from orbiter._internal.task_controller.types import (
     InvalidTransitionError,
     Task,
@@ -14,5 +15,6 @@ __all__ = [
     "TaskError",
     "TaskManager",
     "TaskNotFoundError",
+    "TaskScheduler",
     "TaskStatus",
 ]

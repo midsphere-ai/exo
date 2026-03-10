@@ -4251,3 +4251,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - list(), cancel cascade, and auto-complete parent were already implemented in US-052 — US-053 only needed the hierarchy query methods
   - 14 pre-existing test failures in test_runner.py/test_swarm.py related to `reasoning_content` attribute — not caused by task controller changes
 ---
+
+## 2026-03-10 - US-054
+- Implemented `TaskScheduler` class with semaphore-based concurrent task execution
+- `schedule(executor)` picks up SUBMITTED tasks, transitions to WORKING, runs via asyncio.Semaphore, marks COMPLETED or FAILED
+- `pause(task_id)` transitions WORKING → PAUSED, `resume(task_id)` transitions PAUSED → SUBMITTED, `cancel(task_id)` transitions → CANCELED + cancels asyncio task
+- Added PAUSED → SUBMITTED as valid transition in types.py to support resume-for-rescheduling pattern
+- 20 new tests covering: construction, basic scheduling, concurrency limit, failure handling, pause/resume/cancel, integration cycle
+- Files changed:
+  - `packages/orbiter-core/src/orbiter/_internal/task_controller/scheduler.py` (new — TaskScheduler class)
+  - `packages/orbiter-core/src/orbiter/_internal/task_controller/types.py` (added SUBMITTED to PAUSED transitions)
+  - `packages/orbiter-core/src/orbiter/_internal/task_controller/__init__.py` (export TaskScheduler)
+  - `packages/orbiter-core/src/orbiter/task_controller.py` (export TaskScheduler)
+  - `packages/orbiter-core/tests/test_task_scheduler.py` (new — 20 tests)
+- **Learnings for future iterations:**
+  - TaskScheduler uses `_manager.list(status=SUBMITTED)` to find eligible tasks — relies on priority sorting from TaskManager
+  - PAUSED → SUBMITTED transition was added to types.py to allow resumed tasks to be re-scheduled (not in original transition rules)
+  - Re-check task status after semaphore acquisition and after executor completion to handle concurrent pause/cancel
+  - asyncio.Semaphore `_value` attribute is internal — use `# noqa: SLF001` if accessing for tests
+---

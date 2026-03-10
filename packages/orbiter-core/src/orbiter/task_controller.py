@@ -6,6 +6,7 @@ from orbiter._internal.task_controller import (
     TaskError,
     TaskManager,
     TaskNotFoundError,
+    TaskScheduler,
     TaskStatus,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "TaskError",
     "TaskManager",
     "TaskNotFoundError",
+    "TaskScheduler",
     "TaskStatus",
 ]

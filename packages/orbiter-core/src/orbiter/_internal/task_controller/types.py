@@ -44,7 +44,7 @@ _VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.CANCELED,
         TaskStatus.WAITING,
     },
-    TaskStatus.PAUSED: {TaskStatus.WORKING, TaskStatus.CANCELED},
+    TaskStatus.PAUSED: {TaskStatus.WORKING, TaskStatus.CANCELED, TaskStatus.SUBMITTED},
     TaskStatus.INPUT_REQUIRED: {TaskStatus.WORKING, TaskStatus.CANCELED},
     TaskStatus.WAITING: {TaskStatus.WORKING, TaskStatus.CANCELED},
     TaskStatus.COMPLETED: set(),
