@@ -4285,3 +4285,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - pyright ignore comment must go on the `from` line, not on the imported symbol line — ruff's I001 auto-fix can move it to the wrong spot
   - Pre-existing test_runner.py failure (test_stream_tool_call_events) is unrelated to this change — _FakeToolCallDelta missing thought_signature attribute
 ---
+
+## 2026-03-10 - US-056
+- What was implemented: TaskEvent dataclass, TaskEventType enum (6 lifecycle events), TaskEventBus with pub/sub (subscribe/unsubscribe/emit), and TaskManager integration via optional event_bus parameter
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/event_bus.py (new — TaskEvent, TaskEventType, TaskEventBus, TaskEventHandler type alias)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/manager.py (updated — optional event_bus param, _emit_sync helper for fire-and-forget event emission)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/__init__.py (updated — export new symbols)
+  - packages/orbiter-core/src/orbiter/task_controller.py (updated — public re-exports)
+  - packages/orbiter-core/tests/test_task_event_bus.py (new — 18 tests covering bus + manager integration)
+- **Learnings for future iterations:**
+  - Sync→async bridge for events: use `loop.create_task()` with `_pending_event_tasks` set + `add_done_callback(set.discard)` to satisfy RUF006
+  - In tests, `await asyncio.sleep(0)` after sync TaskManager calls lets fire-and-forget event tasks execute
+  - TaskManager without event_bus is fully backward compatible — no change in behavior
+  - contextlib.suppress(ValueError) is preferred over try/except/pass (Ruff SIM105)
+  - RUF022 requires `__all__` to be sorted — ruff --fix handles it automatically
+---
