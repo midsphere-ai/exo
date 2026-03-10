@@ -34,6 +34,10 @@ from orbiter.memory.long_term import (  # pyright: ignore[reportMissingImports]
 from orbiter.memory.short_term import (  # pyright: ignore[reportMissingImports]
     ShortTermMemory,
 )
+from orbiter.memory.encrypted import (  # pyright: ignore[reportMissingImports]
+    EncryptedMemoryStore,
+    derive_key,
+)
 from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     Summarizer,
     SummaryConfig,
@@ -44,6 +48,9 @@ from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
 )
 
 __all__ = [
+    # encryption
+    "EncryptedMemoryStore",
+    "derive_key",
     # events
     "MEMORY_ADDED",
     "MEMORY_CLEARED",
