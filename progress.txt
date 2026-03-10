@@ -3776,3 +3776,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - MemoryItem.created_at is an ISO-8601 string — string sorting works for descending date order
   - Dedup by item.id using dict insertion order preserves first-seen occurrence across stores
 ---
+
+## 2026-03-10 - US-025
+- What was implemented: Design document for extending Swarm with loops, branches, and sub-workflows (docs/design/workflow-extensions-design.md)
+- Files changed:
+  - docs/design/workflow-extensions-design.md (new — 659 lines covering WorkflowState, expression evaluator, LoopNode, BranchNode, SwarmNode enhancements, DSL decisions, backward compatibility analysis)
+- **Learnings for future iterations:**
+  - Swarm uses duck-typing markers (is_group, is_swarm) for node detection — new nodes should follow same pattern (is_loop, is_branch, accepts_state)
+  - Flow DSL does NOT need syntax changes — new node types are just agents in the flow list with special run() behavior
+  - WorkflowState should auto-populate `{agent_name}.output` after each node for inter-node data passing
+  - Expression evaluator must use AST whitelist approach (not blacklist) for security — allow only known-safe node types
+  - LoopNode break control uses `[BREAK]` marker in agent output — same pattern as agent-core
+  - BranchNode supports both string expressions (evaluated safely) and callable conditions (receives state dict)
+  - SwarmNode context isolation remains the default — share_state=True is opt-in for sub-workflow state forwarding
+  - Only workflow mode gets WorkflowState — handoff (conversation-driven) and team (tool-based) modes are unchanged
+  - 206 pyright errors are pre-existing across workspace; 0 errors in swarm/graph/nested/agent_group files
+---
