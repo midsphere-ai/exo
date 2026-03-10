@@ -3861,3 +3861,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Loop body agent outputs are stored both as individual agent entries and as the loop node's accumulated output
   - Backward compatibility: `input` key is always present in the state dict, so existing conditions like `len(input) > 5` continue to work unchanged
 ---
+
+## 2026-03-10 - US-030
+- What was implemented: Workflow state checkpointing for resumable execution
+  - `WorkflowCheckpoint` frozen dataclass: node_name, state dict, completed_nodes list, timestamp
+  - `WorkflowCheckpointStore` in-memory store: save(), latest(), list_all()
+  - `Swarm.run()` accepts `checkpoint` parameter (bool or store); creates checkpoints before each node
+  - `Swarm.resume(checkpoint_store)` restores state from latest checkpoint and skips completed nodes
+  - Default behavior unchanged when checkpoint=False
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/workflow_checkpoint.py (new — checkpoint dataclass + store)
+  - packages/orbiter-core/src/orbiter/swarm.py (checkpoint param on run(), _run_workflow() checkpoint creation + resume skip logic, resume() method)
+  - packages/orbiter-core/src/orbiter/__init__.py (export WorkflowCheckpoint, WorkflowCheckpointStore)
+  - packages/orbiter-core/tests/test_workflow_checkpoint.py (new, 18 tests covering dataclass, store, checkpoint creation, resume, partial execution, public API)
+- **Learnings for future iterations:**
+  - `_run_workflow()` has two completion points for nodes: loop nodes (`workflow_state.set(agent_name, ...)` + continue) and regular/group nodes (at bottom of loop). Both need `completed_nodes.append()` for resume tracking.
+  - Resume logic uses `_resume_completed` set and `_resume_state` dict as internal params on `_run_workflow()` — keeps public API clean via `resume()` method.
+  - Checkpoint state is a shallow copy from `workflow_state.to_dict()` — safe since agent outputs are strings.
+  - The same pattern in `_run_workflow` is duplicated in `_stream_workflow` — checkpoint for streaming would require a similar change there (not in scope for US-030).
+---

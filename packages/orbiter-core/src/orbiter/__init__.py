@@ -9,6 +9,7 @@ from orbiter._internal.agent_group import ParallelGroup, SerialGroup
 from orbiter._internal.branch_node import BranchNode
 from orbiter._internal.loop_node import LoopNode
 from orbiter._internal.nested import SwarmNode
+from orbiter._internal.workflow_checkpoint import WorkflowCheckpoint, WorkflowCheckpointStore
 from orbiter._internal.workflow_state import WorkflowState
 from orbiter.agent import Agent
 from orbiter.observability.logging import (  # pyright: ignore[reportMissingImports]
@@ -31,6 +32,8 @@ __all__ = [
     "Swarm",
     "SwarmNode",
     "Tool",
+    "WorkflowCheckpoint",
+    "WorkflowCheckpointStore",
     "WorkflowState",
     "configure",
     "get_logger",

@@ -22,6 +22,7 @@ from typing import Any
 
 from orbiter._internal.call_runner import call_runner
 from orbiter._internal.graph import GraphError, parse_flow_dsl, topological_sort
+from orbiter._internal.workflow_checkpoint import WorkflowCheckpoint, WorkflowCheckpointStore
 from orbiter._internal.workflow_state import WorkflowState
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.tool import Tool
@@ -109,6 +110,7 @@ class Swarm:
         messages: Sequence[Message] | None = None,
         provider: Any = None,
         max_retries: int = 3,
+        checkpoint: bool | WorkflowCheckpointStore = False,
     ) -> RunResult:
         """Execute the swarm according to its mode.
 
@@ -121,6 +123,10 @@ class Swarm:
             messages: Prior conversation history.
             provider: LLM provider for all agents.
             max_retries: Retry attempts for transient errors.
+            checkpoint: Enable state checkpointing before each node.
+                Pass ``True`` to create a new store, or pass an existing
+                :class:`WorkflowCheckpointStore` instance.  Only applies
+                to workflow mode.
 
         Returns:
             ``RunResult`` from the final agent in the chain.
@@ -129,8 +135,14 @@ class Swarm:
             SwarmError: If mode is unsupported or an agent fails.
         """
         if self.mode == "workflow":
+            checkpoint_store: WorkflowCheckpointStore | None = None
+            if checkpoint is True:
+                checkpoint_store = WorkflowCheckpointStore()
+            elif isinstance(checkpoint, WorkflowCheckpointStore):
+                checkpoint_store = checkpoint
             return await self._run_workflow(
-                input, messages=messages, provider=provider, max_retries=max_retries
+                input, messages=messages, provider=provider,
+                max_retries=max_retries, checkpoint_store=checkpoint_store,
             )
         if self.mode == "handoff":
             return await self._run_handoff(
@@ -502,6 +514,9 @@ class Swarm:
         messages: Sequence[Message] | None = None,
         provider: Any = None,
         max_retries: int = 3,
+        checkpoint_store: WorkflowCheckpointStore | None = None,
+        _resume_completed: set[str] | None = None,
+        _resume_state: dict[str, Any] | None = None,
     ) -> RunResult:
         """Execute agents sequentially, chaining output→input.
 
@@ -516,12 +531,24 @@ class Swarm:
         as ``state.set(agent_name, output)`` so downstream nodes can
         access the full workflow context for condition evaluation.
 
+        When *checkpoint_store* is provided, a
+        :class:`WorkflowCheckpoint` is saved before each node
+        executes.
+
         Returns the ``RunResult`` from the last agent in the flow.
         """
         current_input = input
         last_result: RunResult | None = None
         skip_until: str | None = None
-        workflow_state = WorkflowState({"input": current_input})
+
+        # Restore state when resuming from a checkpoint
+        if _resume_state is not None:
+            workflow_state = WorkflowState(_resume_state)
+            current_input = _resume_state.get("input", input)
+        else:
+            workflow_state = WorkflowState({"input": current_input})
+
+        completed_nodes: list[str] = list(_resume_completed) if _resume_completed else []
 
         for agent_name in self.flow_order:
             # Branch routing: skip agents until we reach the target
@@ -530,7 +557,24 @@ class Swarm:
                     continue
                 skip_until = None
 
+            # Resume: skip already-completed nodes
+            if agent_name in completed_nodes:
+                saved = workflow_state.get(agent_name)
+                if saved is not None:
+                    current_input = saved
+                continue
+
             agent = self.agents[agent_name]
+
+            # Save checkpoint before executing this node
+            if checkpoint_store is not None:
+                checkpoint_store.save(
+                    WorkflowCheckpoint(
+                        node_name=agent_name,
+                        state=workflow_state.to_dict(),
+                        completed_nodes=list(completed_nodes),
+                    )
+                )
 
             # Branch node: evaluate condition and route to target
             if getattr(agent, "is_branch", False):
@@ -603,6 +647,7 @@ class Swarm:
                     if broke:
                         break
                 workflow_state.set(agent_name, current_input)
+                completed_nodes.append(agent_name)
                 if last_result is None:
                     last_result = RunResult(output=current_input)
                 continue
@@ -624,9 +669,64 @@ class Swarm:
                 )
             current_input = last_result.output  # type: ignore[union-attr]
             workflow_state.set(agent_name, current_input)
+            completed_nodes.append(agent_name)
 
         assert last_result is not None  # guaranteed since agents is non-empty
         return last_result
+
+    async def resume(
+        self,
+        checkpoint_store: WorkflowCheckpointStore,
+        *,
+        messages: Sequence[Message] | None = None,
+        provider: Any = None,
+        max_retries: int = 3,
+        checkpoint: bool | WorkflowCheckpointStore = False,
+    ) -> RunResult:
+        """Resume workflow execution from the latest checkpoint.
+
+        Loads the latest checkpoint from *checkpoint_store*, restores
+        workflow state, and re-executes ``_run_workflow`` starting from
+        the checkpoint node (skipping already-completed nodes).
+
+        Args:
+            checkpoint_store: Store containing checkpoints from a
+                previous run.
+            messages: Prior conversation history.
+            provider: LLM provider for all agents.
+            max_retries: Retry attempts for transient errors.
+            checkpoint: Enable checkpointing during the resumed run.
+                Pass ``True`` to create a new store, or an existing
+                :class:`WorkflowCheckpointStore`.
+
+        Returns:
+            ``RunResult`` from the final agent in the resumed chain.
+
+        Raises:
+            SwarmError: If no checkpoints exist or mode is not workflow.
+        """
+        if self.mode != "workflow":
+            raise SwarmError("resume() is only supported in workflow mode")
+
+        latest = checkpoint_store.latest()
+        if latest is None:
+            raise SwarmError("No checkpoints available to resume from")
+
+        resume_store: WorkflowCheckpointStore | None = None
+        if checkpoint is True:
+            resume_store = WorkflowCheckpointStore()
+        elif isinstance(checkpoint, WorkflowCheckpointStore):
+            resume_store = checkpoint
+
+        return await self._run_workflow(
+            latest.state.get("input", ""),
+            messages=messages,
+            provider=provider,
+            max_retries=max_retries,
+            checkpoint_store=resume_store,
+            _resume_completed=set(latest.completed_nodes),
+            _resume_state=latest.state,
+        )
 
     async def _run_handoff(
         self,
