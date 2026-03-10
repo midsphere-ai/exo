@@ -3880,3 +3880,24 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Checkpoint state is a shallow copy from `workflow_state.to_dict()` — safe since agent outputs are strings.
   - The same pattern in `_run_workflow` is duplicated in `_stream_workflow` — checkpoint for streaming would require a similar change there (not in scope for US-030).
 ---
+
+## 2026-03-10 - US-031
+- What was implemented: Mermaid flowchart visualization generator for Swarm workflows
+  - `to_mermaid(swarm)` function in `_internal/visualization.py` generates valid `graph TD` Mermaid syntax
+  - Handles linear chains, parallel groups (DSL fan-out/fan-in), BranchNode (diamond), LoopNode (hexagon), SwarmNode (subroutine), ParallelGroup (subgraph)
+  - BranchNode edges labeled with `true`/`false`, including out-of-flow targets
+  - LoopNode shows body chain with dashed loop-back edges
+  - `Swarm.to_mermaid()` convenience method added
+  - 16 tests covering all topologies
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/visualization.py (new — to_mermaid function, _safe_id, _escape_label, _build_graph helpers)
+  - packages/orbiter-core/src/orbiter/swarm.py (added to_mermaid() convenience method)
+  - packages/orbiter-core/tests/test_visualization.py (new — 16 tests across 6 test classes)
+- **Learnings for future iterations:**
+  - Swarm does NOT store the parsed Graph object — only `flow` (DSL string) and `flow_order` (list). Must re-parse DSL via `parse_flow_dsl()` to reconstruct topology.
+  - Duck-type markers: `is_branch`, `is_loop`, `is_swarm`, `is_group` — use `getattr(agent, "is_X", False)` for type detection.
+  - Mermaid shape syntax: `{name}` for diamond, `{{name}}` for hexagon, `[[name]]` for subroutine, `subgraph id[label]...end` for groups.
+  - Mermaid node IDs must be alphanumeric — sanitize agent names with regex `[^a-zA-Z0-9_]` -> `_`.
+  - LoopNode.body is always a `list[str]` (normalized from str|list[str] in __init__).
+  - ParallelGroup stores member order in `agent_order` attribute.
+---
