@@ -4875,3 +4875,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - ModelInfo/SuperModelConfig from super_config.py are reused for config creation, but the actual Agent only needs a model string
   - Pre-existing test failures: test_runner (thought_signature attr) and test_swarm team (reasoning_content attr) — both in runner.py, unrelated to this port
 ---
+
+## 2026-03-11 - US-096
+- Created docs/design/super-react-agent-port.md — detailed porting strategy for the 1,223-line SuperReActAgent
+- Inventoried all 9 openjiuwen imports with Orbiter replacements
+- Mapped 7 methods to built-in Orbiter Agent behavior (tool loop, LLM calls, retry, tool dispatch)
+- Identified 9 custom concerns that must be preserved (PlanTracker, context management, QA handler, MCP, sub-agents, etc.)
+- Proposed composition-based architecture (compose around Agent, not extend)
+- Defined splitting strategy: US-097 (PlanTracker), US-098 (MCP tools), US-099 (orchestrator)
+- Files changed: docs/design/super-react-agent-port.md (new)
+- **Learnings for future iterations:**
+  - SuperReActAgent's `invoke()` is an orchestrator, not an agent override — Orbiter's Agent.run() handles the inner loop
+  - PlanTracker has zero framework dependencies and can be extracted cleanly with callback interfaces
+  - MCP tool registration can use the `mcp` SDK directly — no need for openjiuwen's Runner/resource_mgr
+  - Tool whitelist filtering is unnecessary in Orbiter since Agent.tools dict is explicit at construction
+  - Context-limit retry should catch AgentError at the orchestrator level, not intercept the inner loop
+---
