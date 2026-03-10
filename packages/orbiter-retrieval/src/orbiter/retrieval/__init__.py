@@ -4,6 +4,12 @@ from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
 
+from orbiter.retrieval.chunker import (  # pyright: ignore[reportMissingImports]
+    CharacterChunker,
+    Chunker,
+    ParagraphChunker,
+    TokenChunker,
+)
 from orbiter.retrieval.embeddings import Embeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.http_embeddings import HTTPEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings  # pyright: ignore[reportMissingImports]
@@ -30,7 +36,9 @@ from orbiter.retrieval.vector_store import (  # pyright: ignore[reportMissingImp
 from orbiter.retrieval.vertex_embeddings import VertexEmbeddings  # pyright: ignore[reportMissingImports]
 
 __all__ = [
+    "CharacterChunker",
     "Chunk",
+    "Chunker",
     "Document",
     "Embeddings",
     "HTTPEmbeddings",
@@ -38,11 +46,13 @@ __all__ = [
     "InMemoryVectorStore",
     "LLMReranker",
     "OpenAIEmbeddings",
+    "ParagraphChunker",
     "Reranker",
     "Retriever",
     "RetrievalError",
     "RetrievalResult",
     "SparseRetriever",
+    "TokenChunker",
     "VectorRetriever",
     "VectorStore",
     "VertexEmbeddings",
