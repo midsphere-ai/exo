@@ -4238,3 +4238,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `_now()` and `_uuid()` helper functions in types.py provide consistent defaults for Task fields
   - TaskNotFoundError and InvalidTransitionError both inherit from TaskError which inherits OrbiterError
 ---
+
+## 2026-03-10 - US-053
+- Implemented `get_children(parent_id)` and `get_subtree(task_id)` methods on TaskManager
+- Both methods validate the task ID exists and return results sorted by priority (desc) then created_at (asc)
+- `get_subtree` recursively collects all descendants via `_collect_descendants` helper
+- Added 12 new tests covering: direct children, grandchildren exclusion, empty results, priority sorting, missing ID errors, deep hierarchies, multiple branches
+- Files changed:
+  - `packages/orbiter-core/src/orbiter/_internal/task_controller/manager.py` (added get_children, get_subtree, _collect_descendants)
+  - `packages/orbiter-core/tests/test_task_manager.py` (added TestGetChildren, TestGetSubtree classes)
+- **Learnings for future iterations:**
+  - list(), cancel cascade, and auto-complete parent were already implemented in US-052 — US-053 only needed the hierarchy query methods
+  - 14 pre-existing test failures in test_runner.py/test_swarm.py related to `reasoning_content` attribute — not caused by task controller changes
+---
