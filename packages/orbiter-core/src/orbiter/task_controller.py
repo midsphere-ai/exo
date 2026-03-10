@@ -1,7 +1,10 @@
 """Public re-exports for the task controller module."""
 
 from orbiter._internal.task_controller import (
+    Intent,
+    IntentRecognizer,
     InvalidTransitionError,
+    TASK_ACTIONS,
     Task,
     TaskError,
     TaskManager,
@@ -11,7 +14,10 @@ from orbiter._internal.task_controller import (
 )
 
 __all__ = [
+    "Intent",
+    "IntentRecognizer",
     "InvalidTransitionError",
+    "TASK_ACTIONS",
     "Task",
     "TaskError",
     "TaskManager",
