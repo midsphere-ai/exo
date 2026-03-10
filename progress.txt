@@ -4863,3 +4863,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The `to_constrain_config()` helper was renamed to `to_constraint_config()` — downstream callers in super_factory.py will need updating (US-095)
   - 120 insertions / 73 deletions = within 150-line limit
 ---
+
+## 2026-03-11 - US-095
+- What was implemented: Ported deepagent agent/super_factory.py to use Orbiter Agent/Swarm instead of openjiuwen classes
+- Files changed:
+  - examples/advanced/deepagent/agent/super_factory.py (rewritten — 152 insertions, 188 deletions)
+- **Learnings for future iterations:**
+  - super_factory.py pattern: `_build_agent()` helper converts SuperAgentConfig → Agent; `_resolve_model_string()` maps api_base to provider prefix
+  - `create_agent_system_with_sub_agents()` now returns `Swarm(mode="team")` instead of registering sub-agents on main agent — Swarm auto-generates delegate tools
+  - Removed `workflows` param and all PluginSchema/WorkflowSchema schema-wrapper objects — Orbiter tools are passed as instances directly
+  - ModelInfo/SuperModelConfig from super_config.py are reused for config creation, but the actual Agent only needs a model string
+  - Pre-existing test failures: test_runner (thought_signature attr) and test_swarm team (reasoning_content attr) — both in runner.py, unrelated to this port
+---
