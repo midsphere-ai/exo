@@ -1384,7 +1384,7 @@
         "Typecheck passes"
       ],
       "priority": 79,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 5 implementation stories complete. References agent-core's memory/ directory."
     },
     {
@@ -1502,6 +1502,269 @@
       "priority": 86,
       "passes": false,
       "notes": "Final documentation story. Requires all other docs stories (US-076 through US-085) to be complete first."
+    },
+    {
+      "id": "US-087",
+      "title": "Research: DeepAgent example \u2014 inventory and porting plan (Epic 11)",
+      "description": "As a developer, I want a detailed inventory of all openjiuwen imports in examples/advanced/deepagent/ and a file-by-file porting plan so that subsequent stories have clear scope and no surprises.",
+      "acceptanceCriteria": [
+        "Read every Python file in examples/advanced/deepagent/ (agent/, llm/, tool/, test/ subdirectories)",
+        "Read the completed porting guide docs: docs/porting-guide/index.md, docs/porting-guide/agent-rails.md, docs/porting-guide/deep-agent-toolkit.md",
+        "Read examples/advanced/deepsearch/ as the reference for how a ported example should look",
+        "Create docs/design/deepagent-port-plan.md with: (1) file-by-file inventory listing every openjiuwen import and its Orbiter equivalent, (2) dependency graph showing which files depend on which openjiuwen modules, (3) porting order (leaves first, then dependents), (4) files that need no changes (standalone MCP servers, browser tools with no openjiuwen imports), (5) risk assessment for each file",
+        "Identify which files can be deleted vs. rewritten vs. lightly edited",
+        "Typecheck passes"
+      ],
+      "priority": 87,
+      "passes": false,
+      "notes": "Epic 11 \u2014 research phase only, no code changes to deepagent. Depends on US-086 (porting guide index). The porting guides are essential references for mapping openjiuwen concepts to Orbiter."
+    },
+    {
+      "id": "US-088",
+      "title": "Port deepagent pyproject.toml and __init__.py to Orbiter deps (Epic 11)",
+      "description": "As a developer, I want the deepagent example's project config to depend on Orbiter packages instead of openjiuwen so that the dependency foundation is correct before porting code.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for the full porting plan",
+        "Update examples/advanced/deepagent/pyproject.toml: replace openjiuwen dependency with orbiter-core, orbiter-models, and any other needed orbiter packages",
+        "Update examples/advanced/deepagent/__init__.py if needed",
+        "Add inline docstring comments explaining each Orbiter dependency and why it is needed",
+        "Typecheck passes",
+        "Max 50 lines changed"
+      ],
+      "priority": 88,
+      "passes": false,
+      "notes": "Epic 11 \u2014 minimal config-only change. Refer to docs/design/deepagent-port-plan.md and deepsearch's structure as reference."
+    },
+    {
+      "id": "US-089",
+      "title": "Port deepagent agent/utils.py \u2014 logging to Orbiter (Epic 11)",
+      "description": "As a developer, I want agent/utils.py to use Python standard logging instead of openjiuwen's logger so that the utility layer has zero openjiuwen imports.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Replace openjiuwen.core.common.logging imports with Python's standard logging module",
+        "Preserve all existing logging behavior (file logging, real-time flushing, simple format option)",
+        "Add docstrings explaining the logging setup",
+        "Typecheck passes",
+        "Max 50 lines changed"
+      ],
+      "priority": 89,
+      "passes": false,
+      "notes": "Epic 11 \u2014 leaf dependency, no other deepagent files depend on openjiuwen logger through this file. Simple 1:1 replacement."
+    },
+    {
+      "id": "US-090",
+      "title": "Port deepagent llm/openrouter_llm.py \u2014 ModelProvider interface (Epic 11)",
+      "description": "As a developer, I want the OpenRouter LLM client to implement Orbiter's ModelProvider protocol instead of extending openjiuwen's BaseModelClient so that it integrates with Orbiter's provider system.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md and docs/porting-guide/index.md for context",
+        "Read orbiter.models.provider to understand ModelProvider, ModelResponse, and StreamChunk interfaces",
+        "Rewrite OpenRouterLLM to implement ModelProvider protocol (complete/stream methods)",
+        "Replace openjiuwen message types (AIMessage, UsageMetadata, ToolCall, AIMessageChunk) with Orbiter equivalents from orbiter.types",
+        "Keep OpenRouterConfig and ContextLimitError as-is (they are standalone Pydantic models)",
+        "Update llm/__init__.py exports",
+        "Add docstrings for every public method explaining the provider contract",
+        "Typecheck passes",
+        "Max 200 lines changed"
+      ],
+      "priority": 90,
+      "passes": false,
+      "notes": "Epic 11 \u2014 this is the most complex single-file port. The openrouter_llm.py file is ~485 lines; focus on replacing the 5 openjiuwen imports and adapting the class interface. Refer to OpenAIProvider in orbiter-models as a pattern."
+    },
+    {
+      "id": "US-091",
+      "title": "Port deepagent agent/context_manager.py \u2014 Orbiter message types (Epic 11)",
+      "description": "As a developer, I want ContextManager to use Orbiter's message types (UserMessage, AssistantMessage, ToolResult) instead of raw dicts with openjiuwen logger so that it integrates with Orbiter's type system.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Read orbiter.types to understand Message union, UserMessage, AssistantMessage, SystemMessage, ToolResult",
+        "Replace openjiuwen.core.common.logging with standard Python logging",
+        "Update message construction to use Orbiter Message types where beneficial, or document why raw dicts are kept",
+        "Preserve all context management behavior: trimming, summary generation, orphan detection",
+        "Add docstrings for class and all public methods",
+        "Typecheck passes",
+        "Max 150 lines changed"
+      ],
+      "priority": 91,
+      "passes": false,
+      "notes": "Epic 11 \u2014 ContextManager has only 1 openjiuwen import (logger). The message type alignment is optional but recommended for consistency with Orbiter's type system."
+    },
+    {
+      "id": "US-092",
+      "title": "Port deepagent agent/qa_handler.py \u2014 Orbiter logging (Epic 11)",
+      "description": "As a developer, I want QAHandler to use standard Python logging instead of openjiuwen's logger so that the reasoning model integration layer has zero openjiuwen imports.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Replace openjiuwen.core.common.logging import with standard Python logging",
+        "Preserve all QA behavior: hint extraction, answer type detection, final answer extraction, boxed answer parsing",
+        "Add docstrings for class and all public methods",
+        "Typecheck passes",
+        "Max 80 lines changed"
+      ],
+      "priority": 92,
+      "passes": false,
+      "notes": "Epic 11 \u2014 QAHandler has only 1 openjiuwen import (logger). Simple replacement."
+    },
+    {
+      "id": "US-093",
+      "title": "Port deepagent agent/tool_call_handler.py \u2014 Orbiter Tool types (Epic 11)",
+      "description": "As a developer, I want ToolCallHandler to use Orbiter's Tool and FunctionTool instead of openjiuwen's Runtime, LocalFunction, and Param so that tool execution integrates with Orbiter's tool system.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md and docs/porting-guide/deep-agent-toolkit.md for context",
+        "Read orbiter.tool to understand Tool ABC, FunctionTool, and @tool decorator",
+        "Replace openjiuwen.core.runtime.runtime.Runtime with direct tool execution",
+        "Replace openjiuwen LocalFunction/Param with orbiter FunctionTool for sub-agent tool wrappers",
+        "Replace openjiuwen logger with standard Python logging",
+        "Preserve sub-agent delegation behavior and argument type conversion",
+        "Add docstrings for class and all public methods",
+        "Typecheck passes",
+        "Max 150 lines changed"
+      ],
+      "priority": 93,
+      "passes": false,
+      "notes": "Epic 11 \u2014 ToolCallHandler has 4 openjiuwen imports. This is a moderate-complexity port that changes how tools are wrapped and executed."
+    },
+    {
+      "id": "US-094",
+      "title": "Port deepagent agent/super_config.py \u2014 Orbiter Agent config (Epic 11)",
+      "description": "As a developer, I want SuperAgentConfig to use Pydantic BaseModel instead of extending openjiuwen's ReActAgentConfig so that agent configuration is framework-independent.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Read how deepsearch/config.py defines its config as a reference pattern",
+        "Replace ReActAgentConfig/ConstrainConfig inheritance with standalone Pydantic BaseModel",
+        "Replace PluginSchema/WorkflowSchema/ModelConfig with plain Pydantic models or Orbiter equivalents",
+        "Keep SuperAgentFactory but update it to produce Orbiter-compatible config dicts",
+        "Add docstrings for all config classes and factory methods",
+        "Typecheck passes",
+        "Max 150 lines changed"
+      ],
+      "priority": 94,
+      "passes": false,
+      "notes": "Epic 11 \u2014 super_config.py has 3 openjiuwen imports (ReActAgentConfig, PluginSchema/WorkflowSchema, ModelConfig). Pattern: follow deepsearch/config.py style."
+    },
+    {
+      "id": "US-095",
+      "title": "Port deepagent agent/super_factory.py \u2014 Orbiter Agent construction (Epic 11)",
+      "description": "As a developer, I want the agent factory functions to construct orbiter.agent.Agent instances instead of openjiuwen agents so that agent creation uses Orbiter's API.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Read how deepsearch/agents.py builds Agent and Swarm instances as reference",
+        "Replace openjiuwen Tool/Workflow/ModelConfig/BaseModelInfo/PluginSchema/WorkflowSchema imports with Orbiter equivalents",
+        "Rewrite create_super_main_agent and create_super_sub_agent to return orbiter.agent.Agent instances",
+        "Rewrite create_agent_system_with_sub_agents to use orbiter.swarm.Swarm or Agent handoffs",
+        "Add docstrings for all factory functions",
+        "Typecheck passes",
+        "Max 200 lines changed"
+      ],
+      "priority": 95,
+      "passes": false,
+      "notes": "Epic 11 \u2014 super_factory.py has 5 openjiuwen imports. Depends on US-094 (config port). This is a significant rewrite following the deepsearch/agents.py pattern."
+    },
+    {
+      "id": "US-096",
+      "title": "Research: SuperReActAgent porting strategy (Epic 11)",
+      "description": "As a developer, I want a detailed plan for porting the 1,223-line SuperReActAgent to Orbiter so that the rewrite is broken into safe, reviewable chunks.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for the overall plan",
+        "Read agent/super_react_agent.py in full (~1,223 lines)",
+        "Read orbiter.agent.Agent, orbiter.runner, and orbiter.hooks to understand what Orbiter provides out of the box vs. what must be custom",
+        "Create docs/design/super-react-agent-port.md with: (1) list of all 9 openjiuwen imports and their replacements, (2) which SuperReActAgent methods map to built-in Orbiter Agent behavior (e.g., tool loop, LLM calls), (3) which methods must remain as custom logic (e.g., PlanTracker, context overflow retry), (4) proposed class hierarchy \u2014 extend Agent or compose around it, (5) splitting strategy for the next 2-3 stories",
+        "Typecheck passes"
+      ],
+      "priority": 96,
+      "passes": false,
+      "notes": "Epic 11 \u2014 research phase for the largest file. SuperReActAgent is too large to port in one story. This plan will scope US-097 through US-099."
+    },
+    {
+      "id": "US-097",
+      "title": "Port SuperReActAgent Part 1 \u2014 PlanTracker standalone extraction (Epic 11)",
+      "description": "As a developer, I want PlanTracker extracted as a standalone class with zero openjiuwen imports so that it can be used with Orbiter agents.",
+      "acceptanceCriteria": [
+        "Read docs/design/super-react-agent-port.md for the splitting strategy",
+        "Extract PlanTracker and PlanStepState from super_react_agent.py into a new agent/plan_tracker.py",
+        "Remove all openjiuwen imports from PlanTracker (it currently uses only logger)",
+        "Use standard Python logging instead",
+        "Keep all plan tracking behavior: extract, update, finalize, LLM-based plan updates",
+        "Add comprehensive docstrings for every method",
+        "Import PlanTracker back into super_react_agent.py so nothing breaks",
+        "Typecheck passes",
+        "Max 200 lines in new file"
+      ],
+      "priority": 97,
+      "passes": false,
+      "notes": "Epic 11 \u2014 safe extraction, no behavioral changes. PlanTracker is ~200 lines within super_react_agent.py. Extraction reduces the main file's complexity."
+    },
+    {
+      "id": "US-098",
+      "title": "Port SuperReActAgent Part 2 \u2014 MCP and tool registration to Orbiter (Epic 11)",
+      "description": "As a developer, I want SuperReActAgent's MCP tool registration and tool execution to use Orbiter's Tool system instead of openjiuwen's Runtime and LocalFunction.",
+      "acceptanceCriteria": [
+        "Read docs/design/super-react-agent-port.md for the splitting strategy",
+        "Replace openjiuwen.core.utils.tool.base.Tool with orbiter.tool.Tool",
+        "Replace openjiuwen.core.utils.tool.function.function.LocalFunction with orbiter.tool.FunctionTool",
+        "Replace openjiuwen.core.utils.tool.param.Param \u2014 use type hints and @tool decorator instead",
+        "Replace openjiuwen.core.utils.tool.mcp.base.ToolServerConfig with a plain Pydantic model or dict",
+        "Update _make_mcp_call_coroutine and _normalize_mcp_server_config to work without openjiuwen",
+        "Add docstrings for all modified methods",
+        "Typecheck passes",
+        "Max 200 lines changed"
+      ],
+      "priority": 98,
+      "passes": false,
+      "notes": "Epic 11 \u2014 replaces 4 of the 9 openjiuwen imports in super_react_agent.py. Depends on US-093 (ToolCallHandler port) and US-097 (PlanTracker extraction)."
+    },
+    {
+      "id": "US-099",
+      "title": "Port SuperReActAgent Part 3 \u2014 Agent base class and runner to Orbiter (Epic 11)",
+      "description": "As a developer, I want SuperReActAgent to extend or compose with orbiter.agent.Agent instead of openjiuwen's BaseAgent, using Orbiter's runner for execution.",
+      "acceptanceCriteria": [
+        "Read docs/design/super-react-agent-port.md for the splitting strategy",
+        "Replace openjiuwen.core.agent.agent.BaseAgent with orbiter.agent.Agent (extend or compose)",
+        "Replace openjiuwen.core.runtime.runtime.Runtime/Workflow \u2014 use Orbiter's built-in step loop or custom run method",
+        "Replace openjiuwen.core.runner.runner.Runner/resource_mgr with orbiter.runner",
+        "Replace openjiuwen.core.utils.llm.messages.AIMessage with orbiter.types.AssistantMessage",
+        "Replace openjiuwen logger with standard Python logging",
+        "Preserve custom behaviors: context overflow retry, sub-agent delegation, reasoning model integration",
+        "Add docstrings for the class and all public methods",
+        "Typecheck passes",
+        "Max 200 lines changed"
+      ],
+      "priority": 99,
+      "passes": false,
+      "notes": "Epic 11 \u2014 final port of the remaining 5 openjiuwen imports. This is the most architecturally significant change. Depends on US-097 and US-098."
+    },
+    {
+      "id": "US-100",
+      "title": "Port deepagent test/super_react_agent_test_run.py to Orbiter (Epic 11)",
+      "description": "As a developer, I want the integration test runner to use Orbiter APIs so that the test validates the ported example end-to-end.",
+      "acceptanceCriteria": [
+        "Read docs/design/deepagent-port-plan.md for context",
+        "Replace all 6 openjiuwen imports (ModelConfig, BaseModelInfo, LocalFunction, Param, ToolServerConfig, Runner/resource_mgr) with Orbiter equivalents",
+        "Update agent initialization to use the ported SuperAgentConfig and factory functions",
+        "Preserve all MCP server setup, environment configuration, and execution patterns",
+        "Add docstrings explaining the test setup and execution flow",
+        "Typecheck passes",
+        "Max 150 lines changed"
+      ],
+      "priority": 100,
+      "passes": false,
+      "notes": "Epic 11 \u2014 depends on all prior porting stories (US-088 through US-099). This validates the full port works end-to-end."
+    },
+    {
+      "id": "US-101",
+      "title": "Port deepagent \u2014 remove openjiuwen, final cleanup and validation (Epic 11)",
+      "description": "As a developer, I want to verify that zero openjiuwen imports remain in the deepagent example and that the full example runs correctly with only Orbiter dependencies.",
+      "acceptanceCriteria": [
+        "Run grep -r 'openjiuwen' examples/advanced/deepagent/ and confirm zero matches",
+        "Verify pyproject.toml has no openjiuwen dependency",
+        "Run typecheck on the full deepagent example",
+        "Update examples/advanced/deepagent/README.md to reference Orbiter instead of openjiuwen",
+        "Update docs/design/deepagent-port-plan.md with a completion summary",
+        "Add a 'DeepAgent Example Port' entry to docs/porting-guide/index.md linking to the completed port",
+        "Typecheck passes"
+      ],
+      "priority": 101,
+      "passes": false,
+      "notes": "Epic 11 \u2014 final validation story. Depends on all prior Epic 11 stories. This is the last story in the PRD."
     }
   ]
 }

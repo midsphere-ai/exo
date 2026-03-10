@@ -4650,3 +4650,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Pre-existing pyright error in token_counter.py (tiktoken optional import) — not introduced by doc changes
   - ContextConfig uses `extra` dict for extensible fields (token_budget, token_encoding) to keep frozen schema stable
 ---
+
+## 2026-03-10 - US-079
+- Created docs/porting-guide/memory-system.md mapping agent-core's 5-type memory system to Orbiter's orbiter-memory package
+- Covers: MemoryCategory enum, EncryptedMemoryStore (AES-256-GCM), MemUpdateChecker (LLM dedup), MigrationRegistry + run_migrations(), SearchManager (unified parallel search)
+- Includes side-by-side code examples for encrypted storage, dedup, migrations, and unified search
+- Full migration table mapping all agent-core memory classes to Orbiter counterparts
+- Files changed: docs/porting-guide/memory-system.md (new), prd.json
+- **Learnings for future iterations:**
+  - Porting guide style: 4 sections (agent-core overview, Orbiter equivalent, side-by-side examples, migration table) with component mapping tables
+  - orbiter-memory uses protocol-based MemoryStore with typed MemoryItem hierarchy (System/Human/AI/Tool subclasses)
+  - EncryptedMemoryStore wraps any MemoryStore transparently — only encrypts content field, metadata stays searchable
+  - MemUpdateChecker accepts optional LLM checker callable; falls back to exact match when no LLM available
+---
