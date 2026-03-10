@@ -4,6 +4,7 @@ from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
 
+from orbiter.retrieval.agentic_retriever import AgenticRetriever  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.chunker import (  # pyright: ignore[reportMissingImports]
     CharacterChunker,
     Chunker,
@@ -44,6 +45,7 @@ from orbiter.retrieval.vector_store import (  # pyright: ignore[reportMissingImp
 from orbiter.retrieval.vertex_embeddings import VertexEmbeddings  # pyright: ignore[reportMissingImports]
 
 __all__ = [
+    "AgenticRetriever",
     "CharacterChunker",
     "Chunk",
     "Chunker",
