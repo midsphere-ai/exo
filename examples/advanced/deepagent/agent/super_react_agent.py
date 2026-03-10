@@ -197,7 +197,7 @@ class SuperReActAgent:
         """Return the LLM provider instance."""
         return self._llm
 
-    def add_tools(self, tools: list[Tool]) -> None:
+    def add_tools(self, tools: list[Tool] | list[FunctionTool]) -> None:
         """Register additional tools on this agent.
 
         Args:

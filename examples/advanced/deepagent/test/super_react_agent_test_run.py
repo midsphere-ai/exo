@@ -1,8 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""
-Super ReAct Agent Example
-Demonstrates how to use the SuperReActAgent with custom context management
+"""Super ReAct Agent integration test runner.
+
+End-to-end test that validates the ported SuperReActAgent using only Orbiter
+APIs — no openjiuwen imports remain.  The test:
+
+1. Configures model credentials from environment variables.
+2. Defines MCP tool groups (browser, audio, reasoning, reading, searching,
+   vision, code) as ``StdioServerParameters`` / SSE URLs.
+3. Creates a main agent and two sub-agents (browsing, coding), each backed
+   by a ``SuperAgentConfig`` from the ported ``super_config`` module.
+4. Registers MCP tools via ``SuperReActAgent.create_mcp_tools()`` which
+   internally uses ``orbiter.mcp.client.MCPServerConnection`` and wraps
+   discovered tools as ``orbiter.tool.FunctionTool`` instances.
+5. Runs GAIA benchmark queries through the multi-agent system and writes
+   evaluation results to text and JSON files.
+
+Execution flow::
+
+    load env → configure MCP servers → create agents with SuperAgentConfig
+    → build FunctionTool wrappers via create_mcp_tools()
+    → assign tool groups to agents → register sub-agents on main
+    → iterate GAIA queries → invoke main_agent → collect results
+    → disconnect MCP connections → write evaluation summary
 """
 
 import os
@@ -32,13 +52,8 @@ for path in [REPO_ROOT]: #b1
 from agent.super_react_agent import SuperReActAgent
 from agent.super_config import SuperAgentFactory
 from agent.prompt_templates import get_main_agent_system_prompt, get_browsing_agent_system_prompt, get_coding_agent_system_prompt
-from openjiuwen.core.component.common.configs.model_config import ModelConfig
-from openjiuwen.core.utils.llm.base import BaseModelInfo
-from openjiuwen.core.utils.tool.function.function import LocalFunction
-from openjiuwen.core.utils.tool.param import Param
-
-from openjiuwen.core.utils.tool.mcp.base import ToolServerConfig
-from openjiuwen.core.runner.runner import Runner, resource_mgr
+from agent.super_config import ModelInfo, SuperModelConfig
+from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 from mcp import StdioServerParameters
 
 # Environment configuration
@@ -245,7 +260,9 @@ MCP_TOOL_GROUPS = {
                     command=MCP_TOOL_PYTHON,
                     args=["-u", "-m", "tool.mcp_servers.reading_mcp_server", "--transport", "stdio"],
                     env=build_tool_env({
-                        "PATH": os.pathsep.join([MCP_TOOL_BIN, os.getenv("PATH", "")])}
+                        "PATH": os.pathsep.join(
+                            p for p in [MCP_TOOL_BIN, os.getenv("PATH", "")] if p
+                        )}
                         ),
                     cwd=MCP_TOOL_CWD,
                 ),
@@ -300,18 +317,22 @@ MCP_TOOL_GROUPS = {
 }
 
 
-async def build_mcp_tool_groups(agent: SuperReActAgent) -> dict[str, list[LocalFunction]]:
-    """
-    使用某个 SuperReActAgent 实例，把上面 MCP_TOOL_GROUPS 里的所有 server都注册成 LocalFunction 工具，并按 tool-group 名字归类返回。
+async def build_mcp_tool_groups(agent: SuperReActAgent) -> dict[str, list[FunctionTool]]:
+    """Register all MCP servers and return their tools grouped by name.
 
-    返回：
-        {
-          "tool-autobrowser": [LocalFunction(...), ...],  # browser-use-server.* MCP 工具
-          "tool-transcribe": [...],
-          ...
-        }
+    Uses ``SuperReActAgent.create_mcp_tools()`` (which delegates to
+    ``orbiter.mcp.client``) to connect to each MCP server defined in
+    ``MCP_TOOL_GROUPS`` and wrap the discovered tools as ``FunctionTool``
+    instances.
+
+    Args:
+        agent: A SuperReActAgent instance used to create MCP connections.
+
+    Returns:
+        Mapping from tool-group name to list of FunctionTool instances,
+        e.g. ``{"tool-autobrowser": [FunctionTool(...), ...], ...}``.
     """
-    tool_groups: dict[str, list[LocalFunction]] = {}
+    tool_groups: dict[str, list[FunctionTool]] = {}
 
     for group_name, cfg in MCP_TOOL_GROUPS.items():
         tools = await agent.create_mcp_tools(
@@ -323,176 +344,39 @@ async def build_mcp_tool_groups(agent: SuperReActAgent) -> dict[str, list[LocalF
     return tool_groups
 
 
-def create_model_config():
-    """Create separate coding model configuration for SuperReActAgent"""
-    model_info = BaseModelInfo(
+def create_model_config() -> SuperModelConfig:
+    """Create model configuration using Orbiter's SuperModelConfig.
+
+    Returns:
+        SuperModelConfig wrapping a ModelInfo with provider credentials.
+    """
+    model_info = ModelInfo(
         api_key=API_KEY,
         api_base=API_BASE,
-        model=MODEL_NAME,
-        timeout=60  # Increased timeout for API calls
+        model_name=MODEL_NAME,
+        timeout=60,
     )
-
-    return ModelConfig(
-        model_provider=MODEL_PROVIDER,
-        model_info=model_info
-    )
-
-# ========= MCP 工具封装成 LocalFunction 的通用方法 =========
-
-def _make_mcp_call_coroutine(server_name: str, tool_name: str):
-    """
-    为某个 MCP 工具生成一个 coroutine 函数：
-    - 入参是工具的参数（**kwargs）
-    - 内部通过 Runner.run_tool 调用真正的 MCP 工具
-    """
-    async def _wrapper(**kwargs):
-        tool_id = f"{server_name}.{tool_name}"  # 例如：browser-use-server.browser_navigate
-        result = await Runner.run_tool(tool_id, kwargs)
-
-        # Test 里约定：如果返回 dict 且有 "result" 字段，就用它
-        if isinstance(result, dict) and "result" in result:
-            return result["result"]
-        return result
-
-    return _wrapper
-
-
-async def _register_mcp_server_as_local_tools(
-    server_name: str,
-    client_type: str,
-    params,
-):
-    """
-    注册一个 MCP server（SSE / stdio / playwright），并把该 server 上所有 tools
-    映射成 LocalFunction，返回 List[LocalFunction]，可以直接传给 SuperReActAgent.
-
-    :param server_name: MCP server 名字，如 "browser-use-server"
-    :param client_type: "sse" / "stdio" / "playwright"
-    :param params: ToolServerConfig.params，对应：
-                   - sse: "http://127.0.0.1:8930/sse"
-                   - stdio: StdioServerParameters(...)
-                   - playwright: url 或 StdioServerParameters
-    """
-    tool_mgr = resource_mgr.tool()
-
-    server_path = None
-    params_dict = {}
-
-    if client_type == "stdio":
-        if isinstance(params, StdioServerParameters):
-            params_dict = {
-                "command": params.command,
-                "args": list(params.args) if params.args is not None else None,
-                "env": params.env,
-                "cwd": params.cwd,
-                "encoding_error_handler": getattr(params, "encoding_error_handler", None),
-            }
-        elif isinstance(params, dict):
-            params_dict = params
-        elif isinstance(params, str):
-            server_path = params
-
-        if not server_path:
-            server_path = params_dict.get("command") or "stdio"
-    else:
-        if isinstance(params, dict):
-            if "server_path" in params:
-                server_path = params["server_path"]
-                params_dict = {k: v for k, v in params.items() if k != "server_path"}
-            elif "url" in params:
-                server_path = params["url"]
-                params_dict = {k: v for k, v in params.items() if k != "url"}
-            else:
-                params_dict = params
-        else:
-            server_path = params
-
-    if server_path is None:
-        raise ValueError(f"MCP server_path is required for client_type '{client_type}'")
-
-    # 1. 注册 MCP server
-    server_cfg = ToolServerConfig(
-        server_name=server_name,
-        server_path=server_path,
-        params=params_dict,
-        client_type=client_type,
-    )
-    ok_list = await tool_mgr.add_tool_servers([server_cfg])
-    if not ok_list or not ok_list[0]:
-        raise RuntimeError(f"Failed to add MCP server: {server_name}")
-
-    # 2. 用 Runner.list_tools 拿到工具列表（McpToolInfo）
-    tool_infos = await Runner.list_tools(server_name)
-
-    local_tools = []
-
-    for info in tool_infos:
-        schema = getattr(info, "schema", {}) or {}
-        properties = schema.get("properties", {}) or {}
-        required = set(schema.get("required", []) or [])
-
-        # 3. 把 JSON-Schema 转成 Param 列表
-        params_def = []
-        for pname, pinfo in properties.items():
-            params_def.append(
-                Param(
-                    name=pname,
-                    description=pinfo.get("description", ""),
-                    param_type=pinfo.get("type", "string"),
-                    required=pname in required,
-                )
-            )
-
-        # 4. 为每个 tool 生成自己独立的 coroutine wrapper
-        async_func = _make_mcp_call_coroutine(server_name, info.name)
-
-        #  LocalFunction 支持 func 是 async 函数?
-        mcp_local_tool = LocalFunction(
-            name=info.name,
-            description=getattr(info, "description", "") or f"MCP tool {info.name} from {server_name}",
-            params=params_def,
-            func=async_func,   # 传入的是 async 函数
-        )
-
-        local_tools.append(mcp_local_tool)
-
-    return local_tools
-
-
-# 便捷包装
-async def create_sse_mcp_tools(server_name: str, sse_url: str):
-    """
-    将一个 SSE MCP server 上的所有工具注册为 LocalFunction
-    """
-    return await _register_mcp_server_as_local_tools(
-        server_name=server_name,
-        client_type="sse",
-        params=sse_url,
-    )
-
-async def create_stdio_mcp_tools(server_name: str, command: str, args: list[str]):
-    """
-    将一个 stdio MCP server 上的所有工具注册为 LocalFunction
-    """
-    params = StdioServerParameters(command=command, args=args)
-    return await _register_mcp_server_as_local_tools(
-        server_name=server_name,
-        client_type="stdio",
-        params=params,
-    )
+    return SuperModelConfig(model_info=model_info)
 
 async def example_mcp_main_and_sub_agents(queries: list | None = None):
-    """
-    Example: 主 Agent + browsing 子 Agent，使用不同 MCP 工具集
-    当 queries 传入多个问题时，会在同一次 Runner 生命周期中依次运行，
-    每次运行前都会清空上下文，避免串话。
-    main_agent:
-      tools: [tool-reasoning]
-    sub_agents:
-      agent-browsing:
-        tools: [tool-searching, tool-reading, tool-vqa, tool-autobrowser, tool-transcribe]
-      agent-coding:
-        tools: [tool-code, tool-vqa, tool-reading]
+    """Run a multi-agent evaluation over the given GAIA queries.
+
+    Creates three SuperReActAgent instances (main, browsing, coding) with
+    Orbiter-based configuration, registers MCP tool groups on each, then
+    iterates through the queries clearing context between runs.
+
+    Tool assignments:
+        - main_agent: [tool-reasoning]
+        - agent-browsing: [tool-searching, tool-reading, tool-vqa,
+          tool-autobrowser, tool-transcribe]
+        - agent-coding: [tool-code, tool-vqa, tool-reading]
+
+    Args:
+        queries: List of (question, file_path, ground_truth) tuples from
+            the GAIA dataset.
+
+    Returns:
+        List of result dicts with predictions, ground truth, and accuracy.
     """
     assert queries is not None, "query is required"
     assert len(queries) > 0, "query is required"
@@ -505,9 +389,6 @@ async def example_mcp_main_and_sub_agents(queries: list | None = None):
 
     if AUTO_BROWSER_TRANSPORT == "sse":
         ensure_autobrowser_sse_server()
-
-    # 启动 Runner
-    await Runner.start()
 
     # 构造 main_agent 配置
     main_agent_config = SuperAgentFactory.create_main_agent_config(
@@ -576,28 +457,23 @@ async def example_mcp_main_and_sub_agents(queries: list | None = None):
     main_agent = SuperReActAgent(
         agent_config=main_agent_config,
         tools=None,
-        workflows=None,
-        
     )
 
     browsing_agent = SuperReActAgent(
         agent_config=browsing_agent_config,
         tools=None,
-        workflows=None,
-        
     )
 
     coding_agent = SuperReActAgent(
-        agent_config = coding_agent_config,
+        agent_config=coding_agent_config,
         tools=None,
-        workflows=None,
     )
 
     # 用 main_agent 构建出所有 MCP 工具组（只调用一次）
     tool_groups = await build_mcp_tool_groups(main_agent)
     # tool_groups 形如：
     # {
-    #   "tool-autobrowser": [LocalFunction(...), ...],
+    #   "tool-autobrowser": [FunctionTool(...), ...],
     #   "tool-transcribe": [...],
     #   "tool-reasoning":  [...],
     #   "tool-reading":    [...],
@@ -758,25 +634,13 @@ async def example_mcp_main_and_sub_agents(queries: list | None = None):
             "results": results
         }, f, indent=2, ensure_ascii=False)
 
-    # # 资源清理（MCP server & Runner）
-    # tool_mgr = resource_mgr.tool()
-    # # 如果想显式移除所有 server，可以逐个 remove
-    # for server_name in {cfg["server_name"] for cfg in MCP_TOOL_GROUPS.values()}:
-    #     try:
-    #         await tool_mgr.remove_tool_server(server_name)
-    #     except RuntimeError as e:
-    #         if "cancel scope" in str(e):
-    #             print(f"Ignoring SSE shutdown error for {server_name}: {e}")
-    #         else:
-    #             raise
-
-    try:
-        await Runner.stop()
-    except RuntimeError as e:
-        if "cancel scope" in str(e):
-            print("Ignore MCP SSE shutdown RuntimeError during Runner.stop:", e)
-        else:
-            raise
+    # Clean up MCP connections held by agents
+    for agent in (main_agent, browsing_agent, coding_agent):
+        for conn in getattr(agent, "_mcp_connections", []):
+            try:
+                await conn.disconnect()
+            except Exception:
+                pass
 
     return results
 
