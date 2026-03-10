@@ -3416,3 +3416,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - All existing types.py models use `model_config = {"frozen": True}` — rail_types intentionally breaks this pattern for mutability
   - 811 existing tests all pass — zero regressions from adding rail_types
 ---
+
+## 2026-03-10 - US-003
+- What was implemented: Rail ABC with priority ordering and retry capability
+  - `RailAction` StrEnum with CONTINUE, SKIP, RETRY, ABORT values
+  - `RetryRequest` frozen dataclass with delay, max_retries, reason fields
+  - `RailAbortError` exception inheriting OrbiterError with rail_name and reason
+  - `Rail` ABC with name, priority (default 50), and abstract async handle() method
+- Files changed:
+  - packages/orbiter-core/src/orbiter/rail.py (new — 106 lines, all public APIs)
+  - packages/orbiter-core/tests/test_rail.py (new — 21 tests covering all action types, priority ordering, error inheritance)
+- **Learnings for future iterations:**
+  - Rail uses TYPE_CHECKING guard for RailContext import to avoid circular imports (rail.py -> rail_types.py -> hooks.py)
+  - RetryRequest is frozen dataclass (not Pydantic) — lightweight value object pattern for simple data
+  - RailAbortError stores rail_name and reason as instance attributes for programmatic access
+  - Priority sort uses `sorted(rails, key=lambda r: r.priority)` — stable sort preserves registration order for equal priorities
+  - EchoRail test helper pattern: configurable action + last_ctx capture for assertions
+---
