@@ -1620,7 +1620,7 @@
         "Max 150 lines changed"
       ],
       "priority": 93,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 ToolCallHandler has 4 openjiuwen imports. This is a moderate-complexity port that changes how tools are wrapped and executed."
     },
     {

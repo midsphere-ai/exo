@@ -4831,3 +4831,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Pre-existing ruff/pyright issues exist in deepagent example files (deprecated typing imports, missing package resolution) — these are not blockers
   - Standard logging replacement pattern: `import logging` + `logger = logging.getLogger(__name__)` at module level
 ---
+
+## 2026-03-11 - US-093
+- What was implemented: Ported deepagent agent/tool_call_handler.py from openjiuwen to Orbiter Tool types
+- Files changed:
+  - examples/advanced/deepagent/agent/tool_call_handler.py (rewritten — replaced openjiuwen Runtime/LocalFunction/Param with Orbiter Tool ABC)
+- Key changes:
+  - Replaced `openjiuwen.core.runtime.runtime.Runtime` with `dict[str, Tool]` tool registry passed to `execute_tool_call()`
+  - Replaced `openjiuwen.core.utils.tool.function.function.LocalFunction` + `Param` with new `SubAgentTool(Tool)` subclass using JSON Schema parameters
+  - Replaced `openjiuwen.core.common.logging.logger` with `logging.getLogger(__name__)`
+  - Replaced `tool.ainvoke(tool_args)` with `await tool.execute(**tool_args)`
+  - `convert_tool_args()` now reads from `tool.parameters["properties"]` JSON Schema instead of `Param` objects
+  - Sub-agent execution now goes through `SubAgentTool.execute()` instead of intercepting in `execute_tool_call()`
+- **Learnings for future iterations:**
+  - `execute_tool_call()` signature changed: `runtime: Runtime` → `tools: dict[str, Tool]` — callers in super_react_agent.py (US-099) will need updating
+  - SubAgentTool is a proper Tool subclass that can be registered alongside regular tools — no special intercept logic needed
+  - Type conversion now reads JSON Schema `properties.{name}.type` instead of `Param.type` — same type strings ("integer", "number", "boolean", "string")
+---
