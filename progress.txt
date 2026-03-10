@@ -4177,3 +4177,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Entity extraction uses source_chunk_id matching between triples and result chunks — format is "document_id:index"
   - Retriever composition pattern: wrap base_retriever, call its retrieve(), then augment results (same as HybridRetriever, AgenticRetriever)
 ---
+
+## 2026-03-10 - US-050
+- Implemented retrieval tools for Agent integration (Epic 3)
+- `retrieve_tool(retriever)` creates a FunctionTool wrapping `retriever.retrieve()` with query/top_k params
+- `index_tool(chunker, store, embeddings)` creates a FunctionTool for indexing documents into a vector store
+- Both tools return properly formatted string outputs
+- 14 tests: tool creation, schema validation, execution, empty edge cases, and full Agent integration via MockProvider
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/tools.py (new)
+  - packages/orbiter-retrieval/tests/test_tools.py (new, 14 tests)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (added retrieve_tool, index_tool exports)
+- **Learnings for future iterations:**
+  - orbiter-retrieval already depends on orbiter-core, so `from orbiter.tool import FunctionTool` works directly
+  - Use FunctionTool constructor (not @tool decorator) when building tools from closures that capture external state (retriever, store, etc.)
+  - Tool inner functions need proper Google-style docstrings with Args section for schema generation to pick up parameter descriptions
+  - Agent integration tests: use AsyncMock with side_effect=[tool_response, text_response] to simulate tool call + final answer flow
+---
