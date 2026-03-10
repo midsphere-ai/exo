@@ -1,36 +1,37 @@
-"""
-Super ReAct Agent
-Enhanced ReAct Agent with custom context management
-Supports both main agent and sub-agent execution with the same class
+"""Super ReAct Agent — composition-based orchestrator using Orbiter primitives.
+
+Enhanced ReAct Agent with custom context management, plan tracking,
+reasoning-model integration, and sub-agent delegation.  Composes around
+``orbiter.agent.Agent`` (via ``super_factory``) rather than extending a
+framework base class.
 """
 
-import json
-import asyncio
-import re
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, Any, AsyncIterator, List, Optional, Tuple
+from __future__ import annotations
 
 import inspect
+import logging
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import Any
 
-from openjiuwen.core.agent.agent import BaseAgent
-from openjiuwen.core.runtime.runtime import Runtime, Workflow
-from openjiuwen.core.common.logging import logger
-from openjiuwen.core.utils.llm.messages import AIMessage
-
-from orbiter.tool import Tool, FunctionTool
-from orbiter.mcp.client import MCPServerConfig, MCPServerConnection, MCPTransport  # pyright: ignore[reportMissingImports]
-
-from agent.super_config import SuperAgentConfig
 from agent.context_manager import ContextManager
-from agent.tool_call_handler import ToolCallHandler
-from agent.qa_handler import QAHandler
 from agent.plan_tracker import PlanTracker
-from llm.openrouter_llm import OpenRouterLLM, ContextLimitError
-
+from agent.prompt_templates import get_task_instruction_prompt, process_input
+from agent.qa_handler import QAHandler
+from agent.super_config import SuperAgentConfig
+from agent.tool_call_handler import ToolCallHandler
+from llm.openrouter_llm import ContextLimitError, OpenRouterLLM
 from mcp import StdioServerParameters
 
-from agent.prompt_templates import process_input, get_task_instruction_prompt
+from orbiter.mcp.client import (  # pyright: ignore[reportMissingImports]
+    MCPServerConfig,
+    MCPServerConnection,
+    MCPTransport,
+)
+from orbiter.models.types import ModelResponse  # pyright: ignore[reportMissingImports]
+from orbiter.tool import FunctionTool, Tool
+
+logger = logging.getLogger(__name__)
 
 def _make_mcp_call_coroutine(connection: MCPServerConnection, tool_name: str):
     """Create an async callable that invokes an MCP tool via the server connection.
@@ -121,90 +122,105 @@ def _normalize_mcp_server_config(
 
     raise ValueError(f"MCP server_path is required for client_type '{client_type}'")
 
-class SuperReActAgent(BaseAgent):
-    """
-    Enhanced ReAct Agent with custom context management:
-    - Custom context management (no ContextEngine dependency)
-    - Task logging
-    - Reasoning model integration
-    - Context limit handling
-    - Sub-agent support
-    - Main agent and sub-agent use the same class with different instances
+class SuperReActAgent:
+    """Composition-based ReAct orchestrator using Orbiter primitives.
+
+    Wraps an OpenRouterLLM provider with custom context management,
+    plan tracking, QA hint extraction, MCP tool registration, and
+    sub-agent delegation.  Uses ``orbiter.tool.Tool`` for the tool
+    interface and ``orbiter.models.types.ModelResponse`` for LLM output.
+
+    The companion ``super_factory.py`` constructs ``orbiter.agent.Agent``
+    instances from the same ``SuperAgentConfig``; this class provides
+    the full orchestration loop (``invoke``) with GAIA-specific input
+    processing, context-limit retry, and reasoning-model final-answer
+    extraction.
+
+    Args:
+        agent_config: Configuration object specifying model, constraints,
+            prompt template, and feature toggles.
+        tools: Tool instances available to the agent.
     """
 
     def __init__(
         self,
         agent_config: SuperAgentConfig,
-        workflows: List[Workflow] = None,
-        tools: List[Tool] = None
-    ):
-        """
-        Initialize Super ReAct Agent
-
-        Args:
-            agent_config: Super agent configuration
-            workflows: List of workflows
-            tools: List of tools
-        """
-        # Call parent init
-        super().__init__(agent_config)
-
-        # Store agent-specific config
+        tools: list[Tool] | None = None,
+    ) -> None:
         self._agent_config: SuperAgentConfig = agent_config
 
-        # LLM instance (OpenRouter) - create eagerly for context manager
+        # Tool registry — O(1) lookup by name
+        self._tools: dict[str, Tool] = {}
+        if tools:
+            for t in tools:
+                self._tools[t.name] = t
+
+        # LLM instance (OpenRouter) — created eagerly for context manager
         model_config = agent_config.model
         self._llm = OpenRouterLLM(
-            api_key=model_config.model_info.api_key,
-            api_base=model_config.model_info.api_base,
+            api_key=model_config.model_info.api_key or "",
+            api_base=model_config.model_info.api_base or "https://openrouter.ai/api/v1",
             model_name=model_config.model_info.model_name,
-            timeout=model_config.model_info.timeout
+            timeout=model_config.model_info.timeout,
         )
 
-        # Custom context manager (replaces ContextEngine)
-        # Pass LLM for summary generation with retry logic
+        # Custom context manager for history + summary generation
         self._context_manager = ContextManager(
             llm=self._llm,
-            max_history_length=agent_config.constrain.reserved_max_chat_rounds * 2
+            max_history_length=agent_config.constrain.reserved_max_chat_rounds * 2,
         )
 
         # QA handler (for hints and final answer extraction)
-        self._qa_handler: Optional[QAHandler] = None
-        if agent_config.enable_question_hints or agent_config.enable_extract_final_answer:
-            if agent_config.open_api_key: #TODO: make this more general
-                self._qa_handler = QAHandler(
-                    api_key=agent_config.open_api_key,
-                    enable_message_ids=True,
-                    reasoning_model=agent_config.reasoning_model
-                )
-
-        # Add tools and workflows through BaseAgent interface
-        if tools:
-            self.add_tools(tools)
-        if workflows:
-            self.add_workflows(workflows)
+        self._qa_handler: QAHandler | None = None
+        if (
+            (agent_config.enable_question_hints or agent_config.enable_extract_final_answer)
+            and agent_config.open_api_key
+        ):
+            self._qa_handler = QAHandler(
+                api_key=agent_config.open_api_key,
+                enable_message_ids=True,
+                reasoning_model=agent_config.reasoning_model,
+            )
 
         # MCP server connections (for lifecycle management)
         self._mcp_connections: list[MCPServerConnection] = []
 
         # Sub-agent instances (for main agent only)
-        self._sub_agents: Dict[str, "SuperReActAgent"] = {}
+        self._sub_agents: dict[str, SuperReActAgent] = {}
 
         # Tool call handler
         self._tool_call_handler = ToolCallHandler(
-            sub_agents=self._sub_agents
+            sub_agents=self._sub_agents,
         )
 
     def _get_llm(self) -> OpenRouterLLM:
-        """Get LLM instance (always available after __init__)"""
+        """Return the LLM provider instance."""
         return self._llm
 
-    async def _call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    def add_tools(self, tools: list[Tool]) -> None:
+        """Register additional tools on this agent.
+
+        Args:
+            tools: Tool instances to add.
         """
-        调用一个工具：
-        - 从 self._tools 里找到 LocalFunction
-        - 支持 func 是同步函数或 async 函数
-        - 如果 func 返回的是 coroutine（awaitable），自动 await
+        for t in tools:
+            self._tools[t.name] = t
+
+    async def _call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        """Invoke a registered tool by name.
+
+        Supports both sync and async tool functions.
+
+        Args:
+            tool_name: Name of the registered tool.
+            arguments: Keyword arguments for the tool.
+
+        Returns:
+            The tool's execution result.
+
+        Raises:
+            ValueError: If the tool is not registered.
+            RuntimeError: If the tool has no callable or execution fails.
         """
         tool = self._tools.get(tool_name)
         if tool is None:
@@ -292,62 +308,53 @@ class SuperReActAgent(BaseAgent):
             params=params,
         )
 
-    def register_sub_agent(self, agent_name: str, sub_agent: "SuperReActAgent"):
-        """
-        Register a sub-agent instance and add it as a tool
+    def register_sub_agent(self, agent_name: str, sub_agent: SuperReActAgent) -> None:
+        """Register a sub-agent and expose it as a callable tool.
 
         Args:
-            agent_name: Name of the sub-agent (should start with 'agent-' for automatic routing)
-            sub_agent: SuperReActAgent instance to register
+            agent_name: Unique name (should start with ``'agent-'``).
+            sub_agent: SuperReActAgent instance to delegate to.
         """
-        # Register sub-agent in the handler's registry
         self._sub_agents[agent_name] = sub_agent
-
-        # Delegate tool creation to ToolCallHandler
         sub_agent_tool = self._tool_call_handler.create_sub_agent_tool(agent_name, sub_agent)
-
-        # Add the tool to this agent's tools
         self.add_tools([sub_agent_tool])
+        logger.info("Registered sub-agent '%s' as tool", agent_name)
 
-        logger.info(f"Registered sub-agent '{agent_name}' as tool")
-
-    def _format_tool_calls_for_message(self, tool_calls) -> List[Dict]:
-        """Format tool calls for message history"""
+    @staticmethod
+    def _format_tool_calls_for_message(tool_calls: Any) -> list[dict[str, Any]] | None:
+        """Format tool calls for message history."""
         return ToolCallHandler.format_tool_calls_for_message(tool_calls)
 
     async def call_model(
         self,
         user_input: str,
-        runtime: Runtime,
         is_first_call: bool = False,
         step_id: int = 0,
-        plan_tracker: Optional[PlanTracker] = None
-    ) -> AIMessage:
-        """
-        Call LLM for reasoning
+        plan_tracker: PlanTracker | None = None,
+    ) -> ModelResponse:
+        """Call the LLM for one reasoning step.
+
+        Builds the message list from the prompt template and context manager
+        history, generates tool schemas from ``self._tools``, and calls the
+        LLM via ``OpenRouterLLM.complete()``.
 
         Args:
-            user_input: User input or tool result
-            runtime: Runtime instance
-            is_first_call: Whether this is the first call (adds user message)
-            step_id: Step ID for logging
+            user_input: User input or tool result text.
+            is_first_call: If ``True``, adds ``user_input`` to context history.
+            step_id: Iteration number for logging.
+            plan_tracker: Optional plan tracker for step nudges.
 
         Returns:
-            AIMessage: LLM output
+            The LLM's ``ModelResponse`` containing content and tool calls.
         """
-        # If first call, add user message to context
         if is_first_call:
             self._context_manager.add_user_message(user_input)
 
-        # Get chat history from context manager
         chat_history = self._context_manager.get_history()
 
-        # Format messages with prompt template
-        messages = []
-        for prompt in self._agent_config.prompt_template:
-            messages.append(prompt)
+        # Build message list: system prompts + optional plan nudge + history
+        messages: list[dict[str, Any]] = list(self._agent_config.prompt_template)
 
-        # Add a system nudge with the active/next plan step so the model prefixes responses
         if plan_tracker and plan_tracker.has_plan():
             active_step = plan_tracker.get_active_or_next_step()
             if active_step:
@@ -355,349 +362,265 @@ class SuperReActAgent(BaseAgent):
                     "role": "system",
                     "content": (
                         f"Active plan step: Step {active_step.index}. "
-                        f"Begin your response with 'Step {active_step.index}:' and include this step number when choosing actions."
-                    )
+                        f"Begin your response with 'Step {active_step.index}:' "
+                        "and include this step number when choosing actions."
+                    ),
                 })
 
-        # Add chat history
         messages.extend(chat_history)
 
-        # Get tool definitions from runtime
-        # tools = runtime.get_tool_info()
-        
-        # === 从 runtime 拿到所有工具 ===
-        all_tools = runtime.get_tool_info()
-        tools = all_tools
+        # Build tool schemas from self._tools (replaces runtime.get_tool_info)
+        tool_schemas = [t.to_schema() for t in self._tools.values()]
 
-        # === 计算当前 agent 允许使用的工具名集合 ===
-        allowed_tool_names: set[str] = set()
-
-        try:
-            agent_cfg = runtime.get_agent_config()
-        except Exception as e:
-            agent_cfg = None
-            logger.warning(f"Failed to get agent config from runtime: {e}")
-
-        if agent_cfg is not None:
-            cfg_tools = getattr(agent_cfg, "tools", None)
-            if cfg_tools:
-                # cfg_tools 例如 ["tool-vqa", "tool-reading", "tool-code", ...]
-                allowed_tool_names.update(cfg_tools)
-
-        # 兜底：用自身 _agent_config.tools（BaseAgent.add_tools 已经维护）
-        cfg_tools_self = getattr(self._agent_config, "tools", None)
-        if cfg_tools_self:
-            allowed_tool_names.update(cfg_tools_self)
-
-        # === 根据 allowed_tool_names 从 all_tools 里筛 ===
-        if allowed_tool_names:
-            filtered_tools = []
-            for t in all_tools:
-                # ToolInfo.name 是真正暴露给 LLM 的 function 名
-                tool_name = getattr(t, "name", None)
-
-                if tool_name in allowed_tool_names:
-                    filtered_tools.append(t)
-
-            tools = filtered_tools
-            logger.info(
-                f"[SuperReActAgent] Filtered tools for agent {self._agent_config.id}: "
-                f"{[getattr(t, 'name', None) for t in tools]}"
-            )
-        else:
-            # 如果没有任何限制配置，就退回到“全量工具”行为，保证兼容性
-            logger.warning(
-                f"[SuperReActAgent] No tool whitelist found for agent {self._agent_config.id}, "
-                f"exposing all {len(all_tools)} tools to LLM"
-            )
-            tools = all_tools
-            
-        
-        # Call LLM
+        # Call LLM via the Orbiter ModelProvider.complete() interface
         llm = self._get_llm()
-        llm_output = await llm.ainvoke(
-            model_name=self._agent_config.model.model_info.model_name,
-            messages=messages,
-            tools=tools
-        )
+        llm_output = await llm.complete(messages, tools=tool_schemas)  # type: ignore[arg-type]
 
-        # Save AI message to context
-        tool_calls_formatted = self._format_tool_calls_for_message(llm_output.tool_calls)
+        # Save assistant message to context
+        tool_calls_formatted = self._format_tool_calls_for_message(llm_output.tool_calls) or []
         self._context_manager.add_assistant_message(
             llm_output.content or "",
-            tool_calls=tool_calls_formatted
+            tool_calls=tool_calls_formatted,
         )
 
         return llm_output
 
-    async def _execute_tool_call(
-        self,
-        tool_call,
-        runtime: Runtime
-    ) -> Any:
-        """
-        Execute a single tool call
+    async def _execute_tool_call(self, tool_call: Any) -> Any:
+        """Execute a single tool call via the ToolCallHandler.
 
         Args:
-            tool_call: Tool call object from LLM
-            runtime: Runtime instance
+            tool_call: Tool call object from the LLM response.
 
         Returns:
-            Tool execution result
+            Tool execution result as a string.
         """
-        return await self._tool_call_handler.execute_tool_call(tool_call, runtime)
+        return await self._tool_call_handler.execute_tool_call(tool_call, self._tools)
 
-    async def invoke(self, inputs: Dict, runtime: Runtime = None) -> Dict:
-        """
-        Synchronous invoke - complete ReAct loop
+    async def invoke(self, inputs: dict[str, Any], runtime: Any = None) -> dict[str, Any]:
+        """Run the full ReAct loop: input processing, tool execution, summary.
+
+        This is the main orchestration entry point.  It processes GAIA-format
+        inputs, runs the iterative LLM + tool-call loop, handles context-limit
+        retry, generates a summary, and optionally extracts a final answer via
+        a reasoning model.
 
         Args:
-            inputs: Input dict {"query": usr_question, "file_path": usr_file} of GAIA
-            runtime: Optional runtime (creates one if not provided)
+            inputs: Input dict ``{"query": ..., "file_path": ...}``.
+            runtime: Unused — kept for backward compatibility.
 
         Returns:
-            Result dict with 'output' and 'result_type'
+            Dict with ``output`` (summary text), ``result_type``
+            (``"answer"`` or ``"error"``), and optional ``extracted_metadata``.
         """
-        # Prepare runtime
-        runtime_created = False
+        user_input = inputs.get("query", "")
+        if not user_input:
+            return {"output": "No query provided", "result_type": "error"}
 
-        if runtime is None:
-            runtime = await self._runtime.pre_run(session_id="default", inputs=inputs)
-            runtime_created = True
+        file_path = inputs.get("file_path")
 
-        try:
-            user_input = inputs.get("query", "")
-            if not user_input:
-                return {"output": "No query provided", "result_type": "error"}
+        # Process GAIA-format inputs (main agent only)
+        if self._agent_config.agent_type == "main":
+            user_input = process_input(task_description=user_input, task_file_name=file_path)
 
-            file_path  = inputs.get("file_path", None)
-            #1 11.27: Process inputs of GAIA  
-            
-            if self._agent_config.agent_type == "main":
-                user_input = process_input(task_description=user_input, task_file_name=file_path)
-            
-            
-            # Extract question hints if enabled (main agent only)
-            qs_notes = ""
-            if self._agent_config.enable_question_hints and self._agent_config.agent_type == "main":
-                if self._qa_handler:
-                    try:
-                        qa_hints = await self._qa_handler.extract_hints(user_input)
-                        if qa_hints:
-                            qs_notes = f"\n\nBefore you begin, please review the following preliminary notes highlighting subtle or easily misunderstood points in the question, which might help you avoid common pitfalls during your analysis (for reference only; these may not be exhaustive):\n\n{qa_hints}"
-                    except Exception as e:
-                        logger.warning(f"question hints extraction failed: {e}")
-                        qs_notes = ""
-            
-            #2 11.27: add input prompt 
-            if self._agent_config.agent_type == "main":
-                user_input = get_task_instruction_prompt(task_description=user_input, qs_notes = qs_notes, use_skill=True)
-                
-            logger.info(f"Complete_user_inputs: {user_input}")
-            
-            
-            # ReAct loop
-            iteration = 0
-            max_iteration = self._agent_config.constrain.max_iteration
-            max_tool_calls_per_turn = self._agent_config.max_tool_calls_per_turn
-            is_first_call = True
-            task_failed = False
-            is_main_agent = (
-                getattr(self._agent_config, "agent_type", "") == "main"
-                or getattr(self._agent_config, "id", "") == "super_react_main_mcp"
-            )
-            def _llm_call_for_plan(messages, tools):
-                return self._llm._ainvoke(
-                    model_name=self._llm.config.model_name,
-                    messages=messages,
-                    tools=tools,
-                )
-            plan_tracker = PlanTracker(
-                base_dir=Path(__file__).resolve().parent,
-                on_context_update=self._context_manager.upsert_system_message,
-                llm_call=_llm_call_for_plan if is_main_agent else None,
-            ) if (is_main_agent and self._agent_config.enable_todo_plan) else None
-
-            # extracted metadata (populated if final answer extraction succeeds)
-            extracted_metadata = None
-
-            while iteration < max_iteration:
-                iteration += 1
-                if is_main_agent:
-                    logger.info(f"====Main iteration {iteration}==== ({self._agent_config.id})")
-                else:
-                    logger.info(f"====Sub-agent iteration {iteration}==== ({self._agent_config.id})")
-
-                try:
-                    # Call model
-                    llm_output = await self.call_model(
-                        user_input,
-                        runtime,
-                        is_first_call=is_first_call,
-                        step_id=iteration,
-                        plan_tracker=plan_tracker
+        # Extract question hints if enabled (main agent only)
+        qs_notes = ""
+        if (
+            self._agent_config.enable_question_hints
+            and self._agent_config.agent_type == "main"
+            and self._qa_handler
+        ):
+            try:
+                qa_hints = await self._qa_handler.extract_hints(user_input)
+                if qa_hints:
+                    qs_notes = (
+                        "\n\nBefore you begin, please review the following preliminary "
+                        "notes highlighting subtle or easily misunderstood points in "
+                        "the question, which might help you avoid common pitfalls "
+                        "during your analysis (for reference only; these may not be "
+                        f"exhaustive):\n\n{qa_hints}"
                     )
-                    logger.info(f"llm's output: {llm_output.content}")
+            except Exception as e:
+                logger.warning("question hints extraction failed: %s", e)
+                qs_notes = ""
 
-                    if plan_tracker:
-                        try:
-                            await plan_tracker.process_llm_output(llm_output)
-                        except Exception as plan_error:
-                            logger.warning(f"Plan tracking failed to process LLM output: {plan_error}")
+        if self._agent_config.agent_type == "main":
+            user_input = get_task_instruction_prompt(
+                task_description=user_input, qs_notes=qs_notes, use_skill=True,
+            )
 
-                    is_first_call = False
+        logger.info("Complete_user_inputs: %s", user_input)
 
-                    # Check for tool calls
-                    if not llm_output.tool_calls:
-                        logger.info("No tool calls, task completed")
+        # ReAct loop setup
+        iteration = 0
+        max_iteration = self._agent_config.constrain.max_iteration
+        max_tool_calls_per_turn = self._agent_config.max_tool_calls_per_turn
+        is_first_call = True
+        task_failed = False
+        is_main_agent = (
+            getattr(self._agent_config, "agent_type", "") == "main"
+            or getattr(self._agent_config, "id", "") == "super_react_main_mcp"
+        )
+
+        def _llm_call_for_plan(messages: Any, tools: Any) -> Any:
+            return self._llm.complete(messages, tools=tools)  # type: ignore[arg-type]
+
+        plan_tracker = PlanTracker(
+            base_dir=Path(__file__).resolve().parent,
+            on_context_update=self._context_manager.upsert_system_message,
+            llm_call=_llm_call_for_plan if is_main_agent else None,
+        ) if (is_main_agent and self._agent_config.enable_todo_plan) else None
+
+        extracted_metadata = None
+
+        while iteration < max_iteration:
+            iteration += 1
+            label = "Main" if is_main_agent else "Sub-agent"
+            logger.info("====%s iteration %d==== (%s)", label, iteration, self._agent_config.id)
+
+            try:
+                llm_output = await self.call_model(
+                    user_input,
+                    is_first_call=is_first_call,
+                    step_id=iteration,
+                    plan_tracker=plan_tracker,
+                )
+                logger.info("llm's output: %s", llm_output.content)
+
+                if plan_tracker:
+                    try:
+                        await plan_tracker.process_llm_output(llm_output)
+                    except Exception as plan_error:
+                        logger.warning("Plan tracking failed: %s", plan_error)
+
+                is_first_call = False
+
+                if not llm_output.tool_calls:
+                    logger.info("No tool calls, task completed")
+                    break
+
+                num_calls = len(llm_output.tool_calls)
+                if num_calls > max_tool_calls_per_turn:
+                    logger.warning(
+                        "Too many tool calls (%d), processing first %d",
+                        num_calls, max_tool_calls_per_turn,
+                    )
+
+                for tool_call in llm_output.tool_calls[:max_tool_calls_per_turn]:
+                    tool_name = tool_call.name
+                    logger.info("Executing tool: %s", tool_name)
+
+                    try:
+                        result = await self._execute_tool_call(tool_call)
+                        logger.info("Tool %s completed", tool_name)
+                        self._context_manager.add_tool_message(tool_call.id, str(result))
+                    except Exception as tool_error:
+                        logger.error("Tool %s failed: %s", tool_name, tool_error)
+                        self._context_manager.add_tool_message(
+                            tool_call.id,
+                            f"Error executing tool: {tool_error}",
+                        )
+                        raise
+
+                # Check context limits
+                if self._agent_config.enable_context_limit_retry:
+                    llm = self._get_llm()
+                    temp_summary = f"Summarize the task: {inputs.get('query', '')}"
+                    chat_history = self._context_manager.get_history()
+                    if not llm.ensure_summary_context(chat_history, temp_summary):
+                        logger.warning("Context limit reached, triggering summary")
+                        task_failed = True
                         break
 
-                    # Execute tool calls
-                    num_calls = len(llm_output.tool_calls)
-                    if num_calls > max_tool_calls_per_turn:
-                        logger.warning(
-                            f"Too many tool calls ({num_calls}), processing only first {max_tool_calls_per_turn}"
-                        )
-
-                    # Execute all tool calls and collect results (don't add to context yet)
-                    for tool_call in llm_output.tool_calls[:max_tool_calls_per_turn]:
-                        tool_name = tool_call.name
-                        logger.info(f"Executing tool: {tool_name}")
-
-                        try:
-                            result = await self._execute_tool_call(tool_call, runtime)
-                            # Log out the result to understand inner workings 
-                            logger.info(f"Tool {tool_name}'s results: {result} | completed")
-                            # logger.info(f"Tool {tool_name} completed")
-
-                            # Add tool result to context immediately after execution
-                            self._context_manager.add_tool_message(
-                                tool_call.id,
-                                str(result)
-                            )
-                        except Exception as tool_error:
-                            logger.error(f"Tool {tool_name} failed: {tool_error}")
-                            # Add error as tool result so conversation can continue
-                            self._context_manager.add_tool_message(
-                                tool_call.id,
-                                f"Error executing tool: {str(tool_error)}"
-                            )
-                            raise  # Re-raise to trigger task_failed
-
-                    # Check context limits (if enabled)
-                    if self._agent_config.enable_context_limit_retry:
-                        llm = self._get_llm()
-                        # Simple prompt for context space estimation
-                        temp_summary = f"Summarize the task: {inputs.get('query', '')}"
-
-                        chat_history = self._context_manager.get_history()
-
-                        if not llm.ensure_summary_context(chat_history, temp_summary):
-                            logger.warning("Context limit reached, triggering summary")
-                            task_failed = True
-                            break
-
-                except ContextLimitError:
-                    logger.warning("Context limit exceeded during execution")
-                    task_failed = True
-                    break
-
-                except Exception as e:
-                    logger.error(f"Error during iteration {iteration}: {e}")
-                    task_failed = True
-                    break
-
-            # Check if max iterations reached
-            if iteration >= max_iteration:
-                logger.warning(f"Max iterations ({max_iteration}) reached")
+            except ContextLimitError:
+                logger.warning("Context limit exceeded during execution")
                 task_failed = True
+                break
+            except Exception as e:
+                logger.error("Error during iteration %d: %s", iteration, e)
+                task_failed = True
+                break
 
-            # Generate summary using context manager
-            summary = await self._context_manager.generate_summary(
-                task_description=inputs.get("query", ""),
-                task_failed=task_failed,
-                system_prompts=self._agent_config.prompt_template,
-                agent_type=self._agent_config.agent_type
-            )
-            logger.info(f"Generated summary [final turn of {self._agent_config.agent_type}]: {summary}")
+        if iteration >= max_iteration:
+            logger.warning("Max iterations (%d) reached", max_iteration)
+            task_failed = True
 
-            # final answer extraction (main agent only) based on the pointed reasoning model
-            if (self._agent_config.enable_extract_final_answer and
-                self._agent_config.agent_type == "main" and self._qa_handler):
-                # self._qa_handler and
-                # not task_failed):  
-                try:
-                    # Get answer type
-                    answer_type = await self._qa_handler.get_answer_type(inputs.get("query", ""))
-                    logger.info(f"answer type detected: {answer_type}")
+        # Generate summary
+        summary = await self._context_manager.generate_summary(
+            task_description=inputs.get("query", ""),
+            task_failed=task_failed,
+            system_prompts=self._agent_config.prompt_template,
+            agent_type=self._agent_config.agent_type,
+        )
+        logger.info("Generated summary [final turn of %s]: %s", self._agent_config.agent_type, summary)
 
-                    # Extract final answer with type-specific formatting
-                    extracted_answer, confidence = await self._qa_handler.extract_final_answer(
-                        answer_type=answer_type,
-                        task_description=inputs.get("query", ""),
-                        summary=summary
-                    )
+        # Final answer extraction (main agent + reasoning model)
+        if (
+            self._agent_config.enable_extract_final_answer
+            and self._agent_config.agent_type == "main"
+            and self._qa_handler
+        ):
+            try:
+                answer_type = await self._qa_handler.get_answer_type(inputs.get("query", ""))
+                logger.info("answer type detected: %s", answer_type)
 
-                    # Extract boxed answer for logging
-                    boxed_answer = self._qa_handler.extract_boxed_answer(extracted_answer)
+                extracted_answer, confidence = await self._qa_handler.extract_final_answer(
+                    answer_type=answer_type,
+                    task_description=inputs.get("query", ""),
+                    summary=summary,
+                )
+                boxed_answer = self._qa_handler.extract_boxed_answer(extracted_answer)
 
-                    # Add response to message history
-                    # This preserves the reasoning model's analysis in the conversation context
-                    self._context_manager.add_assistant_message(
-                        f"reasoning model extracted final answer:\n{extracted_answer}",
-                        tool_calls=[]
-                    )
-
-                    # Concatenate original summary and reasoning answer as final result
-                    summary = (
-                        f"------------------------------------------Original Summary:------------------------------------------\n"
-                        f"{summary}\n\n"
-                        f"------------------------------------------Reasoning Model Extracted Answer:------------------------------------------\n"
-                        f"{extracted_answer}"
-                    )
-
-                    logger.info(
-                        f"reasoning model final answer extraction completed - "
-                        f"Answer type: {answer_type}, "
-                        f"Confidence: {confidence}/100, "
-                        f"Boxed answer: {boxed_answer}"
-                    )
-
-                    # Store extracted metadata for return
-                    extracted_metadata = {
-                        "answer_type": answer_type,
-                        "confidence": confidence,
-                        "boxed_answer": boxed_answer,
-                        "full_response": extracted_answer
-                    }
-
-                except Exception as e:
-                    logger.warning(f"reasoning model final answer extraction failed after retries: {str(e)}")
-                    # Continue using original summary
-
-            if plan_tracker and plan_tracker.has_plan():
-                plan_tracker.finalize(
-                    summary,
-                    mark_remaining_complete=not task_failed
+                self._context_manager.add_assistant_message(
+                    f"reasoning model extracted final answer:\n{extracted_answer}",
+                    tool_calls=[],
                 )
 
-            # Build result dict
-            result = {
-                "output": summary,
-                "result_type": "error" if task_failed else "answer"
-            }
+                summary = (
+                    "------------------------------------------Original Summary:"
+                    "------------------------------------------\n"
+                    f"{summary}\n\n"
+                    "------------------------------------------Reasoning Model "
+                    "Extracted Answer:------------------------------------------\n"
+                    f"{extracted_answer}"
+                )
 
-            # Add extracted metadata if available
-            if extracted_metadata:
-                result["extracted_metadata"] = extracted_metadata
-                
-            return result
+                logger.info(
+                    "reasoning model final answer extraction completed - "
+                    "Answer type: %s, Confidence: %s/100, Boxed answer: %s",
+                    answer_type, confidence, boxed_answer,
+                )
 
-        finally:
-            if runtime_created:
-                await runtime.post_run()
+                extracted_metadata = {
+                    "answer_type": answer_type,
+                    "confidence": confidence,
+                    "boxed_answer": boxed_answer,
+                    "full_response": extracted_answer,
+                }
+            except Exception as e:
+                logger.warning("reasoning model final answer extraction failed: %s", e)
 
-    async def stream(self, inputs: Dict, runtime: Runtime = None) -> AsyncIterator[Any]:
-        """Streaming invoke - delegates to invoke for now"""
-        result = await self.invoke(inputs, runtime)
+        if plan_tracker and plan_tracker.has_plan():
+            plan_tracker.finalize(summary, mark_remaining_complete=not task_failed)
+
+        result: dict[str, Any] = {
+            "output": summary,
+            "result_type": "error" if task_failed else "answer",
+        }
+        if extracted_metadata:
+            result["extracted_metadata"] = extracted_metadata
+        return result
+
+    async def stream(
+        self, inputs: dict[str, Any], runtime: Any = None,
+    ) -> AsyncIterator[Any]:
+        """Streaming invoke — delegates to ``invoke()`` for now.
+
+        Args:
+            inputs: Same as ``invoke``.
+            runtime: Unused — kept for backward compatibility.
+
+        Yields:
+            The complete result dict.
+        """
+        result = await self.invoke(inputs)
         yield result
