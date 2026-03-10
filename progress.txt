@@ -4513,3 +4513,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Agent-core uses Session.tracer() spans for trajectory extraction; Orbiter needs a pluggable TrajectoryExtractor ABC
   - Checkpointing saves operator states + updater states + progress metadata
 ---
+
+## 2026-03-10 - US-070
+- What was implemented: Operator ABC + TunableSpec + TunableKind in new `operator/` subpackage
+- Files changed:
+  - `packages/orbiter-train/src/orbiter/train/operator/__init__.py` (new — subpackage exports)
+  - `packages/orbiter-train/src/orbiter/train/operator/base.py` (new — Operator ABC, TunableSpec frozen dataclass, TunableKind StrEnum)
+  - `packages/orbiter-train/src/orbiter/train/__init__.py` (updated — export Operator, TunableKind, TunableSpec)
+  - `packages/orbiter-train/tests/test_operator.py` (new — 22 tests: abstract enforcement, TunableSpec creation/frozen/equality, stub operator lifecycle)
+- **Learnings for future iterations:**
+  - Operator subpackage uses same `pyright: ignore[reportMissingImports]` pattern as other train modules for namespace package compat
+  - TunableKind has 4 values: prompt, continuous, discrete, text (PRD spec; design doc had tool_selector/memory_selector which can be added in US-071 if needed)
+  - TunableSpec.constraints is a free-form dict — optimizer interprets based on TunableKind (e.g. min/max for continuous, choices for discrete)
+  - Operator.name serves as the identifier linking trajectory steps to operators for attribution
+  - State roundtrip pattern: get_state() → modify → load_state(original) restores operator to previous state — essential for candidate selection
+---

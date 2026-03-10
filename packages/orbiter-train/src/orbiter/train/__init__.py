@@ -10,6 +10,11 @@ from orbiter.train.evolution import (  # pyright: ignore[reportMissingImports]
     EvolutionState,
     EvolutionStrategy,
 )
+from orbiter.train.operator import (  # pyright: ignore[reportMissingImports]
+    Operator,
+    TunableKind,
+    TunableSpec,
+)
 from orbiter.train.synthesis import (  # pyright: ignore[reportMissingImports]
     DataSynthesiser,
     SynthesisConfig,
@@ -56,6 +61,7 @@ __all__ = [
     "EvolutionResult",
     "EvolutionState",
     "EvolutionStrategy",
+    "Operator",
     "RewardSpec",
     "SynthesisConfig",
     "SynthesisError",
@@ -72,6 +78,8 @@ __all__ = [
     "TrajectoryError",
     "TrajectoryItem",
     "TrajectoryStrategy",
+    "TunableKind",
+    "TunableSpec",
     "VeRLAlgorithm",
     "VeRLConfig",
     "VeRLTrainer",
