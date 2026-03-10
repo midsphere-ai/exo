@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 pgvector = ["asyncpg>=0.29"]
+chroma = ["chromadb>=0.4"]
 
 [tool.uv.sources]
 orbiter-core = { workspace = true }
