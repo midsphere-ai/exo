@@ -140,6 +140,7 @@ from orbiter.memory.evolution.reasoning_bank import (  # pyright: ignore[reportM
     ReasoningBankStrategy,
     ReasoningEntry,
 )
+from orbiter.memory.evolution.reme import ReMeStrategy  # pyright: ignore[reportMissingImports]
 
 __all__ = [
     "ACEStrategy",
@@ -147,4 +148,5 @@ __all__ = [
     "MemoryEvolutionStrategy",
     "ReasoningBankStrategy",
     "ReasoningEntry",
+    "ReMeStrategy",
 ]

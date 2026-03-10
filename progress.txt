@@ -4482,3 +4482,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Embedding results are cached in _vector_cache dict keyed by text string
   - JSON parsing in _parse_entry handles non-dict JSON (arrays, primitives) by falling back to plain text
 ---
+
+## 2026-03-10 22:55 - US-068
+- What was implemented: ReMeStrategy — Relevant Memory evolution strategy that extracts success/failure patterns with when-to-use metadata via LLM, with content similarity deduplication
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/evolution/reme.py (new — ReMeStrategy, PatternModel protocol, keyword dedup)
+  - packages/orbiter-memory/src/orbiter/memory/evolution/__init__.py (updated — export ReMeStrategy)
+  - packages/orbiter-memory/tests/test_reme_strategy.py (new — 30 tests covering extraction, dedup, composition, edge cases)
+- **Learnings for future iterations:**
+  - When using str.format() with JSON examples in prompt templates, escape literal braces as {{ and }}
+  - PatternModel protocol follows same pattern as ACE's ReflectionModel: async callable (prompt) -> str
+  - Keyword (Jaccard) similarity for dedup: same helper as ReasoningBank's fallback; threshold 0.85 default
+  - Extracted patterns stored as MemoryItem(memory_type="pattern") with when_to_use/pattern_type in metadata.extra dict
+  - When model output is invalid (bad JSON, empty array, etc.), gracefully fall back to original items
+---
