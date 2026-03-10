@@ -12,7 +12,9 @@ from orbiter.sandbox.kubernetes import (  # pyright: ignore[reportMissingImports
 )
 from orbiter.sandbox.tools import (  # pyright: ignore[reportMissingImports]
     FilesystemTool,
+    ShellTool,
     TerminalTool,
+    shell_tool,
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     "SandboxBuilder",
     "SandboxError",
     "SandboxStatus",
+    "ShellTool",
     "TerminalTool",
+    "shell_tool",
 ]

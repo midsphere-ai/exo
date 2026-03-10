@@ -4343,3 +4343,23 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - grep_files defaults path="." to search entire working directory when no path specified
   - Pre-existing test_token_counter.py failure (test_unknown_model_uses_default_encoding) is unrelated to changes — tiktoken environment issue
 ---
+
+## 2026-03-10 - US-060
+- Implemented `shell_tool()` factory function and `ShellTool` class in `orbiter-sandbox/tools.py`
+- Allowlist-based approach (opposite of TerminalTool's denylist): only commands in the allowlist are permitted
+- Default allowlist: ls, cat, grep, find, echo, wc, sort, head, tail, diff
+- Uses `asyncio.create_subprocess_exec()` (not shell=True) for safer execution
+- Uses `shlex.split()` for proper command parsing with quoted arguments
+- Output truncated at 10,000 chars with truncation message
+- Configurable timeout (default 30s) and configurable allowlist
+- Files changed:
+  - `packages/orbiter-sandbox/src/orbiter/sandbox/tools.py` — added ShellTool class, shell_tool factory, _DEFAULT_ALLOWED_COMMANDS, _MAX_OUTPUT_CHARS
+  - `packages/orbiter-sandbox/tests/test_sandbox_tools.py` — added 21 tests across 5 test classes
+  - `packages/orbiter-sandbox/src/orbiter/sandbox/__init__.py` — exported ShellTool and shell_tool
+  - `prd.json` — marked US-060 passes: true
+- **Learnings for future iterations:**
+  - ShellTool uses allowlist (shell_tool) vs TerminalTool uses denylist — two complementary approaches for different security postures
+  - `shlex.split()` handles quoted arguments properly and raises ValueError on malformed input — good for safe command parsing
+  - `create_subprocess_exec()` takes a list of args (no shell), safer than `create_subprocess_shell()` used by TerminalTool
+  - Path stripping for validation: `rsplit("/", maxsplit=1)[-1]` extracts base command from full paths like /usr/bin/ls
+---

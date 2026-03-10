@@ -1,4 +1,4 @@
-"""Tests for built-in sandbox tools (FilesystemTool and TerminalTool)."""
+"""Tests for built-in sandbox tools (FilesystemTool, TerminalTool, ShellTool)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ import pytest
 
 from orbiter.sandbox.tools import (  # pyright: ignore[reportMissingImports]
     _DANGEROUS_COMMANDS,
+    _DEFAULT_ALLOWED_COMMANDS,
     FilesystemTool,
+    ShellTool,
     TerminalTool,
+    shell_tool,
 )
 from orbiter.tool import ToolError
 
@@ -267,3 +270,147 @@ class TestTerminalSchema:
         schema = tool.to_schema()
         assert schema["function"]["name"] == "terminal"
         assert "command" in schema["function"]["parameters"]["properties"]
+
+
+# ---------------------------------------------------------------------------
+# ShellTool — command validation
+# ---------------------------------------------------------------------------
+
+
+class TestShellCommandValidation:
+    def test_allowed_command_passes(self) -> None:
+        tool = ShellTool()
+        parts = tool._validate_command("ls -la /tmp")
+        assert parts[0] == "ls"
+
+    def test_disallowed_command_rejected(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="not in the allowed list"):
+            tool._validate_command("rm -rf /")
+
+    def test_empty_command_rejected(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="Empty command"):
+            tool._validate_command("")
+
+    def test_whitespace_only_rejected(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="Empty command"):
+            tool._validate_command("   ")
+
+    def test_full_path_stripped(self) -> None:
+        tool = ShellTool()
+        parts = tool._validate_command("/usr/bin/ls -la")
+        assert parts[0] == "/usr/bin/ls"
+
+    def test_full_path_disallowed(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="not in the allowed list"):
+            tool._validate_command("/usr/bin/rm -rf /")
+
+    def test_custom_allowlist(self) -> None:
+        tool = ShellTool(allowed_commands=["curl", "wget"])
+        tool._validate_command("curl http://example.com")  # should pass
+        with pytest.raises(ToolError, match="not in the allowed list"):
+            tool._validate_command("ls -la")
+
+    def test_default_allowlist_contents(self) -> None:
+        expected = {"ls", "cat", "grep", "find", "echo", "wc", "sort", "head", "tail", "diff"}
+        assert set(_DEFAULT_ALLOWED_COMMANDS) == expected
+
+    def test_quoted_arguments_parsed(self) -> None:
+        tool = ShellTool()
+        parts = tool._validate_command('grep "hello world" file.txt')
+        assert parts == ["grep", "hello world", "file.txt"]
+
+
+# ---------------------------------------------------------------------------
+# ShellTool — execution
+# ---------------------------------------------------------------------------
+
+
+class TestShellExecution:
+    async def test_echo_command(self) -> None:
+        tool = ShellTool()
+        result = await tool.execute(command="echo hello")
+        assert isinstance(result, dict)
+        assert result["exit_code"] == 0
+        assert "hello" in result["stdout"]
+
+    async def test_ls_command(self, tmp_path: Path) -> None:
+        (tmp_path / "test.txt").write_text("x", encoding="utf-8")
+        tool = ShellTool()
+        result = await tool.execute(command=f"ls {tmp_path}")
+        assert result["exit_code"] == 0
+        assert "test.txt" in result["stdout"]
+
+    async def test_cat_command(self, tmp_path: Path) -> None:
+        f = tmp_path / "data.txt"
+        f.write_text("file contents here", encoding="utf-8")
+        tool = ShellTool()
+        result = await tool.execute(command=f"cat {f}")
+        assert result["exit_code"] == 0
+        assert "file contents here" in result["stdout"]
+
+    async def test_disallowed_command_blocked(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="not in the allowed list"):
+            await tool.execute(command="rm -rf /tmp/test")
+
+    async def test_empty_command(self) -> None:
+        tool = ShellTool()
+        with pytest.raises(ToolError, match="Empty command"):
+            await tool.execute(command="")
+
+    async def test_timeout(self) -> None:
+        tool = ShellTool(allowed_commands=["sleep"], timeout=0.1)
+        with pytest.raises(ToolError, match="timed out"):
+            await tool.execute(command="sleep 10")
+
+    async def test_stderr_captured(self) -> None:
+        tool = ShellTool()
+        result = await tool.execute(command="ls /nonexistent_path_xyz_123")
+        assert result["exit_code"] != 0
+        assert result["stderr"]
+
+    async def test_output_truncation(self, tmp_path: Path) -> None:
+        # Create a file with content that produces >10000 chars of output
+        big = tmp_path / "big.txt"
+        big.write_text("x" * 20000, encoding="utf-8")
+        tool = ShellTool()
+        result = await tool.execute(command=f"cat {big}")
+        assert "truncated" in result["stdout"]
+        assert len(result["stdout"]) < 20000
+
+
+# ---------------------------------------------------------------------------
+# ShellTool — schema
+# ---------------------------------------------------------------------------
+
+
+class TestShellSchema:
+    def test_schema(self) -> None:
+        tool = ShellTool()
+        schema = tool.to_schema()
+        assert schema["function"]["name"] == "shell"
+        assert "command" in schema["function"]["parameters"]["properties"]
+
+
+# ---------------------------------------------------------------------------
+# shell_tool factory
+# ---------------------------------------------------------------------------
+
+
+class TestShellToolFactory:
+    def test_factory_default(self) -> None:
+        tool = shell_tool()
+        assert isinstance(tool, ShellTool)
+        assert tool._allowed == _DEFAULT_ALLOWED_COMMANDS
+
+    def test_factory_custom_allowlist(self) -> None:
+        tool = shell_tool(allowed_commands=["python", "node"])
+        assert tool._allowed == ["python", "node"]
+
+    def test_factory_custom_timeout(self) -> None:
+        tool = shell_tool(timeout=60.0)
+        assert tool._timeout == 60.0

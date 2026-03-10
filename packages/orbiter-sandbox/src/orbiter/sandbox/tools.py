@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import platform
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -226,3 +227,134 @@ class TerminalTool(Tool):
             "stderr": stderr.decode(errors="replace") if stderr else "",
             "platform": self.platform,
         }
+
+
+# ---------------------------------------------------------------------------
+# ShellTool (allowlist-based, created via shell_tool factory)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_ALLOWED_COMMANDS: list[str] = [
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "echo",
+    "wc",
+    "sort",
+    "head",
+    "tail",
+    "diff",
+]
+
+_MAX_OUTPUT_CHARS = 10_000
+
+_SHELL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "command": {
+            "type": "string",
+            "description": "Shell command to execute (must start with an allowed command).",
+        },
+    },
+    "required": ["command"],
+}
+
+
+class ShellTool(Tool):
+    """Allowlist-based shell tool for safe command execution.
+
+    Only commands whose base executable is in the allowlist are permitted.
+    Uses ``asyncio.create_subprocess_exec()`` (no shell) for safety.
+    Output is truncated to 10,000 characters.
+    """
+
+    name = "shell"
+    description = "Execute a shell command from the configured allowlist."
+    parameters = _SHELL_SCHEMA
+
+    def __init__(
+        self,
+        *,
+        allowed_commands: list[str] | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        self._allowed: list[str] = (
+            list(allowed_commands) if allowed_commands is not None else list(_DEFAULT_ALLOWED_COMMANDS)
+        )
+        self._timeout = timeout
+
+    def _validate_command(self, command: str) -> list[str]:
+        """Parse and validate *command* against the allowlist.
+
+        Returns the parsed argument list for ``create_subprocess_exec``.
+        Raises ``ToolError`` if the command is empty or not allowed.
+        """
+        stripped = command.strip()
+        if not stripped:
+            raise ToolError("Empty command")
+
+        try:
+            parts = shlex.split(stripped)
+        except ValueError as exc:
+            raise ToolError(f"Invalid command syntax: {exc}") from exc
+
+        if not parts:
+            raise ToolError("Empty command")
+
+        base = parts[0].rsplit("/", maxsplit=1)[-1]
+        if base not in self._allowed:
+            raise ToolError(
+                f"Command {base!r} is not in the allowed list: {self._allowed}"
+            )
+        return parts
+
+    @staticmethod
+    def _truncate(text: str) -> str:
+        """Truncate *text* to ``_MAX_OUTPUT_CHARS``."""
+        if len(text) <= _MAX_OUTPUT_CHARS:
+            return text
+        return text[:_MAX_OUTPUT_CHARS] + f"\n... (truncated at {_MAX_OUTPUT_CHARS} chars)"
+
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+        command: str = kwargs.get("command", "")
+        parts = self._validate_command(command)
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self._timeout
+            )
+        except TimeoutError as exc:
+            proc.kill()  # type: ignore[union-attr]
+            raise ToolError(f"Command timed out after {self._timeout}s") from exc
+        except FileNotFoundError as exc:
+            raise ToolError(f"Command not found: {parts[0]!r}") from exc
+        except Exception as exc:
+            raise ToolError(f"Command execution failed: {exc}") from exc
+
+        stdout_str = stdout.decode(errors="replace") if stdout else ""
+        stderr_str = stderr.decode(errors="replace") if stderr else ""
+
+        return {
+            "exit_code": proc.returncode,
+            "stdout": self._truncate(stdout_str),
+            "stderr": self._truncate(stderr_str),
+        }
+
+
+def shell_tool(allowed_commands: list[str] | None = None, *, timeout: float = 30.0) -> ShellTool:
+    """Factory function that creates an allowlist-based shell tool.
+
+    Args:
+        allowed_commands: Commands to allow. Defaults to ls, cat, grep, find,
+            echo, wc, sort, head, tail, diff.
+        timeout: Maximum seconds per command (default 30).
+
+    Returns:
+        A configured ``ShellTool`` instance.
+    """
+    return ShellTool(allowed_commands=allowed_commands, timeout=timeout)
