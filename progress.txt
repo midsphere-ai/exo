@@ -3976,3 +3976,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - HTTPEmbeddings uses `_get_nested(obj, dotted.path)` helper for traversing nested response structures — supports both dict keys and integer list indices
   - Follow same httpx.AsyncClient mock pattern as OpenAIEmbeddings tests: AsyncMock with __aenter__/__aexit__ + patch at module level
 ---
+
+## 2026-03-10 - US-037
+- Implemented VectorStore ABC with async add, search, delete, clear methods
+- Implemented InMemoryVectorStore with cosine similarity search, metadata filtering, document-level deletion
+- Helper _cosine_similarity function for vector comparison
+- 24 tests covering ABC, cosine similarity, add, search (ranked results, top_k, filters), delete, clear
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/vector_store.py (new)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (added exports)
+  - packages/orbiter-retrieval/tests/test_vector_store.py (new)
+- **Learnings for future iterations:**
+  - VectorStore follows same ABC pattern as Embeddings — async methods, no SDK deps
+  - InMemoryVectorStore uses internal int IDs (_next_id) to track chunks independently of document_id
+  - Metadata filter is exact-match on all provided keys (AND semantics)
+  - Frozen Chunk model means chunks are hashable but cannot be mutated after creation
+---
