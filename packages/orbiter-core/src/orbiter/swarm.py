@@ -901,6 +901,16 @@ class Swarm:
             "agents": {name: agent.describe() for name, agent in self.agents.items()},
         }
 
+    def to_mermaid(self) -> str:
+        """Generate a Mermaid flowchart of this swarm's topology.
+
+        Returns:
+            A string containing valid ``graph TD`` Mermaid syntax.
+        """
+        from orbiter._internal.visualization import to_mermaid
+
+        return to_mermaid(self)
+
     def __repr__(self) -> str:
         return f"Swarm(mode={self.mode!r}, agents={list(self.agents.keys())}, flow={self.flow!r})"
 
