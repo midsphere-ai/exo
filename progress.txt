@@ -3388,3 +3388,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The existing contributing docs (code-style.md, testing.md, etc.) use simple markdown with tables and code blocks — matched that style
   - Astro typecheck (`npx astro check`) only checks .astro and .ts files, not markdown — markdown docs just need ruff check
 ---
+
+## 2026-03-10 - US-001
+- Produced docs/design/rails-design.md — design document for typed agent rails
+- Covers: typed event inputs (InvokeInputs, ModelCallInputs, ToolCallInputs, RailContext), priority ordering, cross-rail state via extra dict, retry mechanism, RailAction enum, RailManager/HookManager integration
+- Key decision: Rails EXTEND hooks (Option B) — RailManager registers as a single hook on HookManager, zero breaking changes
+- Confirmed all existing hook_manager.add(HookPoint.X, my_func) calls continue to work unchanged
+- Typecheck passes (0 errors), all 789 orbiter-core tests pass
+- Files created: docs/design/rails-design.md
+- **Learnings for future iterations:**
+  - HookManager stores hooks in a defaultdict(list) keyed by HookPoint; hooks run sequentially in registration order
+  - Hook signature is `async (**kwargs) -> None` — any async callable matching this can be registered
+  - agent.py fires PRE_LLM_CALL, POST_LLM_CALL, PRE_TOOL_CALL, POST_TOOL_CALL hooks; START, FINISHED, ERROR are defined but NOT fired yet
+  - Agents with hooks cannot be serialized (to_dict raises ValueError) — same will apply to rails
+  - agent-core rail system is in openjiuwen/core/single_agent/rail/ — not in this repo, referenced via analysis doc
+---
