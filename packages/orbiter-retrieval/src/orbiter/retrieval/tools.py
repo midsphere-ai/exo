@@ -14,7 +14,7 @@ from orbiter.retrieval.types import (  # pyright: ignore[reportMissingImports]
     RetrievalResult,
 )
 from orbiter.retrieval.vector_store import VectorStore  # pyright: ignore[reportMissingImports]
-from orbiter.tool import FunctionTool
+from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 
 
 def _format_results(results: list[RetrievalResult]) -> str:

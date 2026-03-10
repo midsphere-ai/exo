@@ -76,6 +76,7 @@ class ModelResponse(BaseModel):
     usage: Usage = Field(default_factory=Usage)
     finish_reason: FinishReason = "stop"
     reasoning_content: str = ""
+    thought_signatures: list[bytes] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +100,7 @@ class ToolCallDelta(BaseModel):
     id: str | None = None
     name: str | None = None
     arguments: str = ""
+    thought_signature: bytes | None = None
 
 
 class StreamChunk(BaseModel):
@@ -117,3 +119,5 @@ class StreamChunk(BaseModel):
     tool_call_deltas: list[ToolCallDelta] = Field(default_factory=list)
     finish_reason: FinishReason | None = None
     usage: Usage = Field(default_factory=Usage)
+    reasoning_delta: str = ""
+    thought_signatures: list[bytes] = Field(default_factory=list)

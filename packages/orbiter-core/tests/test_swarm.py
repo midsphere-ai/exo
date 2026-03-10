@@ -44,6 +44,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -232,6 +234,8 @@ class TestSwarmWorkflow:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -510,6 +514,8 @@ class TestSwarmHandoff:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -696,6 +702,8 @@ def _make_team_provider(responses: list[Any]) -> Any:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -704,6 +712,8 @@ def _make_team_provider(responses: list[Any]) -> Any:
             content = resp.get("content", "")
             tool_calls = resp.get("tool_calls", [])
             usage = resp.get("usage", _DEFAULT_USAGE)
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeToolCallResponse()
 
@@ -984,6 +994,8 @@ class _FakeStreamChunk:
         self.tool_call_deltas = tool_call_deltas or []
         self.finish_reason = finish_reason
         self.usage = usage or Usage()
+        self.reasoning_delta: str = ""
+        self.thought_signatures: list[bytes] = []
 
 
 class _FakeToolCallDelta:

@@ -31,6 +31,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -52,6 +54,8 @@ class _FakeStreamChunk:
         self.tool_call_deltas: list[Any] = []
         self.finish_reason: str | None = None
         self.usage = Usage()
+        self.reasoning_delta: str = ""
+        self.thought_signatures: list[bytes] = []
 
 
 def _make_stream_provider(stream_rounds: list[list[_FakeStreamChunk]]) -> Any:

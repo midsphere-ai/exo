@@ -30,6 +30,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -186,6 +188,8 @@ class TestContextIsolation:
                 content = "output"
                 tool_calls: ClassVar[list[Any]] = []
                 usage = Usage(input_tokens=5, output_tokens=5, total_tokens=10)
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 

@@ -30,6 +30,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -189,6 +191,8 @@ class TestLoopNodeCountMode:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -236,6 +240,8 @@ class TestLoopNodeCountMode:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -350,6 +356,8 @@ class TestLoopNodeConditionMode:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -387,6 +395,8 @@ class TestLoopNodeBreak:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -439,6 +449,8 @@ class TestLoopNodeMaxIterations:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -472,6 +484,8 @@ class TestLoopNodeMaxIterations:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 

@@ -45,6 +45,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -64,6 +66,8 @@ def _counting_provider() -> tuple[Any, dict[str, int]]:
             content = f"call_{tracker['calls']}"
             tool_calls: list[Any] = []
             usage = _USAGE
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 

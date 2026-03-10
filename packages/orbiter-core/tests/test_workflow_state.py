@@ -33,6 +33,8 @@ def _make_provider(responses: list[AgentOutput]) -> Any:
             content = resp.text
             tool_calls = resp.tool_calls
             usage = resp.usage
+            reasoning_content = ""
+            thought_signatures: list[bytes] = []
 
         return FakeResponse()
 
@@ -280,6 +282,8 @@ class TestLoopingStatePropagation:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 
@@ -324,6 +328,8 @@ class TestLoopingStatePropagation:
                 content = resp.text
                 tool_calls = resp.tool_calls
                 usage = resp.usage
+                reasoning_content = ""
+                thought_signatures: list[bytes] = []
 
             return FakeResponse()
 

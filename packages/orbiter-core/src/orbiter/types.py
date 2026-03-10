@@ -36,6 +36,7 @@ class ToolCall(BaseModel):
         id: Unique identifier for this tool call.
         name: Name of the tool to invoke.
         arguments: JSON-encoded string of the tool arguments.
+        thought_signature: Opaque signature for round-tripping thought parts (Gemini).
     """
 
     model_config = {"frozen": True}
@@ -43,6 +44,7 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: str = ""
+    thought_signature: bytes | None = None
 
 
 class AssistantMessage(BaseModel):
@@ -60,6 +62,8 @@ class AssistantMessage(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    reasoning_content: str = ""
+    thought_signatures: list[bytes] = Field(default_factory=list)
 
 
 class ToolResult(BaseModel):
@@ -128,6 +132,8 @@ class AgentOutput(BaseModel):
     text: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     usage: Usage = Field(default_factory=Usage)
+    reasoning_content: str = ""
+    thought_signatures: list[bytes] = Field(default_factory=list)
 
 
 class ActionModel(BaseModel):

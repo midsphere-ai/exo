@@ -228,7 +228,12 @@ class Agent:
             tool_results = await self._execute_tools(actions)
 
             # Append assistant message (with tool calls) and results to history
-            msg_list.append(AssistantMessage(content=output.text, tool_calls=output.tool_calls))
+            msg_list.append(AssistantMessage(
+                content=output.text,
+                tool_calls=output.tool_calls,
+                reasoning_content=output.reasoning_content,
+                thought_signatures=output.thought_signatures,
+            ))
             msg_list.extend(tool_results)
 
         # max_steps exhausted — return last output as-is
@@ -260,6 +265,8 @@ class Agent:
                     content=response.content,
                     tool_calls=response.tool_calls,
                     usage=response.usage,
+                    reasoning_content=response.reasoning_content,
+                    thought_signatures=response.thought_signatures,
                 )
 
             except (RailAbortError, GuardrailError):

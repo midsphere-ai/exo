@@ -78,6 +78,41 @@ class TestAssistantMessage:
         msg2 = AssistantMessage()
         assert msg1.tool_calls is not msg2.tool_calls
 
+    def test_reasoning_content_default(self) -> None:
+        msg = AssistantMessage()
+        assert msg.reasoning_content == ""
+
+    def test_thought_signatures_default(self) -> None:
+        msg = AssistantMessage()
+        assert msg.thought_signatures == []
+
+    def test_with_reasoning_and_signatures(self) -> None:
+        sig = b"\x01\x02"
+        msg = AssistantMessage(
+            content="answer",
+            reasoning_content="thinking...",
+            thought_signatures=[sig],
+        )
+        assert msg.reasoning_content == "thinking..."
+        assert msg.thought_signatures == [sig]
+
+    def test_thought_signatures_default_not_shared(self) -> None:
+        msg1 = AssistantMessage()
+        msg2 = AssistantMessage()
+        assert msg1.thought_signatures is not msg2.thought_signatures
+
+    def test_roundtrip_with_reasoning(self) -> None:
+        sig = b"\xab\xcd"
+        msg = AssistantMessage(
+            content="answer",
+            reasoning_content="step-by-step",
+            thought_signatures=[sig],
+        )
+        data = msg.model_dump()
+        restored = AssistantMessage.model_validate(data)
+        assert restored == msg
+        assert restored.thought_signatures == [sig]
+
 
 class TestToolResult:
     def test_success(self) -> None:
@@ -301,6 +336,29 @@ class TestAgentOutput:
         data = out.model_dump()
         restored = AgentOutput.model_validate(data)
         assert restored == out
+
+    def test_reasoning_content_default(self) -> None:
+        out = AgentOutput()
+        assert out.reasoning_content == ""
+
+    def test_thought_signatures_default(self) -> None:
+        out = AgentOutput()
+        assert out.thought_signatures == []
+
+    def test_with_reasoning_and_signatures(self) -> None:
+        sig = b"\x01\x02"
+        out = AgentOutput(
+            text="answer",
+            reasoning_content="thinking",
+            thought_signatures=[sig],
+        )
+        assert out.reasoning_content == "thinking"
+        assert out.thought_signatures == [sig]
+
+    def test_thought_signatures_default_not_shared(self) -> None:
+        a = AgentOutput()
+        b = AgentOutput()
+        assert a.thought_signatures is not b.thought_signatures
 
 
 # --- ActionModel ---

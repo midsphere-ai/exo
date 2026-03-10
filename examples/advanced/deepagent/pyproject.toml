@@ -1,0 +1,48 @@
+[project]
+name = "jiuwen-opensource"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp==3.11.12",
+    "langgraph==0.6.3",
+    "mcp>=1.24.0",
+    "pydantic>=2.11.7",
+    "python-dateutil==2.9.0.post0",
+    "sqlalchemy==2.0.41",
+    "openai==1.108.0",
+    "cacheout==0.16.0",
+    "mermaid-py==0.8.0",
+    "openjiuwen==0.1.3",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+[dependency-groups]
+dev = [
+    "autodoc-pydantic==2.2.0",
+    "coverage==7.7.1",
+    "pytest==8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-html>=4.1.1",
+    "pytest-mock==3.14.0",
+    "ruff==0.11.2",
+]
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["jiuwen"]
+addopts = ["-v", "--html=report/index.html", "--self-contained-html"]
+
+[project.optional-dependencies]
+pulsar = ["pulsar-client==3.5.0"]

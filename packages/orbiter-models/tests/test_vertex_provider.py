@@ -43,8 +43,15 @@ def _make_part(
     *,
     text: str | None = None,
     function_call: Any | None = None,
+    thought: bool | None = None,
+    thought_signature: bytes | None = None,
 ) -> SimpleNamespace:
-    return SimpleNamespace(text=text, function_call=function_call)
+    return SimpleNamespace(
+        text=text,
+        function_call=function_call,
+        thought=thought,
+        thought_signature=thought_signature,
+    )
 
 
 def _make_function_call(
@@ -315,6 +322,26 @@ class TestParseResponse:
         resp = _parse_response(raw, "gemini-2.0-flash")
         assert resp.finish_reason == "length"
 
+    def test_thought_parts_extracted_as_reasoning(self) -> None:
+        """Thought parts populate reasoning_content, not content."""
+        sig = b"\x01\x02\x03"
+        parts = [
+            _make_part(text="thinking...", thought=True, thought_signature=sig),
+            _make_part(text="Hello!"),
+        ]
+        raw = _make_response(parts=parts)
+        resp = _parse_response(raw, "gemini-2.5-pro")
+        assert resp.content == "Hello!"
+        assert resp.reasoning_content == "thinking..."
+        assert resp.thought_signatures == [sig]
+
+    def test_no_thought_parts(self) -> None:
+        """Standard response without thought parts has empty reasoning fields."""
+        raw = _make_response(content="Hello!")
+        resp = _parse_response(raw, "gemini-2.0-flash")
+        assert resp.reasoning_content == ""
+        assert resp.thought_signatures == []
+
 
 # ---------------------------------------------------------------------------
 # Stream chunk parsing
@@ -357,6 +384,47 @@ class TestParseStreamChunk:
         result = _parse_stream_chunk(chunk)
         assert result.delta == ""
         assert result.usage.input_tokens == 0
+
+    def test_thought_delta(self) -> None:
+        """Thought parts in stream chunks produce reasoning_delta, not delta."""
+        sig = b"\xab\xcd"
+        chunk = _make_stream_chunk(
+            parts=[
+                _make_part(text="thinking", thought=True, thought_signature=sig),
+                _make_part(text="answer"),
+            ]
+        )
+        result = _parse_stream_chunk(chunk)
+        assert result.delta == "answer"
+        assert result.reasoning_delta == "thinking"
+        assert result.thought_signatures == [sig]
+
+
+# ---------------------------------------------------------------------------
+# Thought signature round-trip in message conversion
+# ---------------------------------------------------------------------------
+
+
+class TestThoughtSignatureRoundTrip:
+    def test_thought_signatures_prepended_in_contents(self) -> None:
+        """AssistantMessage with thought_signatures produces thought parts."""
+        sig = b"\x01\x02\x03"
+        msg = AssistantMessage(
+            content="answer",
+            thought_signatures=[sig],
+        )
+        contents, _ = _to_google_contents([msg])
+        parts = contents[0]["parts"]
+        assert parts[0] == {"thought": True, "thought_signature": sig}
+        assert parts[1] == {"text": "answer"}
+
+    def test_no_signatures_unchanged(self) -> None:
+        """AssistantMessage without thought_signatures behaves normally."""
+        msg = AssistantMessage(content="hello")
+        contents, _ = _to_google_contents([msg])
+        parts = contents[0]["parts"]
+        assert len(parts) == 1
+        assert parts[0] == {"text": "hello"}
 
 
 # ---------------------------------------------------------------------------

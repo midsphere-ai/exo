@@ -81,11 +81,18 @@ def _to_google_contents(messages: list[Message]) -> tuple[list[dict[str, Any]], 
             contents.append({"role": "user", "parts": [{"text": msg.content}]})
         elif isinstance(msg, AssistantMessage):
             parts: list[dict[str, Any]] = []
+            # Prepend thought parts with signatures for round-tripping
+            if msg.thought_signatures:
+                for sig in msg.thought_signatures:
+                    parts.append({"thought": True, "thought_signature": sig})
             if msg.content:
                 parts.append({"text": msg.content})
             for tc in msg.tool_calls:
                 args = json.loads(tc.arguments) if tc.arguments else {}
-                parts.append({"function_call": {"name": tc.name, "args": args}})
+                fc_part: dict[str, Any] = {"function_call": {"name": tc.name, "args": args}}
+                if tc.thought_signature:
+                    fc_part["thought_signature"] = tc.thought_signature
+                parts.append(fc_part)
             if not parts:
                 parts.append({"text": ""})
             contents.append({"role": "model", "parts": parts})
@@ -180,20 +187,36 @@ def _parse_response(raw: Any, model_name: str) -> ModelResponse:
     """
     candidate = raw.candidates[0]
     content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    thought_sigs: list[bytes] = []
     tool_calls: list[ToolCall] = []
 
-    for i, part in enumerate(candidate.content.parts):
+    parts = getattr(candidate.content, "parts", None) or []
+    for i, part in enumerate(parts):
+        # Check for thought parts (Gemini 2.5+ thinking models)
+        thought = getattr(part, "thought", None)
+        if thought:
+            text = getattr(part, "text", None)
+            if text:
+                reasoning_parts.append(text)
+            sig = getattr(part, "thought_signature", None)
+            if sig:
+                thought_sigs.append(sig)
+            continue  # don't add to regular content
+
         text = getattr(part, "text", None)
         if text:
             content_parts.append(text)
         fc = getattr(part, "function_call", None)
         if fc:
             call_id = getattr(fc, "id", None) or f"call_{i}"
+            fc_sig = getattr(part, "thought_signature", None)
             tool_calls.append(
                 ToolCall(
                     id=call_id,
                     name=fc.name,
                     arguments=json.dumps(fc.args) if fc.args else "{}",
+                    thought_signature=fc_sig,
                 )
             )
 
@@ -214,6 +237,8 @@ def _parse_response(raw: Any, model_name: str) -> ModelResponse:
         tool_calls=tool_calls,
         usage=usage,
         finish_reason=_map_finish_reason(finish_reason_raw),
+        reasoning_content="".join(reasoning_parts),
+        thought_signatures=thought_sigs,
     )
 
 
@@ -238,21 +263,37 @@ def _parse_stream_chunk(chunk: Any) -> StreamChunk:
 
     candidate = chunk.candidates[0]
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    thought_sigs: list[bytes] = []
     tool_call_deltas: list[ToolCallDelta] = []
 
-    for i, part in enumerate(candidate.content.parts):
+    parts = getattr(candidate.content, "parts", None) or []
+    for i, part in enumerate(parts):
+        # Check for thought parts (Gemini 2.5+ thinking models)
+        thought = getattr(part, "thought", None)
+        if thought:
+            text = getattr(part, "text", None)
+            if text:
+                reasoning_parts.append(text)
+            sig = getattr(part, "thought_signature", None)
+            if sig:
+                thought_sigs.append(sig)
+            continue  # don't add to regular content
+
         text = getattr(part, "text", None)
         if text:
             text_parts.append(text)
         fc = getattr(part, "function_call", None)
         if fc:
             call_id = getattr(fc, "id", None) or f"call_{i}"
+            fc_sig = getattr(part, "thought_signature", None)
             tool_call_deltas.append(
                 ToolCallDelta(
                     index=i,
                     id=call_id,
                     name=fc.name,
                     arguments=json.dumps(fc.args) if fc.args else "{}",
+                    thought_signature=fc_sig,
                 )
             )
 
@@ -272,6 +313,8 @@ def _parse_stream_chunk(chunk: Any) -> StreamChunk:
         tool_call_deltas=tool_call_deltas,
         finish_reason=finish,
         usage=usage,
+        reasoning_delta="".join(reasoning_parts),
+        thought_signatures=thought_sigs,
     )
 
 

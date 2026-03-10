@@ -940,3 +940,54 @@ class TestAgentEdgeCases:
         second_call_msgs = provider.complete.call_args_list[1][0][0]
         tool_msgs = [m for m in second_call_msgs if m.role == "tool"]
         assert "pong" in tool_msgs[0].content
+
+
+# ---------------------------------------------------------------------------
+# Thought signature propagation
+# ---------------------------------------------------------------------------
+
+
+class TestThoughtSignaturePropagation:
+    async def test_reasoning_content_propagated(self) -> None:
+        """reasoning_content from ModelResponse reaches AgentOutput."""
+        resp = ModelResponse(
+            content="answer",
+            usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            reasoning_content="thinking step by step",
+            thought_signatures=[b"\x01\x02"],
+        )
+        provider = AsyncMock()
+        provider.complete = AsyncMock(return_value=resp)
+        agent = Agent(name="bot")
+
+        output = await agent.run("Hello", provider=provider)
+
+        assert output.reasoning_content == "thinking step by step"
+        assert output.thought_signatures == [b"\x01\x02"]
+
+    async def test_thought_signatures_in_assistant_message(self) -> None:
+        """thought_signatures are included in AssistantMessage during tool loop."""
+        tc = ToolCall(id="tc-1", name="greet", arguments='{"name": "Alice"}')
+        resp_tool = ModelResponse(
+            content="",
+            tool_calls=[tc],
+            usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            reasoning_content="let me think",
+            thought_signatures=[b"\xab\xcd"],
+        )
+        resp_text = ModelResponse(
+            content="Done!",
+            usage=Usage(input_tokens=20, output_tokens=10, total_tokens=30),
+        )
+        provider = AsyncMock()
+        provider.complete = AsyncMock(side_effect=[resp_tool, resp_text])
+        agent = Agent(name="bot", tools=[greet])
+
+        await agent.run("Hello", provider=provider)
+
+        # Check that the second call has the assistant message with thought_signatures
+        second_call_msgs = provider.complete.call_args_list[1][0][0]
+        assistant_msgs = [m for m in second_call_msgs if m.role == "assistant"]
+        assert len(assistant_msgs) == 1
+        assert assistant_msgs[0].thought_signatures == [b"\xab\xcd"]
+        assert assistant_msgs[0].reasoning_content == "let me think"

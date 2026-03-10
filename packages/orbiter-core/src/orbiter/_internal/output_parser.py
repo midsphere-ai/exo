@@ -38,6 +38,8 @@ def parse_response(
     content: str,
     tool_calls: list[ToolCall],
     usage: Usage,
+    reasoning_content: str = "",
+    thought_signatures: list[bytes] | None = None,
 ) -> AgentOutput:
     """Convert raw model fields into an ``AgentOutput``.
 
@@ -49,11 +51,19 @@ def parse_response(
         content: Text output from the model.
         tool_calls: Tool invocations from the model.
         usage: Token usage statistics.
+        reasoning_content: Chain-of-thought content from reasoning models.
+        thought_signatures: Opaque signatures for round-tripping thought parts.
 
     Returns:
         An ``AgentOutput`` with the same data.
     """
-    return AgentOutput(text=content, tool_calls=tool_calls, usage=usage)
+    return AgentOutput(
+        text=content,
+        tool_calls=tool_calls,
+        usage=usage,
+        reasoning_content=reasoning_content,
+        thought_signatures=thought_signatures or [],
+    )
 
 
 # ---------------------------------------------------------------------------

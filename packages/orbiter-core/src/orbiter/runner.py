@@ -37,6 +37,7 @@ from orbiter.types import (
     AssistantMessage,
     ErrorEvent,
     Message,
+    ReasoningEvent,
     RunResult,
     StatusEvent,
     StepEvent,
@@ -277,6 +278,8 @@ async def _stream(
         try:
             # Accumulate text and tool call deltas from the stream
             text_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            thought_sigs: list[bytes] = []
             # dict of index -> accumulated tool call data
             tc_acc: dict[int, dict[str, str]] = {}
             step_usage = Usage()
@@ -294,16 +297,27 @@ async def _stream(
                     if _passes_filter(_ev):
                         yield _ev
 
+                # Accumulate reasoning/thought data from stream chunks
+                if chunk.reasoning_delta:
+                    reasoning_parts.append(chunk.reasoning_delta)
+                    _ev = ReasoningEvent(text=chunk.reasoning_delta, agent_name=agent.name)
+                    if _passes_filter(_ev):
+                        yield _ev
+                if chunk.thought_signatures:
+                    thought_sigs.extend(chunk.thought_signatures)
+
                 # Accumulate tool call deltas
                 for tcd in chunk.tool_call_deltas:
                     idx = tcd.index
                     if idx not in tc_acc:
-                        tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                        tc_acc[idx] = {"id": "", "name": "", "arguments": "", "thought_signature": None}
                     if tcd.id is not None:
                         tc_acc[idx]["id"] = tcd.id
                     if tcd.name is not None:
                         tc_acc[idx]["name"] = tcd.name
                     tc_acc[idx]["arguments"] += tcd.arguments
+                    if tcd.thought_signature is not None:
+                        tc_acc[idx]["thought_signature"] = tcd.thought_signature
 
                 # Capture usage from final chunk
                 if chunk.usage and chunk.usage.total_tokens > 0:
@@ -329,6 +343,7 @@ async def _stream(
                     id=data["id"],
                     name=data["name"],
                     arguments=data["arguments"],
+                    thought_signature=data.get("thought_signature"),
                 )
                 for data in tc_acc.values()
                 if data["id"]
@@ -410,7 +425,12 @@ async def _stream(
 
             # Append assistant message + tool results to conversation
             msg_list.append(
-                AssistantMessage(content=full_text, tool_calls=tool_calls)
+                AssistantMessage(
+                    content=full_text,
+                    tool_calls=tool_calls,
+                    reasoning_content="".join(reasoning_parts),
+                    thought_signatures=thought_sigs,
+                )
             )
             msg_list.extend(tool_results)
 
