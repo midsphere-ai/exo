@@ -3,6 +3,7 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 ---
 
 ## Codebase Patterns
+- GuardrailError bypasses agent retry loop: add to `except (RailAbortError, GuardrailError): raise` in agent.py `_call_llm()`; without this, guardrail blocks get retried 3x and wrapped in AgentError
 - **API versioning**: All API routes use `/api/v1/` prefix. Health check at `/api/health` is unversioned. Legacy `/api/...` paths 301-redirect to `/api/v1/...` via `APIVersionRedirectMiddleware`. Frontend calls all use `/api/v1/`. Vite proxy uses `/api` which matches both.
 - Node error handling: `_get_node_error_config(node)` reads retry_count, retry_delay_ms, on_error, fallback_value, timeout_ms from `node.data`; `_execute_node_with_retry()` wraps `_execute_node` with timeout + exponential backoff + on_error strategy
 - Schedules: CRUD at `/api/v1/schedules`, background polling in `services/scheduler.py` using `croniter`; fires workflow runs with `trigger_type='schedule'`; starts/stops via app lifespan
@@ -3509,4 +3510,25 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - GuardrailResult uses `frozen=True` like RiskAssessment — both are immutable Pydantic models
   - GuardrailResult.safe() and GuardrailResult.block() are classmethod factories for common result patterns
   - 864 orbiter-core tests still pass — no regressions from guardrail additions
+---
+
+## 2026-03-10 - US-009
+- Implemented BaseGuardrail class with HookManager integration in `packages/orbiter-guardrail/src/orbiter/guardrail/base.py`
+- BaseGuardrail has: backend (GuardrailBackend | None), events (list[str]), attach(agent), detach(agent), detect(event, **data) -> GuardrailResult
+- attach() registers async hooks on agent's hook_manager for each event; detach() removes them
+- detect() calls backend.analyze() if backend set, else returns GuardrailResult.safe()
+- When GuardrailResult.is_safe is False and risk_level >= HIGH, raises GuardrailError (blocks agent execution)
+- Added GuardrailError to agent.py's retry bypass (alongside RailAbortError) so guardrail blocks are immediate, not retried
+- Updated __init__.py to export BaseGuardrail
+- Files changed:
+  - `packages/orbiter-guardrail/src/orbiter/guardrail/base.py` (new)
+  - `packages/orbiter-guardrail/src/orbiter/guardrail/__init__.py` (added BaseGuardrail export)
+  - `packages/orbiter-guardrail/tests/test_base_guardrail.py` (new, 23 tests)
+  - `packages/orbiter-core/src/orbiter/agent.py` (import GuardrailError, bypass retry)
+- **Learnings for future iterations:**
+  - GuardrailError must bypass agent retry loop (like RailAbortError) — add to `except (RailAbortError, GuardrailError): raise` in agent.py _call_llm
+  - BaseGuardrail tracks hooks per agent via `_hooks: dict[int, dict[HookPoint, Hook]]` using `id(agent)` as key
+  - Hook closures in loops need default arg binding (`__point: HookPoint = point`) to capture correct value
+  - pyright: ignore[reportMissingImports] needed for cross-package namespace imports in orbiter-guardrail
+  - Pre-existing test failures: test_agent_generation.py (2 tests), test_gemini_provider.py and test_vertex_provider.py (import errors) — not related to guardrail work
 ---

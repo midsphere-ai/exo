@@ -14,6 +14,7 @@ from orbiter._internal.output_parser import parse_response, parse_tool_arguments
 from orbiter.config import parse_model_string
 from orbiter.hooks import Hook, HookManager, HookPoint
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+from orbiter.guardrail.types import GuardrailError  # pyright: ignore[reportMissingImports]
 from orbiter.rail import Rail, RailAbortError, RailManager
 from orbiter.tool import Tool, ToolError
 from orbiter.types import (
@@ -261,7 +262,7 @@ class Agent:
                     usage=response.usage,
                 )
 
-            except RailAbortError:
+            except (RailAbortError, GuardrailError):
                 raise
 
             except Exception as exc:

@@ -4,6 +4,7 @@ from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
 
+from orbiter.guardrail.base import BaseGuardrail  # pyright: ignore[reportMissingImports]
 from orbiter.guardrail.types import (  # pyright: ignore[reportMissingImports]
     GuardrailBackend,
     GuardrailError,
@@ -13,6 +14,7 @@ from orbiter.guardrail.types import (  # pyright: ignore[reportMissingImports]
 )
 
 __all__ = [
+    "BaseGuardrail",
     "GuardrailBackend",
     "GuardrailError",
     "GuardrailResult",
