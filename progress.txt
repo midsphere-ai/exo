@@ -4330,3 +4330,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `get_deep_agent_tools()` aggregator should go in orbiter-core/toolkit.py since core already depends on sandbox and context
   - CodeExecutionTool should use AST-based import allowlist (not exec/eval blocking) per sandbox patterns
 ---
+
+## 2026-03-10 - US-059
+- What was implemented: Four new file I/O tools for agents: write_file, edit_file, glob_files, grep_files
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/tools.py (added _resolve_safe_path helper, 4 new tool functions, 4 new _ContextTool instances, updated get_file_tools() to return all 5)
+  - packages/orbiter-context/tests/test_context_tools.py (added TestWriteFile, TestEditFile, TestGlobFiles, TestGrepFiles classes with 25+ new tests, updated factory assertions)
+- **Learnings for future iterations:**
+  - Extracted _resolve_safe_path() helper from _read_file to share path safety logic across all file tools — keeps DRY
+  - edit_file uses replace(old, new, 1) for first-occurrence-only replacement — matches typical LLM tool calling expectations
+  - glob_files uses stdlib glob.glob with recursive=True rather than Path.glob to support ** patterns consistently
+  - grep_files defaults path="." to search entire working directory when no path specified
+  - Pre-existing test_token_counter.py failure (test_unknown_model_uses_default_encoding) is unrelated to changes — tiktoken environment issue
+---
