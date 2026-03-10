@@ -4942,3 +4942,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `ModelInfo.api_key` and `.api_base` can be `str | None` — add `or ""` fallback when passing to `OpenRouterLLM.__init__`
   - Smart/curly quotes (U+201C/U+201D) break Python syntax — always verify with `py_compile` after edits
 ---
+
+## 2026-03-11 - US-100
+- Ported `test/super_react_agent_test_run.py` to use only Orbiter APIs
+- Replaced 6 openjiuwen imports (ModelConfig, BaseModelInfo, LocalFunction, Param, ToolServerConfig, Runner/resource_mgr) with Orbiter equivalents (ModelInfo, SuperModelConfig, FunctionTool)
+- Removed ~140 lines of old MCP helper functions (_make_mcp_call_coroutine, _register_mcp_server_as_local_tools, create_sse_mcp_tools, create_stdio_mcp_tools) — now handled by SuperReActAgent.create_mcp_tools()
+- Removed Runner.start()/stop() lifecycle — replaced with direct MCP connection disconnect
+- Removed `workflows=None` from SuperReActAgent() calls (not a valid param)
+- Fixed PATH join to filter None values for pyright
+- Updated add_tools() signature to accept list[FunctionTool] union
+- Added comprehensive module docstring and function docstrings
+- Files changed: test/super_react_agent_test_run.py, agent/super_react_agent.py
+- **Learnings for future iterations:**
+  - SuperReActAgent.create_mcp_tools() replaces the entire old _register_mcp_server_as_local_tools flow — no need for ToolServerConfig, Param, or Runner
+  - list[FunctionTool] vs list[Tool] is invariant in Python typing — use union in function signatures or Sequence[Tool]
+  - MCP_TOOL_BIN can be None when tooling venv doesn't exist — always filter before os.pathsep.join()
+---
