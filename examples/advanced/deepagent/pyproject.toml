@@ -41,7 +41,7 @@ omit = ["tests/*"]
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-pythonpath = ["jiuwen"]
+pythonpath = ["."]
 addopts = ["-v", "--html=report/index.html", "--self-contained-html"]
 
 [project.optional-dependencies]

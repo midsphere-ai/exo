@@ -1,6 +1,6 @@
 """Factory functions for creating Super agents.
 
-Constructs ``orbiter.agent.Agent`` instances (replacing openjiuwen agents).
+Constructs ``orbiter.agent.Agent`` instances.
 Follows the ``deepsearch/agents.py`` pattern — tools are passed as instances,
 multi-agent orchestration uses ``orbiter.swarm.Swarm(mode="team")``.
 """

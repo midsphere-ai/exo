@@ -1,7 +1,7 @@
 
-# openJiuwen DeepAgent
+# DeepAgent — Multi-Agent ReAct System (Orbiter)
 
-openJiuwen agentcore is an AI agent designed for all scenarios of ToC and ToB. It aims to provide a flexible, powerful and easy-to-use agent development framework, support the creation of AI agents for various complex tasks, achieve efficient and accurate execution of AI agents, help teams of all sizes and across industries build reliable AI agents that can be deployed in production environments, and help users and enterprises implement Agent AI technology.
+DeepAgent is a multi-agent ReAct research system built on the **Orbiter** framework. It uses `orbiter-core` for agent orchestration, `orbiter-models` for LLM abstraction, and `orbiter-mcp` for MCP server integration.
 
 
 ## 1. Data Preparation
@@ -11,9 +11,9 @@ Two sample entries have already been provided in `test.jsonl` for your reference
 
 
 ## 2. Environment Setup
-Our project requires **two** Python environments: one for running the openJiuwen framework, and another for running the MCP services.
+Our project requires **two** Python environments: one for running the Orbiter framework, and another for running the MCP services.
 
-### 2.1 Prepare openJiuwen framework
+### 2.1 Prepare Orbiter framework
 ```
 
 1. Install [uv](https://docs.astral.sh/uv/) if it is not already on your PATH.
@@ -57,9 +57,9 @@ source .venv-tool/bin/activate
 
 # Install dependencies:
 ## Windows (PowerShell)
-uv pip install --no-deps -r requirements.txt 
+uv pip install --no-deps -r requirements.txt
 ## macOS/Linux
-uv pip install --no-deps -r requirements_mac.txt 
+uv pip install --no-deps -r requirements_mac.txt
 ```
 
 **Option 2: User-Managed Environment**
@@ -71,7 +71,7 @@ If you prefer to manage your own Python environment (venv, conda, system Python,
 2. Install dependencies: `pip install --no-deps -r requirements.txt` (`requirements_mac.txt` for macOS)
 3. Run the scripts with the `--no-env` flag (see below)
 
-#### Additonal Notes about Node.js
+#### Additional Notes about Node.js
 
 You can check whether Node.js is installed by running the following commands:
 ```
@@ -117,8 +117,6 @@ Some mcp servers may require specific API keys. Set these in your `.env` file or
 - `CHROME_PATH` - the location of your browser
 - `CHROME_USER_PROFILE_DIR` - the location of your browser user profile, since some websites restrict access for users who are not logged in
 - `DATA_DIR` - data path
-
-
 
 
 

@@ -2,9 +2,8 @@
 # coding: utf-8
 """Super Agent Configuration.
 
-Standalone Pydantic configuration for the SuperReActAgent, replacing
-openjiuwen's ReActAgentConfig / ConstrainConfig / ModelConfig inheritance
-with plain BaseModel classes.  Follows the deepsearch/config.py pattern.
+Standalone Pydantic configuration for the SuperReActAgent.
+Uses plain BaseModel classes following the deepsearch/config.py pattern.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelInfo(BaseModel):
-    """Low-level model connection details (replaces openjiuwen ModelConfig.model_info)."""
+    """Low-level model connection details."""
 
     model_name: str = Field(default="gpt-4o", description="LLM model identifier.")
     api_key: str | None = Field(default=None, description="Provider API key.")
@@ -32,7 +31,7 @@ class SuperModelConfig(BaseModel):
 class ConstraintConfig(BaseModel):
     """Execution constraints for the agent loop.
 
-    Replaces openjiuwen ``ConstrainConfig`` with a plain Pydantic model.
+    Plain Pydantic model for execution constraints.
     """
 
     max_iteration: int = Field(default=10, description="Maximum iterations for the ReAct loop.")
@@ -61,10 +60,9 @@ class AgentConstraints(BaseModel):
 class SuperAgentConfig(BaseModel):
     """Enhanced ReAct-style agent configuration.
 
-    Replaces openjiuwen ``ReActAgentConfig`` inheritance with a standalone
-    Pydantic model.  All fields that were previously inherited
-    (id, version, description, model, prompt_template, tools, constrain,
-    workflows, plugins) are now declared explicitly.
+    Standalone Pydantic model for agent configuration.
+    All fields (id, version, description, model, prompt_template, tools,
+    constrain, workflows, plugins) are declared explicitly.
 
     Custom fields:
     - Reasoning model integration (question hints, final-answer extraction)

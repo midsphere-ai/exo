@@ -3,7 +3,7 @@
 """Super ReAct Agent integration test runner.
 
 End-to-end test that validates the ported SuperReActAgent using only Orbiter
-APIs — no openjiuwen imports remain.  The test:
+APIs.  The test:
 
 1. Configures model credentials from environment variables.
 2. Defines MCP tool groups (browser, audio, reasoning, reading, searching,

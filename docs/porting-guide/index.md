@@ -131,6 +131,7 @@ extensions/context_evolver   ──→    orbiter-memory (evolution strategies)
 | 8 — Deep Agent Toolkit | [deep-agent-toolkit.md](deep-agent-toolkit.md) | Autonomous toolkit (file I/O, shell, code, todo) distributed across Orbiter's tool system and sandbox |
 | 9 — Context Evolution | [context-evolver.md](context-evolver.md) | Three memory evolution strategies (ACE, ReasoningBank, ReMe) mapped to composable strategy subclasses |
 | 10 — Operator & Self-Optimization | [operator-optimization.md](operator-optimization.md) | Iterative optimization system mapped to orbiter-train with Operator ABC and textual gradient tuning |
+| 11 — DeepAgent Example Port | [../design/deepagent-port-plan.md](../design/deepagent-port-plan.md) | Multi-agent ReAct system ported from openjiuwen to Orbiter (Agent, Swarm, MCP) |
 
 ## 6. Acknowledgments
 
