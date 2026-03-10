@@ -15,12 +15,11 @@ import inspect
 
 from openjiuwen.core.agent.agent import BaseAgent
 from openjiuwen.core.runtime.runtime import Runtime, Workflow
-from openjiuwen.core.utils.tool.base import Tool
 from openjiuwen.core.common.logging import logger
 from openjiuwen.core.utils.llm.messages import AIMessage
-from openjiuwen.core.utils.tool.param import Param
-from openjiuwen.core.utils.tool.function.function import LocalFunction
 
+from orbiter.tool import Tool, FunctionTool
+from orbiter.mcp.client import MCPServerConfig, MCPServerConnection, MCPTransport  # pyright: ignore[reportMissingImports]
 
 from agent.super_config import SuperAgentConfig
 from agent.context_manager import ContextManager
@@ -29,67 +28,98 @@ from agent.qa_handler import QAHandler
 from agent.plan_tracker import PlanTracker
 from llm.openrouter_llm import OpenRouterLLM, ContextLimitError
 
-from openjiuwen.core.utils.tool.mcp.base import ToolServerConfig
-from openjiuwen.core.runner.runner import Runner, resource_mgr
 from mcp import StdioServerParameters
 
 from agent.prompt_templates import process_input, get_task_instruction_prompt
 
-def _make_mcp_call_coroutine(server_name: str, tool_name: str):
-    """
-    为某个 MCP 工具生成一个 coroutine 函数：
-    - 入参是工具的参数（**kwargs）
-    - 内部通过 Runner.run_tool 调用真正的 MCP 工具
+def _make_mcp_call_coroutine(connection: MCPServerConnection, tool_name: str):
+    """Create an async callable that invokes an MCP tool via the server connection.
+
+    Args:
+        connection: Live MCP server connection to call tools on.
+        tool_name: Name of the tool on the MCP server.
+
+    Returns:
+        Async callable that forwards kwargs to the MCP tool and returns the result.
     """
     async def _wrapper(**kwargs):
-        tool_id = f"{server_name}.{tool_name}"  # 例如：browser-use-server.browser_navigate
-        result = await Runner.run_tool(tool_id, kwargs)
-
-        # Test 里约定：如果返回 dict 且有 "result" 字段，就用它
-        if isinstance(result, dict) and "result" in result:
-            return result["result"]
-        return result
+        result = await connection.call_tool(tool_name, kwargs or None)
+        # Extract text content from CallToolResult
+        parts = []
+        for item in result.content:
+            text = getattr(item, "text", None)
+            if text is not None:
+                parts.append(text)
+            else:
+                parts.append(str(item))
+        output = "\n".join(parts)
+        if result.isError:
+            raise RuntimeError(f"MCP tool '{tool_name}' returned error: {output}")
+        return output
 
     return _wrapper
 
 
-def _normalize_mcp_server_config(client_type: str, params):
-    server_path = None
-    params_dict: Dict[str, Any] = {}
+def _normalize_mcp_server_config(
+    server_name: str, client_type: str, params
+) -> MCPServerConfig:
+    """Normalize MCP server parameters into an MCPServerConfig.
 
+    Supports stdio, SSE, and streamable HTTP transports. Parameters can be
+    provided as StdioServerParameters, a dict, or a plain URL/command string.
+
+    Args:
+        server_name: Name of the MCP server.
+        client_type: Transport type ('stdio', 'sse', or 'streamable_http').
+        params: Server parameters — StdioServerParameters, dict, or string.
+
+    Returns:
+        MCPServerConfig ready for connection.
+
+    Raises:
+        ValueError: If required fields are missing for the transport type.
+    """
     if client_type == "stdio":
         if isinstance(params, StdioServerParameters):
-            params_dict = {
-                "command": params.command,
-                "args": list(params.args) if params.args is not None else None,
-                "env": params.env,
-                "cwd": params.cwd,
-                "encoding_error_handler": getattr(params, "encoding_error_handler", None),
-            }
-        elif isinstance(params, dict):
-            params_dict = params
-        elif isinstance(params, str):
-            server_path = params
+            return MCPServerConfig(
+                name=server_name,
+                transport=MCPTransport.STDIO,
+                command=params.command,
+                args=list(params.args) if params.args else [],
+                env=params.env,
+                cwd=params.cwd,
+            )
+        if isinstance(params, dict):
+            return MCPServerConfig(
+                name=server_name,
+                transport=MCPTransport.STDIO,
+                command=params.get("command", ""),
+                args=params.get("args", []),
+                env=params.get("env"),
+                cwd=params.get("cwd"),
+            )
+        # String: treat as command
+        return MCPServerConfig(
+            name=server_name,
+            transport=MCPTransport.STDIO,
+            command=str(params),
+        )
 
-        if not server_path:
-            server_path = params_dict.get("command") or "stdio"
-        return server_path, params_dict
-
+    # SSE or streamable_http
+    transport = (
+        MCPTransport.SSE if client_type == "sse" else MCPTransport.STREAMABLE_HTTP
+    )
     if isinstance(params, dict):
-        if "server_path" in params:
-            server_path = params["server_path"]
-            params_dict = {k: v for k, v in params.items() if k != "server_path"}
-        elif "url" in params:
-            server_path = params["url"]
-            params_dict = {k: v for k, v in params.items() if k != "url"}
-        else:
-            params_dict = params
-    else:
-        server_path = params
+        url = params.get("server_path") or params.get("url")
+        if not url:
+            raise ValueError(
+                f"MCP server URL is required for client_type '{client_type}'"
+            )
+        return MCPServerConfig(name=server_name, transport=transport, url=url)
+    if isinstance(params, str):
+        return MCPServerConfig(name=server_name, transport=transport, url=params)
 
-    if server_path is None:
-        raise ValueError(f"MCP server_path is required for client_type '{client_type}'")
-    return server_path, params_dict
+    raise ValueError(f"MCP server_path is required for client_type '{client_type}'")
 
 class SuperReActAgent(BaseAgent):
     """
@@ -154,6 +184,9 @@ class SuperReActAgent(BaseAgent):
         if workflows:
             self.add_workflows(workflows)
 
+        # MCP server connections (for lifecycle management)
+        self._mcp_connections: list[MCPServerConnection] = []
+
         # Sub-agent instances (for main agent only)
         self._sub_agents: Dict[str, "SuperReActAgent"] = {}
 
@@ -193,63 +226,66 @@ class SuperReActAgent(BaseAgent):
         self,
         server_name: str,
         client_type: str,
-        params
-    ):
+        params,
+    ) -> list[FunctionTool]:
+        """Register an MCP server and create FunctionTool wrappers for its tools.
+
+        Connects to the MCP server, discovers available tools, and wraps each
+        as an orbiter FunctionTool with the correct JSON Schema parameters.
+
+        Args:
+            server_name: Name of the MCP server.
+            client_type: Transport type ('stdio', 'sse', or 'streamable_http').
+            params: Server parameters (StdioServerParameters, dict, or string).
+
+        Returns:
+            List of FunctionTool instances wrapping the MCP server's tools.
+
+        Raises:
+            RuntimeError: If the server connection or tool discovery fails.
         """
-        注册一个 MCP server（SSE / stdio ），并把该 server 上所有 tools
-        映射成 LocalFunction，返回 List[LocalFunction]，可以直接传给 SuperReActAgent.
-        """
-        tool_mgr = resource_mgr.tool()
+        config = _normalize_mcp_server_config(server_name, client_type, params)
+        connection = MCPServerConnection(config)
+        await connection.connect()
+        # Store connection for lifecycle management
+        self._mcp_connections.append(connection)
 
-        # 注册 MCP server
-        server_path, params_dict = _normalize_mcp_server_config(client_type, params)
-        server_cfg = ToolServerConfig(
-            server_name=server_name,
-            server_path=server_path,
-            params=params_dict,
-            client_type=client_type,
-        )
-        
-        ok_list = await tool_mgr.add_tool_servers([server_cfg])
-        if not ok_list or not ok_list[0]:
-            raise RuntimeError(f"Failed to add MCP server: {server_name}")
+        mcp_tools = await connection.list_tools()
 
-        # 用 Runner.list_tools 拿到工具列表（McpToolInfo）
-        tool_infos = await Runner.list_tools(server_name)
-
-        local_tools = []
-        for info in tool_infos:
-            info.name = info.name.split(".")[-1]  # 去掉 server_name 前缀
-            schema = getattr(info, "input_schema", {}) or {}
-            properties = schema.get("properties", {}) or {}
-            required = set(schema.get("required", []) or [])
-
-            params_def = []
-            for pname, pinfo in properties.items():
-                params_def.append(
-                    Param(
-                        name=pname,
-                        description=pinfo.get("description", ""),
-                        param_type=pinfo.get("type", "string"),
-                        required=pname in required,
-                    )
-                )
-
-            async_func = _make_mcp_call_coroutine(server_name, info.name)
-
-            mcp_local_tool = LocalFunction(
-                name=info.name,
-                description=info.description,
-                params=params_def,
-                func=async_func,   
+        local_tools: list[FunctionTool] = []
+        for mcp_tool in mcp_tools:
+            tool_name = mcp_tool.name
+            schema = mcp_tool.inputSchema
+            parameters = (
+                dict(schema) if isinstance(schema, dict)
+                else {"type": "object", "properties": {}}
             )
 
-            local_tools.append(mcp_local_tool)
+            call_fn = _make_mcp_call_coroutine(connection, tool_name)
+            ft = FunctionTool(
+                call_fn,
+                name=tool_name,
+                description=mcp_tool.description or f"MCP tool: {tool_name}",
+            )
+            # Override auto-generated schema with the actual MCP tool schema
+            ft.parameters = parameters
+            local_tools.append(ft)
 
         return local_tools
 
-    async def create_mcp_tools(self, server_name: str, client_type: str, params) -> List[LocalFunction]:
-        """Utility method to create MCP tools based on server type and params"""
+    async def create_mcp_tools(
+        self, server_name: str, client_type: str, params
+    ) -> list[FunctionTool]:
+        """Create FunctionTool wrappers for all tools on an MCP server.
+
+        Args:
+            server_name: Name of the MCP server.
+            client_type: Transport type ('stdio', 'sse', or 'streamable_http').
+            params: Server parameters.
+
+        Returns:
+            List of FunctionTool instances ready for agent use.
+        """
         return await self._register_mcp_server_as_local_tools(
             server_name=server_name,
             client_type=client_type,

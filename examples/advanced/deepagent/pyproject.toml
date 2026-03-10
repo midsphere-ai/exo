@@ -10,6 +10,8 @@ dependencies = [
     "orbiter-core",
     # orbiter-models: ModelProvider protocol, model registry, streaming — LLM abstraction layer
     "orbiter-models",
+    # orbiter-mcp: MCPServerConnection, MCPToolWrapper — MCP server client and tool integration
+    "orbiter-mcp",
     # --- Third-party dependencies ---
     "aiohttp==3.11.12",
     "mcp>=1.24.0",
