@@ -4683,3 +4683,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Porting guide format: 4 sections (overview, mapping, code examples, migration table) with Epic/Date metadata header
   - Backends (pgvector, chroma) live in backends/ subpackage, not top-level
 ---
+
+## 2026-03-11 - US-082
+- Created docs/porting-guide/task-management.md mapping agent-core's controller/ to Orbiter's task_controller
+- Section 1: Agent-core overview — TaskManager (CRUD, parent-child, priority), TaskScheduler (concurrent limits, pause/cancel), TaskState (8 states), IntentRecognizer (LLM routing), EventQueue (pub/sub)
+- Section 2: Orbiter equivalent — component mapping table, architecture differences, Orbiter additions (TaskLoopQueue, cascading behaviors, explicit transitions)
+- Section 3: Code comparisons — task hierarchy + scheduling, intent recognition, event-driven reactions, task loop steering
+- Section 4: Migration table — 20-row mapping from agent-core paths to orbiter.task_controller imports
+- Files changed: docs/porting-guide/task-management.md (new), prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Public API re-exports live in `orbiter/task_controller.py`, implementation in `orbiter/_internal/task_controller/`
+  - TaskLoopQueue is an Orbiter-only addition not present in agent-core — document it as "no equivalent" in the agent-core column
+  - agent-core analysis doc at `agent-core-vs-orbiter-analysis.md` is the authoritative reference for original openjiuwen architecture
+---
