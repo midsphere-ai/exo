@@ -3846,3 +3846,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - When adding new node types to swarm.py's _run_workflow, the `continue` after the node block means `last_result` may be None — add a fallback `RunResult(output=current_input)` for 0-iteration loops
   - pyright requires `# type: ignore[union-attr]` on `last_result.output` due to the None initialization + continue paths
 ---
+
+## 2026-03-10 - US-029
+- What was implemented: WorkflowState class for passing shared context through workflow execution
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/workflow_state.py (new — WorkflowState class with set/get/to_dict/data/contains)
+  - packages/orbiter-core/src/orbiter/swarm.py (updated — _run_workflow and _stream_workflow create WorkflowState, store agent outputs, pass full state to BranchNode/LoopNode evaluations)
+  - packages/orbiter-core/src/orbiter/__init__.py (export WorkflowState)
+  - packages/orbiter-core/tests/test_workflow_state.py (new, 24 tests covering unit, linear, branching, looping, backward compat, mixed flows)
+- **Learnings for future iterations:**
+  - BranchNode and LoopNode already accept `state: dict` — no code changes needed in those modules; integration happens in Swarm where the state dict is enriched via `workflow_state.to_dict()`
+  - WorkflowState uses `to_dict()` to create a snapshot for BranchNode/LoopNode — this prevents mutations during evaluation from leaking back
+  - Agent outputs are keyed by agent name in workflow state (e.g., `state.get("scorer")` returns scorer agent's output)
+  - Loop body agent outputs are stored both as individual agent entries and as the loop node's accumulated output
+  - Backward compatibility: `input` key is always present in the state dict, so existing conditions like `len(input) > 5` continue to work unchanged
+---

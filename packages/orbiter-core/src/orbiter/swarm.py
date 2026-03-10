@@ -22,6 +22,7 @@ from typing import Any
 
 from orbiter._internal.call_runner import call_runner
 from orbiter._internal.graph import GraphError, parse_flow_dsl, topological_sort
+from orbiter._internal.workflow_state import WorkflowState
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.tool import Tool
 from orbiter.types import Message, OrbiterError, RunResult, StatusEvent, StreamEvent
@@ -207,6 +208,10 @@ class Swarm:
 
         Collects text from ``TextEvent`` objects during streaming to build
         the output for chaining to the next agent — avoiding double execution.
+
+        A :class:`WorkflowState` accumulates agent outputs so that
+        :class:`BranchNode` and :class:`LoopNode` conditions can
+        reference any prior agent's output.
         """
         from orbiter.runner import run
         from orbiter.types import TextEvent
@@ -216,6 +221,7 @@ class Swarm:
 
         current_input = input
         skip_until: str | None = None
+        workflow_state = WorkflowState({"input": current_input})
 
         for agent_name in self.flow_order:
             # Branch routing: skip agents until we reach the target
@@ -228,7 +234,8 @@ class Swarm:
 
             # Branch node: evaluate condition and route to target
             if getattr(agent, "is_branch", False):
-                state = {"input": current_input}
+                state = workflow_state.to_dict()
+                state["input"] = current_input
                 target = agent.evaluate(state)
                 if target not in self.agents:
                     raise SwarmError(
@@ -258,6 +265,7 @@ class Swarm:
                         text_parts_branch.append(event.text)
                     if _passes_filter(event):
                         yield event
+                workflow_state.set(target, "".join(text_parts_branch))
                 return
 
             if detailed:
@@ -273,7 +281,8 @@ class Swarm:
             if getattr(agent, "is_loop", False):
                 from orbiter._internal.loop_node import BREAK_SENTINEL
 
-                loop_state: dict[str, Any] = {"input": current_input}
+                loop_state = workflow_state.to_dict()
+                loop_state["input"] = current_input
                 n_iters = agent._resolve_iterations(loop_state)
                 iteration = 0
                 while True:
@@ -306,6 +315,7 @@ class Swarm:
                             if _passes_filter(event):
                                 yield event
                         body_input = "".join(loop_text_parts)
+                        workflow_state.set(body_name, body_input)
                         if BREAK_SENTINEL in body_input:
                             broke = True
                             break
@@ -314,6 +324,7 @@ class Swarm:
                     iteration += 1
                     if broke:
                         break
+                workflow_state.set(agent_name, current_input)
                 continue
 
             # For groups/nested swarms, delegate to their stream if available
@@ -334,6 +345,7 @@ class Swarm:
                         current_input, messages=messages, provider=provider,
                     )
                     current_input = result.output
+                workflow_state.set(agent_name, current_input)
                 continue
 
             # Stream the agent and collect text for chaining
@@ -348,6 +360,7 @@ class Swarm:
                     yield event
 
             current_input = "".join(text_parts)
+            workflow_state.set(agent_name, current_input)
 
     async def _stream_handoff(
         self,
@@ -498,11 +511,17 @@ class Swarm:
         nodes evaluate a condition and skip to the chosen target
         agent in the flow.  Loop nodes iterate body agents.
 
+        A :class:`WorkflowState` is created at the start and
+        propagated through execution.  Each agent's output is stored
+        as ``state.set(agent_name, output)`` so downstream nodes can
+        access the full workflow context for condition evaluation.
+
         Returns the ``RunResult`` from the last agent in the flow.
         """
         current_input = input
         last_result: RunResult | None = None
         skip_until: str | None = None
+        workflow_state = WorkflowState({"input": current_input})
 
         for agent_name in self.flow_order:
             # Branch routing: skip agents until we reach the target
@@ -515,7 +534,8 @@ class Swarm:
 
             # Branch node: evaluate condition and route to target
             if getattr(agent, "is_branch", False):
-                state = {"input": current_input}
+                state = workflow_state.to_dict()
+                state["input"] = current_input
                 target = agent.evaluate(state)
                 if target not in self.agents:
                     raise SwarmError(
@@ -535,13 +555,15 @@ class Swarm:
                     provider=provider,
                     max_retries=max_retries,
                 )
+                workflow_state.set(target, last_result.output)
                 return last_result
 
             # Loop node: iterate body agents
             if getattr(agent, "is_loop", False):
                 from orbiter._internal.loop_node import BREAK_SENTINEL
 
-                loop_state: dict[str, Any] = {"input": current_input}
+                loop_state = workflow_state.to_dict()
+                loop_state["input"] = current_input
                 n_iters = agent._resolve_iterations(loop_state)
                 iteration = 0
                 while True:
@@ -571,6 +593,7 @@ class Swarm:
                             max_retries=max_retries,
                         )
                         body_input = last_result.output
+                        workflow_state.set(body_name, last_result.output)
                         if BREAK_SENTINEL in last_result.output:
                             broke = True
                             break
@@ -579,6 +602,7 @@ class Swarm:
                     iteration += 1
                     if broke:
                         break
+                workflow_state.set(agent_name, current_input)
                 if last_result is None:
                     last_result = RunResult(output=current_input)
                 continue
@@ -599,6 +623,7 @@ class Swarm:
                     max_retries=max_retries,
                 )
             current_input = last_result.output  # type: ignore[union-attr]
+            workflow_state.set(agent_name, current_input)
 
         assert last_result is not None  # guaranteed since agents is non-empty
         return last_result
