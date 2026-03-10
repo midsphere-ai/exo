@@ -4024,3 +4024,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Mock chromadb with `patch.dict("sys.modules", {"chromadb": mock_module})` + MagicMock for client/collection — same pattern as asyncpg mocking
   - Backends are NOT exported from main `__init__.py` — users import directly from `orbiter.retrieval.backends.chroma`
 ---
+
+## 2026-03-10 - US-040
+- What was implemented: Retriever ABC and VectorRetriever for dense semantic search
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/retriever.py (new — Retriever ABC + VectorRetriever with score_threshold)
+  - packages/orbiter-retrieval/tests/test_retriever.py (new — 12 tests covering ABC, basic retrieval, score threshold, kwargs passthrough)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — export Retriever + VectorRetriever)
+- **Learnings for future iterations:**
+  - Retriever ABC follows same pattern as VectorStore/Embeddings ABCs: single abstract async method
+  - VectorRetriever composes Embeddings + VectorStore — embed query then search store
+  - score_threshold is applied post-search as a simple list filter (store.search doesn't support it natively)
+  - kwargs from retrieve() pass through to store.search() — enables filter and other store-specific params
+  - MockEmbeddings with explicit mapping dict is useful for deterministic test vectors
+---

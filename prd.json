@@ -712,7 +712,7 @@
         "Tests pass"
       ],
       "priority": 40,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
