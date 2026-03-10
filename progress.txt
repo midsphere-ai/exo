@@ -22,6 +22,9 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
 - Pagination: list endpoints return `{data: [...], pagination: {next_cursor, has_more, total}}`; use `paginate()` from `orbiter_web/pagination.py`; frontend extracts `.data` via `.then(body => body.data || body)`
 - CSRF: window.fetch is monkey-patched in PageLayout to auto-include X-CSRF-Token on POST/PUT/DELETE; no need to manually add headers in page scripts
 - CSRF exempt paths are in `middleware/csrf.py` `_EXEMPT_PATHS` — add new exempt routes there when needed
+- Design docs go in `docs/design/` with format: title, status, epic, date, then numbered sections (motivation → key decision → component design → file layout → integration flow → open questions → summary)
+- `_internal/` pattern is well-established for core modules — `state.py`, `background.py`, `loop_node.py`, `branch_node.py`, `expression.py`, `workflow_state.py` all live there
+- `BackgroundTaskHandler` handles async operations within a single run; task-level management (across runs) is separate concern
 - orbiter-web is a Node.js (Astro 5.x) package inside a UV Python workspace — it has its own package.json, not pyproject.toml for the frontend
 - Astro 5.x defaults to strict TypeScript; extend `astro/tsconfigs/strict` in tsconfig.json
 - Tailwind CSS v4 must be integrated via `@tailwindcss/vite`, NOT `@astrojs/tailwind`
@@ -4193,4 +4196,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use FunctionTool constructor (not @tool decorator) when building tools from closures that capture external state (retriever, store, etc.)
   - Tool inner functions need proper Google-style docstrings with Args section for schema generation to pick up parameter descriptions
   - Agent integration tests: use AsyncMock with side_effect=[tool_response, text_response] to simulate tool call + final answer flow
+---
+
+## 2026-03-10 - US-051
+- Created `docs/design/task-controller-design.md` — design doc for Epic 7 task management controller
+- Covers: TaskStatus lifecycle (8 states), Task Pydantic model, TaskManager CRUD with hierarchy, TaskScheduler with asyncio.Semaphore, IntentRecognizer (LLM-powered), TaskEventBus pub/sub
+- Key decision: task controller as module in `orbiter-core/_internal/task_controller/` (Option C chosen over separate package or top-level module)
+- Documents relationship between Tasks vs RunNodes, Agent runs, Swarm workflows, and BackgroundTaskHandler
+- Files changed: `docs/design/task-controller-design.md` (new), `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Existing design docs follow a consistent numbered-section pattern — follow same structure for new design docs
+  - Agent.run() loop: LLM call → tool execution → repeat, tracked by RunState/RunNode
+  - Swarm supports three modes: workflow (flow DSL with `>>` and `|`), handoff (agent-driven), team (lead-worker)
+  - RunNodeStatus (INIT/RUNNING/SUCCESS/FAILED/TIMEOUT) tracks execution steps; task-level states need a richer lifecycle (SUBMITTED/WORKING/PAUSED/INPUT_REQUIRED/COMPLETED/CANCELED/FAILED/WAITING)
+  - Pre-existing pyright errors (~698) in orbiter-web and other packages — markdown-only changes don't introduce new errors
 ---
