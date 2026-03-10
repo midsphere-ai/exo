@@ -3548,3 +3548,44 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Only HIGH and CRITICAL risk levels trigger GuardrailError (blocking) — MEDIUM and below pass through via BaseGuardrail's `_BLOCKING_LEVELS` frozenset
   - `_extract_latest_user_message()` handles string content, list-format content `[{"type": "text", "text": "..."}]`, and missing/empty messages gracefully
 ---
+
+## 2026-03-10 - US-011
+- Implemented LLMGuardrailBackend: an LLM-powered GuardrailBackend subclass for sophisticated content analysis
+- Constructor takes model (provider:model format), prompt_template, api_key, and optional pre-built provider
+- analyze() extracts latest user message, formats into prompt, calls LLM, parses structured JSON response into RiskAssessment
+- Default prompt template covers prompt injection, jailbreak, PII leakage, and harmful content detection
+- Robust JSON parsing handles markdown fences, invalid JSON, missing fields, and out-of-range values
+- Provider errors gracefully fall back to safe assessment (fail-open)
+- Lazy import of orbiter.models.provider to keep orbiter-models as optional dependency
+- Exported LLMGuardrailBackend from orbiter.guardrail package __init__.py
+- 38 new tests using AsyncMock provider (no real API calls)
+- Files changed:
+  - packages/orbiter-guardrail/src/orbiter/guardrail/llm_backend.py (new)
+  - packages/orbiter-guardrail/tests/test_llm_backend.py (new)
+  - packages/orbiter-guardrail/src/orbiter/guardrail/__init__.py (updated exports)
+  - prd.json (US-011 passes: true)
+- **Learnings for future iterations:**
+  - Use `provider` constructor param for dependency injection in tests — avoids needing model_registry setup
+  - LLM responses may be wrapped in markdown fences (```json...```) — always strip before parsing
+  - Cross-package imports in guardrail use `# pyright: ignore[reportMissingImports]` since orbiter-models isn't a hard dependency
+  - _extract_latest_user_message helper is duplicated from user_input.py — could be consolidated in a shared utils module
+---
+
+## 2026-03-10 - US-012
+- What was implemented: End-to-end integration tests for guardrails with Agent.run()
+- Files changed:
+  - packages/orbiter-guardrail/tests/test_integration.py (new — 19 integration tests across 6 test classes)
+- Test coverage:
+  - TestInjectionBlocksAgentRun: 4 tests (instruction override, role impersonation, delimiter attack, error details)
+  - TestSafeInputSucceeds: 4 tests (normal question, benign ignore word, medium risk passthrough, agent with instructions)
+  - TestMultipleGuardrailsExecutionOrder: 5 tests (both execute, first blocks second skipped, second catches missed, mixed types, three guardrails)
+  - TestGuardrailHookCoexistence: 3 tests (traditional hooks fire, block prevents post hooks, detach restores behavior)
+  - TestLLMGuardrailIntegration: 2 tests (safe allows, high risk blocks)
+  - TestMultiEventGuardrail: 1 test (guardrail on multiple events)
+- Verified: all 864 orbiter-core tests pass, all 149 guardrail tests pass, source typecheck clean
+- **Learnings for future iterations:**
+  - Pyright reportMissingImports errors on `orbiter.guardrail.*` in test files are a known namespace package issue — source typecheck is the acceptance criterion, not test file typecheck
+  - OrderTrackingBackend pattern (label + shared log list) is effective for verifying hook execution order
+  - When guardrail blocks at PRE_LLM_CALL, the provider.complete is never called — assert_not_called() is a good verification
+  - Hooks registered first execute first — guardrail execution order matches attach() call order
+---
