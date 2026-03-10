@@ -1,120 +1,50 @@
-import os
 import logging
-from typing import Optional
+import os
+from logging.handlers import RotatingFileHandler
+
+logger = logging.getLogger("deepagent")
 
 
 def setup_file_logging(log_file_path: str = "super_agent_test_run.log", simple_format: bool = True) -> None:
-    """
-    Configure the openjiuwen logger to write to a file using the built-in logging system.
-    Logs will be written in real-time as they occur (auto-flushed).
-    
-    This adds file output to the existing "common" logger, so all existing logger calls
-    will automatically write to both console and file.
-    
+    """Configure the deepagent logger to write to a rotating file with real-time flushing.
+
+    Adds a ``RotatingFileHandler`` to the ``deepagent`` logger so that all
+    calls to ``logger.info()``, etc. are written to both the console (if a
+    console handler is present) and the specified log file.
+
     Args:
-        log_file_path: Path to the log file (default: "super_agent_test_run.log")
-        simple_format: If True, use a cleaner, simpler format for file logs (default: True)
+        log_file_path: Path to the log file (default: "super_agent_test_run.log").
+        simple_format: If True, use a clean ``timestamp | level | message``
+            format. If False, include the module name as well.
     """
-    from openjiuwen.core.common.logging import logger, LogManager
-    
-    try:
-        from openjiuwen.extensions.common.configs.log_config import log_config
-        
-        # Get the existing "common" logger config and update it to include file output
-        common_config = log_config.get_common_config()
-        common_config['log_file'] = log_file_path
-        common_config['output'] = ["console", "file"]
-        
-        # Use a simpler format for file logs if requested
-        if simple_format:
-            # Clean format: timestamp | level | message (no filename, line number, function name)
-            # This makes logs much more readable
-            common_config['format'] = '%(asctime)s | %(levelname)-8s | %(message)s'
-        
-        # Recreate the common logger with file output enabled
-        from openjiuwen.extensions.common.log.default_impl import DefaultLogger
-        updated_logger = DefaultLogger("common", common_config)
-        LogManager.register_logger("common", updated_logger)
-        
-        # If simple_format is requested, replace the file handler with a simpler formatter
-        if simple_format:
-            actual_logger = updated_logger._logger
-            # Find and replace the file handler
-            for handler in actual_logger.handlers[:]:
-                if isinstance(handler, logging.FileHandler) or hasattr(handler, 'baseFilename'):
-                    # Remove the old file handler
-                    actual_logger.removeHandler(handler)
-                    handler.close()
-                    
-                    # Create a new file handler with simple format
-                    from openjiuwen.extensions.common.log.default_impl import SafeRotatingFileHandler
-                    backup_count = common_config.get('backup_count', 20)
-                    max_bytes = common_config.get('max_bytes', 20 * 1024 * 1024)
-                    
-                    simple_file_handler = SafeRotatingFileHandler(
-                        filename=log_file_path,
-                        maxBytes=max_bytes,
-                        backupCount=backup_count,
-                        encoding='utf-8'
-                    )
-                    simple_file_handler.setLevel(logging.DEBUG)
-                    
-                    # Use a simple formatter (not CallerAwareFormatter)
-                    simple_formatter = logging.Formatter(
-                        '%(asctime)s | %(levelname)-8s | %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S'
-                    )
-                    simple_file_handler.setFormatter(simple_formatter)
-                    
-                    # Add filter if needed
-                    from openjiuwen.extensions.common.log.default_impl import ThreadContextFilter
-                    simple_file_handler.addFilter(ThreadContextFilter("common"))
-                    
-                    actual_logger.addHandler(simple_file_handler)
-                    break
-        
-        logger.info(f"File logging enabled: {os.path.abspath(log_file_path)}")
-    except Exception as e:
-        # Fallback: if openjiuwen config system isn't available, use manual handler
-        logger.warning(f"Could not use openjiuwen logger config: {e}. Using fallback method.")
-        
-        # Force logger initialization
-        _ = logger.info
-        
-        # Get the underlying Python logger from the common logger
-        actual_logger = None
-        if hasattr(logger, '_logger'):
-            actual_logger = logger._logger
-            if hasattr(actual_logger, '_logger'):
-                actual_logger = actual_logger._logger
-        
-        # Create file handler with UTF-8 encoding
-        file_handler = logging.FileHandler(log_file_path, encoding='utf-8', mode='a')
-        file_handler.setLevel(logging.DEBUG)
-        
-        # Use a clean, simple format for file logging
-        if simple_format:
-            formatter = logging.Formatter(
-                '%(asctime)s | %(levelname)-8s | %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-        else:
-            formatter = logging.Formatter(
-                '%(asctime)s | %(levelname)s | %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-        file_handler.setFormatter(formatter)
-        
-        # Add handler to the appropriate logger
-        if actual_logger:
-            actual_logger.addHandler(file_handler)
-        else:
-            # Fallback: add to root logger
-            root_logger = logging.getLogger()
-            root_logger.addHandler(file_handler)
-            root_logger.setLevel(logging.DEBUG)
-        
-        logger.info(f"File logging enabled (fallback): {os.path.abspath(log_file_path)}")
+    # Ensure the logger itself is at DEBUG so handlers control filtering
+    logger.setLevel(logging.DEBUG)
+
+    # Add a console handler if none exist yet
+    if not logger.handlers:
+        console = logging.StreamHandler()
+        console.setLevel(logging.INFO)
+        console.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        logger.addHandler(console)
+
+    # Rotating file handler — matches original behaviour (20 MB, 20 backups)
+    file_handler = RotatingFileHandler(
+        filename=log_file_path,
+        maxBytes=20 * 1024 * 1024,
+        backupCount=20,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
+
+    if simple_format:
+        fmt = "%(asctime)s | %(levelname)-8s | %(message)s"
+    else:
+        fmt = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+
+    file_handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(file_handler)
+
+    logger.info("File logging enabled: %s", os.path.abspath(log_file_path))
 
 
 def process_input(task_description, task_file_name):
