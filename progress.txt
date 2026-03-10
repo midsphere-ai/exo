@@ -4748,3 +4748,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - agent-core-vs-orbiter-analysis.md lives at repo root, not in docs/
   - Porting guides cover Epics 1-10 in separate files; this index ties them together
 ---
+
+## 2026-03-11 - US-087
+- Created docs/design/deepagent-port-plan.md with comprehensive porting inventory
+- Inventoried all 64 Python files in examples/advanced/deepagent/
+- Identified 9 files with openjiuwen imports that need porting, ~45 files with no changes needed
+- Mapped every openjiuwen import to its Orbiter equivalent
+- Created dependency graph and porting order (leaves first)
+- Added risk assessment (super_react_agent.py = HIGH, logging swaps = LOW)
+- Identified delete/rewrite/light-edit action for each file
+- Files changed: docs/design/deepagent-port-plan.md (new)
+- **Learnings for future iterations:**
+  - tool/browser/ and tool/mcp_servers/ have ZERO openjiuwen imports — they can be left completely unchanged
+  - tool/browser/utils/utils/ is a duplicate of tool/browser/utils/ — cleanup candidate
+  - The 9 openjiuwen-dependent files are all in agent/ and llm/ directories
+  - super_react_agent.py has 9 distinct openjiuwen imports — highest complexity, should be split across 2-3 stories
+  - deepsearch example is the gold-standard reference for the target structure
+---

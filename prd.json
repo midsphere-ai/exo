@@ -1516,7 +1516,7 @@
         "Typecheck passes"
       ],
       "priority": 87,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 research phase only, no code changes to deepagent. Depends on US-086 (porting guide index). The porting guides are essential references for mapping openjiuwen concepts to Orbiter."
     },
     {
