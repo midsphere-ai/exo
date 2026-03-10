@@ -3496,3 +3496,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use `# pyright: ignore[reportMissingImports]` on cross-workspace imports in __init__.py (same pattern as orbiter-memory, orbiter-context)
   - GuardrailError stores risk_level, risk_type, details as instance attributes (not Pydantic) since it inherits Exception → OrbiterError
 ---
+
+## 2026-03-10 - US-008
+- What was implemented: GuardrailBackend ABC and GuardrailResult frozen Pydantic model in orbiter-guardrail package
+- Files changed:
+  - packages/orbiter-guardrail/src/orbiter/guardrail/types.py (added GuardrailBackend ABC, GuardrailResult model with safe()/block() class methods)
+  - packages/orbiter-guardrail/src/orbiter/guardrail/__init__.py (added GuardrailBackend, GuardrailResult to exports)
+  - packages/orbiter-guardrail/tests/test_guardrail_types.py (added TestGuardrailBackend and TestGuardrailResult test classes — 11 new tests)
+- **Learnings for future iterations:**
+  - Guardrail package uses `pytest-asyncio` with `@pytest.mark.asyncio` for async tests (not anyio)
+  - GuardrailBackend is an ABC — subclasses must implement `async def analyze(self, data: dict[str, Any]) -> RiskAssessment`
+  - GuardrailResult uses `frozen=True` like RiskAssessment — both are immutable Pydantic models
+  - GuardrailResult.safe() and GuardrailResult.block() are classmethod factories for common result patterns
+  - 864 orbiter-core tests still pass — no regressions from guardrail additions
+---
