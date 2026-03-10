@@ -10,6 +10,7 @@ from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissin
 from orbiter.context.context import Context  # pyright: ignore[reportMissingImports]
 from orbiter.context.processor import (  # pyright: ignore[reportMissingImports]
     ContextProcessor,
+    DialogueCompressor,
     MessageOffloader,
     ProcessorError,
     ProcessorPipeline,
@@ -648,3 +649,279 @@ class TestMessageOffloader:
         await proc.process(ctx, {})
         offloaded = ctx.state.get("offloaded_messages")
         assert len(offloaded) == 0
+
+
+# ── DialogueCompressor tests ──────────────────────────────────────
+
+
+def _tool_call_msg(name: str = "search", call_id: str = "c1") -> dict[str, Any]:
+    """Helper: assistant message with a tool call."""
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{"id": call_id, "name": name, "arguments": "{}"}],
+    }
+
+
+def _tool_result_msg(
+    name: str = "search", call_id: str = "c1", content: str = "result"
+) -> dict[str, Any]:
+    """Helper: tool result message."""
+    return {
+        "role": "tool",
+        "tool_call_id": call_id,
+        "tool_name": name,
+        "content": content,
+    }
+
+
+class TestDialogueCompressor:
+    def test_defaults(self) -> None:
+        proc = DialogueCompressor()
+        assert proc.event == "pre_llm_call"
+        assert proc.name == "dialogue_compressor"
+        assert proc.min_tool_chain_length == 3
+        assert proc.model is None
+
+    def test_custom_params(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=5, model="gpt-4")
+        assert proc.min_tool_chain_length == 5
+        assert proc.model == "gpt-4"
+
+    async def test_no_history(self) -> None:
+        proc = DialogueCompressor()
+        ctx = _make_ctx()
+        await proc.process(ctx, {})
+        # No error, no state change
+        assert ctx.state.get("history") is None
+
+    async def test_empty_history(self) -> None:
+        proc = DialogueCompressor()
+        ctx = _make_ctx(history=[])
+        await proc.process(ctx, {})
+        assert ctx.state.get("history") == []
+
+    async def test_no_tool_chains(self) -> None:
+        proc = DialogueCompressor()
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+            {"role": "user", "content": "how are you?"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        assert len(ctx.state.get("history")) == 3
+
+    async def test_chain_below_threshold_untouched(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            {"role": "user", "content": "search for X"},
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "found X"),
+            {"role": "assistant", "content": "I found X"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        # 2 tool messages < 3, so no compression
+        assert len(ctx.state.get("history")) == 4
+
+    async def test_chain_at_threshold_compressed(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            {"role": "user", "content": "do research"},
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "result 1"),
+            _tool_result_msg("lookup", "c2", "result 2"),
+            {"role": "assistant", "content": "done"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # 3 tool messages compressed to 1 system message
+        assert len(result) == 3  # user + system_summary + assistant
+        assert result[0]["role"] == "user"
+        assert result[1]["role"] == "system"
+        assert result[2]["role"] == "assistant"
+        assert "compressed" in result[1]["content"].lower()
+
+    async def test_long_chain_compressed(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            {"role": "user", "content": "find everything"},
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "result A"),
+            _tool_call_msg("lookup", "c2"),
+            _tool_result_msg("lookup", "c2", "result B"),
+            _tool_call_msg("fetch", "c3"),
+            _tool_result_msg("fetch", "c3", "result C"),
+            {"role": "assistant", "content": "here's what I found"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # 6 tool messages -> 1 summary
+        assert len(result) == 3
+        summary = result[1]["content"]
+        assert "search" in summary
+        assert "lookup" in summary
+        assert "fetch" in summary
+
+    async def test_summary_contains_tool_names_and_results(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            _tool_call_msg("web_search", "c1"),
+            _tool_result_msg("web_search", "c1", "Found 10 results"),
+            _tool_call_msg("read_file", "c2"),
+            _tool_result_msg("read_file", "c2", "File contents here"),
+            _tool_call_msg("analyze", "c3"),
+            _tool_result_msg("analyze", "c3", "Analysis complete"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 1
+        summary = result[0]["content"]
+        assert "web_search" in summary
+        assert "read_file" in summary
+        assert "analyze" in summary
+        assert "3 calls" in summary
+        assert "Found 10 results" in summary
+
+    async def test_multiple_separate_chains(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            # First chain (3 tool msgs)
+            _tool_call_msg("a", "c1"),
+            _tool_result_msg("a", "c1", "r1"),
+            _tool_result_msg("b", "c2", "r2"),
+            # Break
+            {"role": "user", "content": "now do more"},
+            # Second chain (3 tool msgs)
+            _tool_call_msg("x", "c3"),
+            _tool_result_msg("x", "c3", "r3"),
+            _tool_result_msg("y", "c4", "r4"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # Both chains compressed: 2 summaries + 1 user msg
+        assert len(result) == 3
+        assert result[0]["role"] == "system"
+        assert result[1]["role"] == "user"
+        assert result[2]["role"] == "system"
+
+    async def test_mixed_chains_and_regular_messages(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "r1"),
+            _tool_call_msg("lookup", "c2"),
+            _tool_result_msg("lookup", "c2", "r2"),
+            {"role": "assistant", "content": "done"},
+            {"role": "user", "content": "thanks"},
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # Chain of 4 tool msgs -> 1 summary; rest untouched
+        assert len(result) == 5  # user, assistant, summary, assistant, user
+        assert result[2]["role"] == "system"
+
+    async def test_chain_only_tool_results(self) -> None:
+        """Consecutive tool results (no assistant tool_call) still count."""
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            _tool_result_msg("a", "c1", "r1"),
+            _tool_result_msg("b", "c2", "r2"),
+            _tool_result_msg("c", "c3", "r3"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 1
+        assert result[0]["role"] == "system"
+
+    async def test_assistant_without_tool_calls_not_counted(self) -> None:
+        """Regular assistant messages don't count as tool chain."""
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        history = [
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "r1"),
+            {"role": "assistant", "content": "thinking..."},  # breaks chain
+            _tool_call_msg("lookup", "c2"),
+            _tool_result_msg("lookup", "c2", "r2"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # Two chains of 2 each, both below threshold of 3
+        assert len(result) == 5
+
+    async def test_truncates_long_tool_results_in_summary(self) -> None:
+        proc = DialogueCompressor(min_tool_chain_length=3)
+        long_result = "x" * 200
+        history = [
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", long_result),
+            _tool_result_msg("fetch", "c2", "short"),
+            _tool_result_msg("analyze", "c3", "done"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        summary = result[0]["content"]
+        # Long result should be truncated to 100 chars
+        assert "x" * 100 in summary
+        assert "x" * 200 not in summary
+
+    async def test_with_pipeline(self) -> None:
+        pipeline = ProcessorPipeline()
+        pipeline.register(DialogueCompressor(min_tool_chain_length=3))
+        history = [
+            {"role": "user", "content": "go"},
+            _tool_call_msg("a", "c1"),
+            _tool_result_msg("a", "c1", "r1"),
+            _tool_call_msg("b", "c2"),
+            _tool_result_msg("b", "c2", "r2"),
+            {"role": "assistant", "content": "done"},
+        ]
+        ctx = _make_ctx(history=history)
+        await pipeline.fire("pre_llm_call", ctx)
+        result = ctx.state.get("history")
+        # 4 tool messages -> 1 summary
+        assert len(result) == 3
+        assert result[1]["role"] == "system"
+
+    async def test_fallback_no_model(self) -> None:
+        """When model is None, uses simple concatenation fallback."""
+        proc = DialogueCompressor(min_tool_chain_length=3, model=None)
+        history = [
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "found it"),
+            _tool_result_msg("validate", "c2", "valid"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        assert len(result) == 1
+        summary = result[0]["content"]
+        # Falls back to concatenation — still produces valid summary
+        assert "search" in summary
+        assert "found it" in summary
+
+    async def test_with_mock_summarizer_model(self) -> None:
+        """When model is set, the summary still works (no actual LLM call)."""
+        proc = DialogueCompressor(min_tool_chain_length=3, model="test-model")
+        history = [
+            _tool_call_msg("search", "c1"),
+            _tool_result_msg("search", "c1", "data"),
+            _tool_result_msg("process", "c2", "processed"),
+        ]
+        ctx = _make_ctx(history=history)
+        await proc.process(ctx, {})
+        result = ctx.state.get("history")
+        # Still compresses (model param is stored but not used for actual LLM call yet)
+        assert len(result) == 1
+        assert result[0]["role"] == "system"

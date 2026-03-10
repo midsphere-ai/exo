@@ -315,3 +315,149 @@ class MessageOffloader(ContextProcessor):
                 msg.content = marker  # type: ignore[attr-defined]
 
         ctx.state.set("offloaded_messages", offloaded)
+
+
+class DialogueCompressor(ContextProcessor):
+    """Compresses long tool-call chains into concise summaries.
+
+    Fires on ``"pre_llm_call"``.  Scans ``ctx.state['history']`` for
+    consecutive sequences of assistant-with-tool-calls and tool-result
+    messages.  When a chain length meets or exceeds ``min_tool_chain_length``,
+    the entire chain is replaced by a single ``SystemMessage``-style summary.
+
+    If ``model`` is ``None`` (no LLM summarizer), falls back to simple
+    concatenation of tool names and truncated results.
+
+    Parameters
+    ----------
+    min_tool_chain_length:
+        Minimum number of tool-call/result message pairs before compression
+        is triggered.  Default ``3``.
+    model:
+        Optional model identifier for LLM-based summarization.  When
+        ``None``, uses simple concatenation fallback.
+    name:
+        Processor name.  Default ``"dialogue_compressor"``.
+    """
+
+    __slots__ = ("_event", "_min_tool_chain_length", "_model", "_name")
+
+    def __init__(
+        self,
+        *,
+        min_tool_chain_length: int = 3,
+        model: str | None = None,
+        name: str = "dialogue_compressor",
+    ) -> None:
+        super().__init__("pre_llm_call", name=name)
+        self._min_tool_chain_length = min_tool_chain_length
+        self._model = model
+
+    @property
+    def min_tool_chain_length(self) -> int:
+        """Minimum chain length before compression."""
+        return self._min_tool_chain_length
+
+    @property
+    def model(self) -> str | None:
+        """Model identifier for LLM summarization, or ``None``."""
+        return self._model
+
+    async def process(self, ctx: Context, payload: dict[str, Any]) -> None:
+        history: list[Any] | None = ctx.state.get("history")
+        if not history:
+            return
+
+        chains = self._find_tool_chains(history)
+        if not chains:
+            return
+
+        # Process chains in reverse order so indices stay valid
+        for start, end in reversed(chains):
+            chain_msgs = history[start:end]
+            summary = self._summarize_chain(chain_msgs)
+            summary_msg: dict[str, str] = {"role": "system", "content": summary}
+            history[start:end] = [summary_msg]
+
+    def _find_tool_chains(
+        self, history: list[Any]
+    ) -> list[tuple[int, int]]:
+        """Find consecutive tool-call/result chains that exceed the threshold.
+
+        Returns a list of ``(start_index, end_index)`` tuples (exclusive end).
+        A "tool message" is an assistant message with tool_calls or a tool
+        result message.
+        """
+        chains: list[tuple[int, int]] = []
+        i = 0
+        n = len(history)
+
+        while i < n:
+            if self._is_tool_message(history[i]):
+                chain_start = i
+                while i < n and self._is_tool_message(history[i]):
+                    i += 1
+                chain_length = i - chain_start
+                if chain_length >= self._min_tool_chain_length:
+                    chains.append((chain_start, i))
+            else:
+                i += 1
+
+        return chains
+
+    @staticmethod
+    def _is_tool_message(msg: Any) -> bool:
+        """Check if a message is part of a tool-call chain."""
+        if isinstance(msg, dict):
+            role = msg.get("role")
+            if role == "tool":
+                return True
+            if role == "assistant" and msg.get("tool_calls"):
+                return True
+            return False
+
+        role = getattr(msg, "role", None)
+        if role == "tool":
+            return True
+        if role == "assistant" and getattr(msg, "tool_calls", None):
+            return True
+        return False
+
+    def _summarize_chain(self, chain: list[Any]) -> str:
+        """Produce a text summary of a tool-call chain.
+
+        Uses simple concatenation (no LLM call) when ``self._model`` is
+        ``None``.  LLM-based summarization would be plugged in here.
+        """
+        tool_names: list[str] = []
+        results: list[str] = []
+
+        for msg in chain:
+            if isinstance(msg, dict):
+                role = msg.get("role")
+                if role == "assistant":
+                    for tc in msg.get("tool_calls", []):
+                        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
+                        tool_names.append(str(name) if name else "unknown")
+                elif role == "tool":
+                    tool_name = msg.get("tool_name") or msg.get("name") or "tool"
+                    content = str(msg.get("content", ""))
+                    results.append(f"{tool_name}: {content[:100]}")
+            else:
+                role = getattr(msg, "role", None)
+                if role == "assistant":
+                    for tc in getattr(msg, "tool_calls", []):
+                        tool_names.append(getattr(tc, "name", "unknown"))
+                elif role == "tool":
+                    tool_name = getattr(msg, "tool_name", None) or getattr(msg, "name", "tool")
+                    content = str(getattr(msg, "content", ""))
+                    results.append(f"{tool_name}: {content[:100]}")
+
+        unique_tools = list(dict.fromkeys(tool_names))  # preserves order
+        tools_str = ", ".join(unique_tools) if unique_tools else "tools"
+        results_str = "; ".join(results) if results else "no results"
+
+        return (
+            f"[Tool chain compressed — called {tools_str} "
+            f"({len(tool_names)} calls). Results: {results_str}]"
+        )
