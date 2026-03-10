@@ -4082,3 +4082,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Reranker follows same ABC pattern as Retriever: single abstract async method, concrete impl in same or sibling file
   - RetrievalResult is frozen — must create new instances when changing score/metadata
 ---
+
+## 2026-03-10 - US-044
+- Implemented text chunking strategies for orbiter-retrieval package
+- Files changed:
+  - `packages/orbiter-retrieval/src/orbiter/retrieval/chunker.py` (new) — Chunker ABC + CharacterChunker, ParagraphChunker, TokenChunker
+  - `packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py` — added exports for Chunker, CharacterChunker, ParagraphChunker, TokenChunker
+  - `packages/orbiter-retrieval/tests/test_chunker.py` (new) — 39 tests covering all strategies + edge cases
+- **Learnings for future iterations:**
+  - TokenChunker default `chunk_overlap=20` — tests using small `chunk_size` must explicitly pass `chunk_overlap=0` to avoid validation error
+  - Chunkers are synchronous (not async) — unlike retrievers/embeddings, chunking is CPU-only with no I/O
+  - tiktoken is an optional dependency — use `try/except ModuleNotFoundError` for import, `pyright: ignore[reportMissingImports]` for type checker
+  - _WhitespaceEncoder is the fallback when tiktoken is unavailable — splits on `\S+` regex matches
+  - ParagraphChunker joins paragraphs with `\n\n` in output but splits on `\n\s*\n` (handles multiple blank lines)
+  - Chunk offsets (start/end) must reference the original document text — verify with `text[start:end] == content`
+---
