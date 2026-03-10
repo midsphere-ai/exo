@@ -33,6 +33,10 @@ from orbiter.retrieval.retriever import (  # pyright: ignore[reportMissingImport
     VectorRetriever,
 )
 from orbiter.retrieval.sparse_retriever import SparseRetriever  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.tools import (  # pyright: ignore[reportMissingImports]
+    index_tool,
+    retrieve_tool,
+)
 from orbiter.retrieval.triple_extractor import (  # pyright: ignore[reportMissingImports]
     Triple,
     TripleExtractor,
@@ -80,4 +84,6 @@ __all__ = [
     "VectorRetriever",
     "VectorStore",
     "VertexEmbeddings",
+    "index_tool",
+    "retrieve_tool",
 ]
