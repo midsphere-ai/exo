@@ -3901,3 +3901,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - LoopNode.body is always a `list[str]` (normalized from str|list[str] in __init__).
   - ParallelGroup stores member order in `agent_order` attribute.
 ---
+
+## 2026-03-10 - US-032
+- What was implemented: Comprehensive backward compatibility test suite for workflow extensions (27 tests)
+- Files changed:
+  - packages/orbiter-core/tests/test_workflow_backward_compat.py (new — 5 test classes: TestDSLBackwardCompat, TestModesBackwardCompat, TestBranchLoopCombined, TestLoopWithNestedSwarm, TestMermaidComplexTopology)
+- **Learnings for future iterations:**
+  - _counting_provider() pattern (returns provider + tracker dict) is useful for verifying exact LLM call counts in combined flows
+  - BranchNode + LoopNode combined: branch false path correctly routes to out-of-flow target, skipping the loop entirely
+  - SwarmNode before/after LoopNode works — nested swarm output chains correctly into loop input and vice versa
+  - All three modes (workflow, handoff, team) are unaffected by BranchNode/LoopNode/SwarmNode additions
+  - Mermaid shapes are deterministic: `{name}` for branch, `{{name}}` for loop, `[[name]]` for nested, `[name]` for regular
+---
