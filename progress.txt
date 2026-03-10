@@ -3913,3 +3913,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - All three modes (workflow, handoff, team) are unaffected by BranchNode/LoopNode/SwarmNode additions
   - Mermaid shapes are deterministic: `{name}` for branch, `{{name}}` for loop, `[[name]]` for nested, `[name]` for regular
 ---
+
+## 2026-03-10 - US-033
+- What was implemented: Research and design document for RAG/retrieval pipeline architecture (Epic 3)
+- Files changed:
+  - docs/design/retrieval-design.md (new — comprehensive design doc covering package layout, type hierarchy, embedding abstraction, vector store abstraction, 5 retriever types, chunking strategies, document parsers, reranking, query rewriting, agent tool integration, optional dependencies, and relationship to existing packages)
+- **Learnings for future iterations:**
+  - orbiter-memory has Embeddings ABC (embed, aembed, dimension) and orbiter-retrieval needs embed_batch — create independent ABC that is protocol-compatible
+  - No lateral dependencies allowed between same-level packages (orbiter-memory, orbiter-retrieval) — each gets its own Embeddings ABC
+  - orbiter-context KnowledgeStore serves workspace artifact search (TF-IDF keyword); orbiter-retrieval serves document retrieval (vector + hybrid) — different purposes, no replacement
+  - Agent-core has 5 retriever types (Vector, Sparse, Hybrid, Graph, Agentic) — port all to orbiter-retrieval
+  - Optional deps pattern: core types + ABCs + InMemoryVectorStore work with zero optional deps; heavy backends (chromadb, asyncpg, tiktoken) are extras
+---
