@@ -1401,7 +1401,7 @@
         "Typecheck passes"
       ],
       "priority": 80,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 2 implementation stories complete. References agent-core's graph/ directory."
     },
     {

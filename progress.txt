@@ -4663,3 +4663,13 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - EncryptedMemoryStore wraps any MemoryStore transparently — only encrypts content field, metadata stays searchable
   - MemUpdateChecker accepts optional LLM checker callable; falls back to exact match when no LLM available
 ---
+
+## 2026-03-10 - US-080
+- What was implemented: Created docs/porting-guide/workflow-engine.md mapping agent-core's Pregel graph engine to Orbiter's extended Swarm system
+- Files changed:
+  - docs/porting-guide/workflow-engine.md (new — 278 lines)
+- **Learnings for future iterations:**
+  - Porting guide format: 5 sections (agent-core overview, Orbiter equivalent with mapping table, code comparison, key differences, migration table)
+  - Match the style of existing guides (guardrails.md, memory-system.md, etc.) for consistency
+  - Pre-existing pyright errors in runner.py (2 errors) are unrelated to doc changes — don't try to fix them in a doc story
+---
