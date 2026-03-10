@@ -1638,7 +1638,7 @@
         "Max 150 lines changed"
       ],
       "priority": 94,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 super_config.py has 3 openjiuwen imports (ReActAgentConfig, PluginSchema/WorkflowSchema, ModelConfig). Pattern: follow deepsearch/config.py style."
     },
     {

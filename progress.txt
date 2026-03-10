@@ -4848,3 +4848,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - SubAgentTool is a proper Tool subclass that can be registered alongside regular tools — no special intercept logic needed
   - Type conversion now reads JSON Schema `properties.{name}.type` instead of `Param.type` — same type strings ("integer", "number", "boolean", "string")
 ---
+
+## 2026-03-11 - US-094
+- Ported `examples/advanced/deepagent/agent/super_config.py` from openjiuwen to standalone Pydantic models
+- Replaced `ReActAgentConfig` / `ConstrainConfig` inheritance with `SuperAgentConfig(BaseModel)`
+- Replaced `ModelConfig` with `SuperModelConfig` + `ModelInfo` (preserves `config.model.model_info.x` access path)
+- Replaced `PluginSchema` / `WorkflowSchema` with `list[dict[str, Any]]`
+- Replaced `ConstrainConfig` with `ConstraintConfig` standalone model
+- Kept `SuperAgentFactory` with updated type signatures
+- Files changed: `examples/advanced/deepagent/agent/super_config.py`
+- **Learnings for future iterations:**
+  - Downstream files (super_react_agent.py, super_factory.py) access `config.model.model_info.api_key` and `config.constrain.max_iteration` — preserve these nested access paths when replacing openjiuwen models
+  - `SuperModelConfig` wraps `ModelInfo` specifically to maintain the `.model.model_info` access pattern used in super_react_agent.py
+  - The `to_constrain_config()` helper was renamed to `to_constraint_config()` — downstream callers in super_factory.py will need updating (US-095)
+  - 120 insertions / 73 deletions = within 150-line limit
+---
