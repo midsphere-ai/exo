@@ -154,6 +154,48 @@ class TaskManager:
         tasks.sort(key=lambda t: (-t.priority, t.created_at))
         return tasks
 
+    def get_children(self, parent_id: str) -> list[Task]:
+        """Return direct children of the given parent, sorted by priority then created_at.
+
+        Args:
+            parent_id: The parent task ID.
+
+        Returns:
+            List of child tasks.
+
+        Raises:
+            TaskNotFoundError: If *parent_id* does not exist.
+        """
+        self._require(parent_id)
+        children = [t for t in self._tasks.values() if t.parent_id == parent_id]
+        children.sort(key=lambda t: (-t.priority, t.created_at))
+        return children
+
+    def get_subtree(self, task_id: str) -> list[Task]:
+        """Return all descendants of the given task (recursive), sorted by priority then created_at.
+
+        Args:
+            task_id: The root task ID.
+
+        Returns:
+            List of all descendant tasks (does not include the root task itself).
+
+        Raises:
+            TaskNotFoundError: If *task_id* does not exist.
+        """
+        self._require(task_id)
+        result: list[Task] = []
+        self._collect_descendants(task_id, result)
+        result.sort(key=lambda t: (-t.priority, t.created_at))
+        return result
+
+    def _collect_descendants(self, parent_id: str, result: list[Task]) -> None:
+        """Recursively collect all descendants of *parent_id* into *result*."""
+        for task in self._tasks.values():
+            if task.parent_id == parent_id:
+                result.append(task)
+                self._collect_descendants(task.id, result)
+
     # -- cascading effects ----------------------------------------------------
 
     def _cascade_cancel(self, parent_id: str) -> None:

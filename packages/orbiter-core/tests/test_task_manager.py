@@ -233,3 +233,99 @@ class TestAutoCompleteParent:
         mgr.update(child.id, status=TaskStatus.WORKING)
         mgr.update(child.id, status=TaskStatus.COMPLETED)
         assert parent.status == TaskStatus.WORKING  # stays working
+
+
+# ---------------------------------------------------------------------------
+# get_children
+# ---------------------------------------------------------------------------
+
+
+class TestGetChildren:
+    def test_get_children_returns_direct_children(self, mgr: TaskManager) -> None:
+        parent = mgr.create("parent")
+        c1 = mgr.create("child1", parent_id=parent.id)
+        c2 = mgr.create("child2", parent_id=parent.id)
+        children = mgr.get_children(parent.id)
+        assert len(children) == 2
+        assert {c.id for c in children} == {c1.id, c2.id}
+
+    def test_get_children_excludes_grandchildren(self, mgr: TaskManager) -> None:
+        gp = mgr.create("grandparent")
+        parent = mgr.create("parent", parent_id=gp.id)
+        mgr.create("grandchild", parent_id=parent.id)
+        children = mgr.get_children(gp.id)
+        assert len(children) == 1
+        assert children[0].id == parent.id
+
+    def test_get_children_empty(self, mgr: TaskManager) -> None:
+        leaf = mgr.create("leaf")
+        assert mgr.get_children(leaf.id) == []
+
+    def test_get_children_sorted_by_priority(self, mgr: TaskManager) -> None:
+        parent = mgr.create("parent")
+        mgr.create("low", parent_id=parent.id, priority=1)
+        mgr.create("high", parent_id=parent.id, priority=10)
+        mgr.create("mid", parent_id=parent.id, priority=5)
+        children = mgr.get_children(parent.id)
+        priorities = [c.priority for c in children]
+        assert priorities == [10, 5, 1]
+
+    def test_get_children_missing_parent_raises(self, mgr: TaskManager) -> None:
+        with pytest.raises(TaskNotFoundError):
+            mgr.get_children("nonexistent")
+
+
+# ---------------------------------------------------------------------------
+# get_subtree
+# ---------------------------------------------------------------------------
+
+
+class TestGetSubtree:
+    def test_get_subtree_returns_all_descendants(self, mgr: TaskManager) -> None:
+        root = mgr.create("root")
+        child = mgr.create("child", parent_id=root.id)
+        grandchild = mgr.create("grandchild", parent_id=child.id)
+        subtree = mgr.get_subtree(root.id)
+        assert len(subtree) == 2
+        assert {t.id for t in subtree} == {child.id, grandchild.id}
+
+    def test_get_subtree_does_not_include_root(self, mgr: TaskManager) -> None:
+        root = mgr.create("root")
+        mgr.create("child", parent_id=root.id)
+        subtree = mgr.get_subtree(root.id)
+        assert all(t.id != root.id for t in subtree)
+
+    def test_get_subtree_empty_for_leaf(self, mgr: TaskManager) -> None:
+        leaf = mgr.create("leaf")
+        assert mgr.get_subtree(leaf.id) == []
+
+    def test_get_subtree_deep_hierarchy(self, mgr: TaskManager) -> None:
+        root = mgr.create("root")
+        level1 = mgr.create("l1", parent_id=root.id)
+        level2 = mgr.create("l2", parent_id=level1.id)
+        level3 = mgr.create("l3", parent_id=level2.id)
+        subtree = mgr.get_subtree(root.id)
+        assert len(subtree) == 3
+        assert {t.id for t in subtree} == {level1.id, level2.id, level3.id}
+
+    def test_get_subtree_sorted_by_priority(self, mgr: TaskManager) -> None:
+        root = mgr.create("root")
+        mgr.create("low", parent_id=root.id, priority=1)
+        child = mgr.create("high-parent", parent_id=root.id, priority=10)
+        mgr.create("mid-grandchild", parent_id=child.id, priority=5)
+        subtree = mgr.get_subtree(root.id)
+        priorities = [t.priority for t in subtree]
+        assert priorities == [10, 5, 1]
+
+    def test_get_subtree_missing_task_raises(self, mgr: TaskManager) -> None:
+        with pytest.raises(TaskNotFoundError):
+            mgr.get_subtree("nonexistent")
+
+    def test_get_subtree_multiple_branches(self, mgr: TaskManager) -> None:
+        root = mgr.create("root")
+        b1 = mgr.create("branch1", parent_id=root.id, priority=5)
+        b2 = mgr.create("branch2", parent_id=root.id, priority=5)
+        mgr.create("b1-child", parent_id=b1.id, priority=3)
+        mgr.create("b2-child", parent_id=b2.id, priority=3)
+        subtree = mgr.get_subtree(root.id)
+        assert len(subtree) == 4
