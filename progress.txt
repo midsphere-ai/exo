@@ -3445,3 +3445,21 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The `extra` dict is created fresh per `run()` invocation, ensuring cross-rail state doesn't leak between calls
   - Import the rail_types inside function bodies in `rail.py` to avoid circular imports (rail.py imports from hooks.py, rail_types.py imports from hooks.py)
 ---
+
+## 2026-03-10 - US-005
+- What was implemented: Agent integration for rails with full backward compatibility
+  - Added `rails: list[Rail] | None = None` parameter to Agent.__init__
+  - If rails provided, creates RailManager and registers hook_for(event) on every HookPoint
+  - RailAbortError propagates immediately without being caught by the retry loop in _call_llm
+  - Agent with no rails behaves identically to before (rail_manager is None)
+  - Agent with both traditional hooks and rails: both execute correctly
+- Files changed:
+  - packages/orbiter-core/src/orbiter/agent.py (constructor + RailAbortError re-raise in _call_llm)
+  - packages/orbiter-core/tests/test_agent_rails.py (new - integration tests)
+  - prd.json (US-005 passes: true)
+- **Learnings for future iterations:**
+  - RailAbortError must be re-raised before the generic Exception handler in _call_llm, otherwise it gets retried like a transient error
+  - Rails registered on agent fire at ALL HookPoints (START, FINISHED, ERROR, PRE/POST_LLM_CALL, PRE/POST_TOOL_CALL) - rail implementations should check ctx.event to filter
+  - RailAbortError raised inside _execute_tools (TaskGroup) gets wrapped in ExceptionGroup on Python 3.11+ — tests need to handle this
+  - The to_dict() serialization check already catches rails since they're registered as hooks on hook_manager
+---

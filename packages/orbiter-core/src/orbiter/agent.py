@@ -14,6 +14,7 @@ from orbiter._internal.output_parser import parse_response, parse_tool_arguments
 from orbiter.config import parse_model_string
 from orbiter.hooks import Hook, HookManager, HookPoint
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+from orbiter.rail import Rail, RailAbortError, RailManager
 from orbiter.tool import Tool, ToolError
 from orbiter.types import (
     AgentOutput,
@@ -49,6 +50,9 @@ class Agent:
         tools: Tools available to this agent.
         handoffs: Other agents this agent can delegate to via handoff.
         hooks: Lifecycle hooks as ``(HookPoint, Hook)`` tuples.
+        rails: Optional list of :class:`~orbiter.rail.Rail` instances.
+            If provided, a :class:`~orbiter.rail.RailManager` is created
+            and registered as hooks on the agent's hook_manager.
         output_type: Pydantic model class for structured output validation.
         max_steps: Maximum LLM-tool round-trips before stopping.
         temperature: LLM sampling temperature.
@@ -66,6 +70,7 @@ class Agent:
         tools: list[Tool] | None = None,
         handoffs: list[Agent] | None = None,
         hooks: list[tuple[HookPoint, Hook]] | None = None,
+        rails: list[Rail] | None = None,
         output_type: type[BaseModel] | None = None,
         max_steps: int = 10,
         temperature: float = 1.0,
@@ -101,6 +106,17 @@ class Agent:
         if hooks:
             for point, hook in hooks:
                 self.hook_manager.add(point, hook)
+
+        # Rails — structured lifecycle guards registered as hooks
+        self.rail_manager: RailManager | None = None
+        if rails:
+            self.rail_manager = RailManager()
+            for rail in rails:
+                self.rail_manager.add(rail)
+            # Register rail hooks on every hook point so rails fire
+            # alongside (before or after) traditional hooks.
+            for point in HookPoint:
+                self.hook_manager.add(point, self.rail_manager.hook_for(point))
 
     def _register_tool(self, t: Tool) -> None:
         """Add a tool, raising on duplicate names.
@@ -244,6 +260,9 @@ class Agent:
                     tool_calls=response.tool_calls,
                     usage=response.usage,
                 )
+
+            except RailAbortError:
+                raise
 
             except Exception as exc:
                 if _is_context_length_error(exc):
