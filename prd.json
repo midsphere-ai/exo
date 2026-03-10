@@ -1601,7 +1601,7 @@
         "Max 80 lines changed"
       ],
       "priority": 92,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 QAHandler has only 1 openjiuwen import (logger). Simple replacement."
     },
     {
