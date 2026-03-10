@@ -4409,3 +4409,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Agent queue drain happens after tool execution but before next LLM call — ABORT raises immediately, STEER/FOLLOWUP inject user messages
   - Pre-existing test failures in test_runner.py and test_swarm.py (14 total) are unrelated to this change
 ---
+
+## 2026-03-10 - US-064
+- What was implemented: Design document for memory evolution algorithms (ACE, ReasoningBank, ReMe) integrating with orbiter-memory
+- Files changed:
+  - docs/design/memory-evolution-design.md (new — design doc covering MemoryEvolutionStrategy ABC, composable pipeline operators, ACE/ReasoningBank/ReMe strategies, integration with existing MemoryOrchestrator)
+- **Learnings for future iterations:**
+  - Evolution strategies operate on `list[MemoryItem]` directly, not on `MemoryStore` — caller loads/saves
+  - `MemoryEvolutionStrategy` is named to avoid conflict with orbiter-train's `EvolutionStrategy`
+  - LLM calls in evolution strategies use duck-typed callables `async (prompt: str) -> str` — no provider dependency
+  - Embeddings use duck-typed `async embed(text: str) -> list[float]` — no orbiter-retrieval dependency
+  - ACE counter persistence uses stdlib JSON files, not MemoryStore
+  - ReMe stores `when_to_use` in `metadata.extra["when_to_use"]` rather than extending MemoryItem
+  - Evolution complements extraction (MemoryOrchestrator): extraction = conversation → knowledge, evolution = knowledge → better knowledge
+---
