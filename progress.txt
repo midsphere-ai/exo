@@ -4673,3 +4673,13 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Match the style of existing guides (guardrails.md, memory-system.md, etc.) for consistency
   - Pre-existing pyright errors in runner.py (2 errors) are unrelated to doc changes — don't try to fix them in a doc story
 ---
+
+## 2026-03-11 - US-081
+- Created docs/porting-guide/rag-retrieval.md — comprehensive mapping of agent-core's RAG pipeline to orbiter-retrieval
+- Files changed: docs/porting-guide/rag-retrieval.md (new)
+- **Learnings for future iterations:**
+  - orbiter-retrieval renames EmbeddingProvider → Embeddings and KnowledgeGraphRetriever → GraphRetriever
+  - All public symbols are re-exported from orbiter.retrieval __init__.py for convenience imports
+  - Porting guide format: 4 sections (overview, mapping, code examples, migration table) with Epic/Date metadata header
+  - Backends (pgvector, chroma) live in backends/ subpackage, not top-level
+---

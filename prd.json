@@ -1417,7 +1417,7 @@
         "Typecheck passes"
       ],
       "priority": 81,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 3 implementation stories complete. References agent-core's rag/ directory."
     },
     {
