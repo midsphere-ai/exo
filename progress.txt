@@ -4118,3 +4118,15 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Mock pymupdf in tests with `patch.dict("sys.modules", ...)` pattern — no need to install the actual dependency
   - MarkdownParser uses compiled regex patterns as class-level constants for performance
 ---
+
+## 2026-03-10 - US-046
+- What was implemented: QueryRewriter class for LLM-based query rewriting to improve retrieval quality
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/query_rewriter.py (new — QueryRewriter class with rewrite() method, default + history templates)
+  - packages/orbiter-retrieval/tests/test_query_rewriter.py (new — 12 tests covering config, rewriting, history compression, fallbacks)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — export QueryRewriter)
+- **Learnings for future iterations:**
+  - Follow the LLMReranker pattern for LLM-using retrieval classes: lazy `from orbiter.models import get_provider` inside the method, MockProvider in tests with monkeypatch
+  - When a feature has two template variants (with/without history), use a fallback strategy: if custom template has {history} placeholder use it, otherwise fall back to built-in history template
+  - Empty string LLM responses should fall back to the original query to avoid silent data loss
+---
