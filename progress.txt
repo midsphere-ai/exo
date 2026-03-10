@@ -4765,3 +4765,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - super_react_agent.py has 9 distinct openjiuwen imports — highest complexity, should be split across 2-3 stories
   - deepsearch example is the gold-standard reference for the target structure
 ---
+
+## 2026-03-11 - US-088
+- Ported deepagent pyproject.toml from openjiuwen to Orbiter dependencies
+- Replaced `openjiuwen==0.1.3` with `orbiter-core` and `orbiter-models`
+- Removed unused deps: `langgraph`, `sqlalchemy`, `mermaid-py` (confirmed zero imports in deepagent)
+- Renamed project from `jiuwen-opensource` to `deepagent-example`
+- Added inline docstring comments explaining each Orbiter dependency
+- `__init__.py` is empty — no changes needed
+- Files changed: `examples/advanced/deepagent/pyproject.toml`
+- **Learnings for future iterations:**
+  - deepagent is NOT a UV workspace member — it's a standalone project with its own pyproject.toml
+  - The deepsearch example (already ported) is the reference pattern for config and structure
+  - `langgraph`, `sqlalchemy`, `mermaid-py` were openjiuwen transitive deps, not used directly
+---

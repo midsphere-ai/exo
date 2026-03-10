@@ -1532,7 +1532,7 @@
         "Max 50 lines changed"
       ],
       "priority": 88,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 minimal config-only change. Refer to docs/design/deepagent-port-plan.md and deepsearch's structure as reference."
     },
     {
