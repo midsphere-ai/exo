@@ -4528,3 +4528,40 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Operator.name serves as the identifier linking trajectory steps to operators for attribution
   - State roundtrip pattern: get_state() → modify → load_state(original) restores operator to previous state — essential for candidate selection
 ---
+
+## 2026-03-10 - US-071
+- Implemented three concrete Operator subclasses: LLMCallOperator, ToolCallOperator, MemoryCallOperator
+- Each operator records execution traces (LLMCallTrace, ToolCallTrace, MemoryCallTrace) with timing, results, and errors
+- LLMCallOperator: wraps async LLM callable, tunables are system_prompt (PROMPT) and user_prompt (PROMPT)
+- ToolCallOperator: wraps async tool callable, tunable is tool_description (TEXT)
+- MemoryCallOperator: wraps async memory callable, tunables are enabled (DISCRETE) and max_retries (DISCRETE); supports disable and retry logic
+- All operators implement full Operator ABC: name, execute, get_tunables, get_state, load_state
+- 38 new tests covering execution, trace recording (success + failure), state roundtrip, tunable reflection, trace serialization
+- Files changed:
+  - packages/orbiter-train/src/orbiter/train/operator/llm_call.py (new)
+  - packages/orbiter-train/src/orbiter/train/operator/tool_call.py (new)
+  - packages/orbiter-train/src/orbiter/train/operator/memory_call.py (new)
+  - packages/orbiter-train/src/orbiter/train/operator/__init__.py (updated exports)
+  - packages/orbiter-train/src/orbiter/train/__init__.py (updated exports)
+  - packages/orbiter-train/tests/test_concrete_operators.py (new, 38 tests)
+- **Learnings for future iterations:**
+  - Concrete operators follow pattern: store tunables as instance attrs, expose via get_tunables/get_state/load_state, record traces in _traces list
+  - Trace dataclasses use frozen=True + slots=True with to_dict() via dataclasses.asdict()
+  - MemoryCallOperator retry loop: for/else pattern where else block fires when all retries exhausted
+  - Operators accept async callables (not Agent/Tool objects directly) — keeps them decoupled from orbiter-core types
+  - Use `# pyright: ignore[reportMissingImports]` on all imports in operator subpackage for namespace package compat
+---
+
+## 2026-03-10 - US-072
+- What was implemented: TrajectoryExtractor class that extracts complete execution DAGs from agent session traces
+- Files changed:
+  - packages/orbiter-train/src/orbiter/train/trajectory.py (added TrajectoryExtractor class)
+  - packages/orbiter-train/src/orbiter/train/__init__.py (updated exports)
+  - packages/orbiter-train/tests/test_trajectory_extractor.py (new, 27 tests)
+- **Learnings for future iterations:**
+  - TrajectoryExtractor delegates to dataset.strategy.build_item() for each segment — keeps it compatible with any TrajectoryStrategy implementation
+  - Message segmentation: split at user messages for turns, then at assistant messages within a turn for incremental DAG steps
+  - include_tool_calls=False strips tool-role messages AND tool_calls from assistant messages; assistant messages with only tool_calls and no content are dropped entirely
+  - System messages without a preceding user message form their own segment (they don't merge with the next user turn)
+  - Extracted items are appended to the underlying TrajectoryDataset, so they accumulate across multiple extract() calls
+---

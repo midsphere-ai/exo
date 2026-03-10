@@ -1,4 +1,4 @@
-"""Trajectory capture with strategy patterns and export to JSON/CSV."""
+"""Trajectory capture, extraction, and export to JSON/CSV."""
 
 from __future__ import annotations
 
@@ -230,3 +230,151 @@ class TrajectoryDataset:
         """Remove all items and reset step counters."""
         self._items.clear()
         self._step_counters.clear()
+
+
+class TrajectoryExtractor:
+    """Extracts complete execution DAGs from agent session traces.
+
+    Given a flat message history (OpenAI chat format), produces a list of
+    :class:`TrajectoryItem` objects representing individual execution steps:
+    LLM calls, operator invocations, tool call chains, and final outputs.
+
+    Uses the underlying dataset's :class:`TrajectoryStrategy` (typically
+    :class:`DefaultStrategy`) to build each item, so the extracted items
+    are fully compatible with existing training pipelines.
+
+    Args:
+        dataset: The trajectory dataset to append extracted items to.
+    """
+
+    __slots__ = ("_dataset",)
+
+    def __init__(self, dataset: TrajectoryDataset) -> None:
+        self._dataset = dataset
+
+    @property
+    def dataset(self) -> TrajectoryDataset:
+        """The underlying trajectory dataset."""
+        return self._dataset
+
+    def extract(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        include_tool_calls: bool = True,
+        task_id: str = "",
+        agent_id: str = "",
+    ) -> list[TrajectoryItem]:
+        """Extract trajectory items from a message history.
+
+        Breaks the conversation into logical turns, and within each turn,
+        into sub-steps when tool calls are present.
+
+        Args:
+            messages: Flat list of message dicts (OpenAI chat format).
+            include_tool_calls: When *True*, tool-calling turns produce
+                multiple steps (one per assistant response).  When *False*,
+                tool messages are stripped and only user-to-final-answer
+                exchanges are captured.
+            task_id: Task identifier applied to all extracted items.
+            agent_id: Agent identifier applied to all extracted items.
+
+        Returns:
+            List of extracted :class:`TrajectoryItem` instances.  Items are
+            also appended to the underlying dataset.
+        """
+        if not messages:
+            return []
+
+        segments = self._segment_messages(
+            messages, include_tool_calls=include_tool_calls
+        )
+
+        items: list[TrajectoryItem] = []
+        for step, segment in enumerate(segments):
+            item = self._dataset.strategy.build_item(
+                segment,
+                task_id=task_id,
+                agent_id=agent_id,
+                step=step,
+            )
+            self._dataset.append_trajectory(item)
+            items.append(item)
+
+        return items
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _segment_messages(
+        messages: Sequence[dict[str, Any]],
+        *,
+        include_tool_calls: bool = True,
+    ) -> list[list[dict[str, Any]]]:
+        """Split a flat message list into logical execution segments.
+
+        Each segment represents one step in the execution DAG and will be
+        passed to ``strategy.build_item()`` to produce a
+        :class:`TrajectoryItem`.
+
+        When *include_tool_calls* is True, multi-step tool-calling turns
+        produce incremental segments — one ending at each assistant message
+        — so the DAG captures: LLM call → tool chain → final output.
+
+        When *include_tool_calls* is False, tool-role messages and
+        tool_calls on assistant messages are stripped, collapsing each turn
+        into a single user→answer segment.
+        """
+        if not messages:
+            return []
+
+        # Split into turns at each user message.
+        turns: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        for msg in messages:
+            if msg.get("role") == "user" and current:
+                turns.append(current)
+                current = []
+            current.append(msg)
+        if current:
+            turns.append(current)
+
+        segments: list[list[dict[str, Any]]] = []
+
+        for turn in turns:
+            if include_tool_calls:
+                # Find assistant message indices within this turn.
+                asst_indices = [
+                    i for i, m in enumerate(turn) if m.get("role") == "assistant"
+                ]
+                if len(asst_indices) <= 1:
+                    # Simple turn — one segment.
+                    segments.append(list(turn))
+                else:
+                    # Multi-step: create an incremental segment up to each
+                    # assistant message to capture the progression.
+                    for idx in asst_indices:
+                        segments.append(list(turn[: idx + 1]))
+            else:
+                # Strip tool-role messages and tool_calls from assistants.
+                filtered: list[dict[str, Any]] = []
+                for m in turn:
+                    role = m.get("role", "")
+                    if role == "tool":
+                        continue
+                    if role == "assistant" and m.get("tool_calls"):
+                        if not m.get("content"):
+                            # Assistant with only tool_calls and no text — skip.
+                            continue
+                        # Has both content and tool_calls — keep content only.
+                        filtered.append(
+                            {k: v for k, v in m.items() if k != "tool_calls"}
+                        )
+                    else:
+                        filtered.append(m)
+                if filtered:
+                    segments.append(filtered)
+
+        return segments

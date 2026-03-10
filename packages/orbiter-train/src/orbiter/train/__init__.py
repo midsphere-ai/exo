@@ -46,6 +46,7 @@ from orbiter.train.trajectory import (  # pyright: ignore[reportMissingImports]
     DefaultStrategy,
     TrajectoryDataset,
     TrajectoryError,
+    TrajectoryExtractor,
     TrajectoryItem,
     TrajectoryStrategy,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "TrainerState",
     "TrajectoryDataset",
     "TrajectoryError",
+    "TrajectoryExtractor",
     "TrajectoryItem",
     "TrajectoryStrategy",
     "TunableKind",
