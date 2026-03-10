@@ -1,228 +1,233 @@
 #!/usr/bin/env python
-# coding: utf-8
 """
 Tool Call Handler
-Handles tool call execution, type conversion, and formatting
-Also manages sub-agent tool creation and execution
+
+Handles tool call execution, type conversion, and formatting.
+Also manages sub-agent tool creation and execution using Orbiter's Tool system.
 """
 
-import json
-from typing import Dict, Any, List, Optional
 import asyncio
-from openjiuwen.core.runtime.runtime import Runtime
-from openjiuwen.core.common.logging import logger
-from openjiuwen.core.utils.tool.function.function import LocalFunction
-from openjiuwen.core.utils.tool.param import Param
+import json
+import logging
+from typing import Any
+
+from orbiter.tool import Tool
+
+logger = logging.getLogger(__name__)
+
+
+class SubAgentTool(Tool):
+    """Tool wrapper that delegates execution to a sub-agent.
+
+    When the LLM calls this tool, the ``subtask`` argument is forwarded
+    to the wrapped sub-agent's ``invoke()`` method.
+
+    Args:
+        agent_name: Unique name for the tool (should start with 'agent-').
+        sub_agent: Agent instance with an ``invoke()`` coroutine.
+        description: Human-readable description of the sub-agent's purpose.
+    """
+
+    def __init__(self, agent_name: str, sub_agent: Any, description: str) -> None:
+        self.name = agent_name
+        self.description = (
+            f"{description}. Delegate a subtask to this specialized agent "
+            "by providing a clear task description."
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "subtask": {
+                    "type": "string",
+                    "description": (
+                        "The task or question to delegate to this sub-agent. "
+                        "Be specific and provide all necessary context."
+                    ),
+                },
+            },
+            "required": ["subtask"],
+        }
+        self._sub_agent = sub_agent
+
+    async def execute(self, **kwargs: Any) -> str:
+        """Execute the sub-agent with the given subtask.
+
+        Args:
+            **kwargs: Must include ``subtask`` string.
+
+        Returns:
+            The sub-agent's output text.
+        """
+        subtask = kwargs.get("subtask", "")
+        subtask += (
+            "\n\nPlease provide the answer and detailed supporting "
+            "information of the subtask given to you."
+        )
+        result = await self._sub_agent.invoke(
+            {"query": subtask},
+            runtime=None,  # Sub-agent creates its own runtime
+        )
+        return result.get("output", "No result from sub-agent")
 
 
 class ToolCallHandler:
-    """
-    Handles all tool call related operations:
-    - Sub-agent tool creation (creates LocalFunction wrappers)
+    """Handles all tool call related operations.
+
+    Responsibilities:
+    - Sub-agent tool creation (creates SubAgentTool wrappers)
     - Type conversion for tool arguments
     - Tool execution (regular tools and sub-agents)
     - Tool call formatting for message history
     """
 
-    def __init__(self, sub_agents: Dict[str, Any] = None):
-        """
-        Initialize ToolCallHandler
+    def __init__(self, sub_agents: dict[str, Any] | None = None) -> None:
+        """Initialize ToolCallHandler.
 
         Args:
-            sub_agents: Dictionary of sub-agent instances (optional)
+            sub_agents: Dictionary mapping agent names to agent instances.
         """
-        # Use 'is not None' instead of 'or' to preserve empty dict references
         self._sub_agents = sub_agents if sub_agents is not None else {}
 
-    def create_sub_agent_tool(self, agent_name: str, sub_agent: Any) -> LocalFunction:
-        """
-        Create a LocalFunction tool wrapper for a sub-agent
+    def create_sub_agent_tool(self, agent_name: str, sub_agent: Any) -> SubAgentTool:
+        """Create a SubAgentTool wrapper for a sub-agent.
 
         Args:
-            agent_name: Name of the sub-agent (should start with 'agent-')
-            sub_agent: SuperReActAgent instance
+            agent_name: Name of the sub-agent (should start with 'agent-').
+            sub_agent: Agent instance with ``_agent_config.description`` and ``invoke()``.
 
         Returns:
-            LocalFunction that delegates to the sub-agent
+            A SubAgentTool that delegates to the sub-agent.
         """
-        # Get description from sub-agent config
         description = sub_agent._agent_config.description or f"Sub-agent: {agent_name}"
+        tool = SubAgentTool(agent_name, sub_agent, description)
+        logger.info("Created tool wrapper for sub-agent '%s'", agent_name)
+        return tool
 
-        # Create a placeholder function
-        # Note: Actual execution is handled by execute_tool_call() → _execute_sub_agent()
-        def sub_agent_placeholder(subtask: str) -> str:
-            """
-            Placeholder function for sub-agent tool.
-            Actual execution is intercepted by ToolCallHandler.execute_tool_call()
-            """
-            return f"Sub-agent {agent_name} invoked with task: {subtask}"
-
-        # Create the tool with proper parameters
-        sub_agent_tool = LocalFunction(
-            name=agent_name,
-            description=f"{description}. Delegate a subtask to this specialized agent by providing a clear task description.",
-            params=[
-                Param(
-                    name="subtask",
-                    description="The task or question to delegate to this sub-agent. Be specific and provide all necessary context.",
-                    param_type="string",
-                    required=True
-                )
-            ],
-            func=sub_agent_placeholder
-        )
-
-        logger.info(f"Created tool wrapper for sub-agent '{agent_name}'")
-        return sub_agent_tool
-
-    def convert_tool_args(self, tool_args: dict, tool) -> dict:
-        """
-        Convert tool arguments to correct types based on parameter definitions
+    def convert_tool_args(self, tool_args: dict[str, Any], tool: Tool) -> dict[str, Any]:
+        """Convert tool arguments to correct types based on JSON Schema parameters.
 
         Args:
-            tool_args: Raw arguments from LLM (may be strings)
-            tool: Tool instance with params definition
+            tool_args: Raw arguments from LLM (may be strings).
+            tool: Tool instance with ``parameters`` JSON Schema.
 
         Returns:
-            Converted arguments with correct types
+            Converted arguments with correct types.
         """
-        if not hasattr(tool, 'params') or not tool.params:
+        properties = tool.parameters.get("properties", {})
+        if not properties:
             return tool_args
 
-        converted = {}
-        for param in tool.params:
-            param_name = param.name
+        converted: dict[str, Any] = {}
+        for param_name, schema in properties.items():
             if param_name not in tool_args:
                 continue
 
             value = tool_args[param_name]
-            param_type = param.type
+            param_type = schema.get("type", "string")
 
-            # Convert based on type
             try:
-                if param_type == 'integer':
+                if param_type == "integer":
                     converted[param_name] = int(value)
-                elif param_type == 'number':
+                elif param_type == "number":
                     converted[param_name] = float(value)
-                elif param_type == 'boolean':
+                elif param_type == "boolean":
                     if isinstance(value, str):
-                        converted[param_name] = value.lower() in ('true', '1', 'yes')
+                        converted[param_name] = value.lower() in ("true", "1", "yes")
                     else:
                         converted[param_name] = bool(value)
-                elif param_type == 'string':
+                elif param_type == "string":
                     converted[param_name] = str(value)
                 else:
-                    # Keep as-is for complex types
                     converted[param_name] = value
             except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to convert {param_name} to {param_type}: {e}, using raw value")
+                logger.warning(
+                    "Failed to convert %s to %s: %s, using raw value",
+                    param_name, param_type, e,
+                )
                 converted[param_name] = value
 
         return converted
 
     async def execute_tool_call(
         self,
-        tool_call,
-        runtime: Runtime
+        tool_call: Any,
+        tools: dict[str, Tool],
     ) -> Any:
-        """
-        Execute a single tool call
+        """Execute a single tool call.
 
         Args:
-            tool_call: Tool call object from LLM
-            runtime: Runtime instance
+            tool_call: Tool call object from LLM with ``name`` and ``arguments``.
+            tools: Dictionary mapping tool names to Tool instances.
 
         Returns:
-            Tool execution result
+            Tool execution result as a string.
         """
-        # Parse tool call
         tool_name = tool_call.name
         try:
-            tool_args = json.loads(tool_call.arguments) if isinstance(
-                tool_call.arguments, str
-            ) else tool_call.arguments
+            tool_args = (
+                json.loads(tool_call.arguments)
+                if isinstance(tool_call.arguments, str)
+                else tool_call.arguments
+            )
         except (json.JSONDecodeError, AttributeError):
             tool_args = {}
 
-        logger.debug(f"Tool {tool_name} raw args: {tool_args}, types: {[(k, type(v).__name__) for k, v in tool_args.items()]}")
-
-        # Check if this is a sub-agent call
-        if tool_name.startswith("agent-"):
-            return await self._execute_sub_agent(tool_name, tool_args)
-        else:
-            return await self._execute_regular_tool(tool_name, tool_args, runtime)
-
-    async def _execute_sub_agent(self, tool_name: str, tool_args: dict) -> Any:
-        """
-        Execute a sub-agent call
-
-        Args:
-            tool_name: Sub-agent tool name
-            tool_args: Tool arguments
-
-        Returns:
-            Sub-agent result
-        """
-        if tool_name not in self._sub_agents:
-            raise ValueError(f"Sub-agent not found: {tool_name}")
-
-        sub_agent = self._sub_agents[tool_name]
-        subtask = tool_args.get("subtask", "")
-        subtask += "\n\nPlease provide the answer and detailed supporting information of the subtask given to you."
-
-        # Execute sub-agent
-        result = await sub_agent.invoke(
-            {"query": subtask},
-            runtime=None  # Sub-agent creates its own runtime
+        logger.debug(
+            "Tool %s raw args: %s, types: %s",
+            tool_name, tool_args,
+            [(k, type(v).__name__) for k, v in tool_args.items()],
         )
 
-        # Return the output from sub-agent
-        return result.get("output", "No result from sub-agent")
+        # Look up tool
+        tool = tools.get(tool_name)
+        if not tool:
+            raise ValueError(f"Tool not found: {tool_name}")
+
+        # Sub-agent tools handle their own execution via SubAgentTool.execute()
+        if isinstance(tool, SubAgentTool):
+            return await tool.execute(**tool_args)
+
+        return await self._execute_regular_tool(tool_name, tool_args, tool)
 
     async def _execute_regular_tool(
         self,
         tool_name: str,
-        tool_args: dict,
-        runtime: Runtime
-    ) -> Any:
-        """
-        Execute a regular tool call
+        tool_args: dict[str, Any],
+        tool: Tool,
+    ) -> str:
+        """Execute a regular (non-sub-agent) tool call.
 
         Args:
-            tool_name: Tool name
-            tool_args: Tool arguments
-            runtime: Runtime instance
+            tool_name: Tool name.
+            tool_args: Tool arguments.
+            tool: The Tool instance to execute.
 
         Returns:
-            Tool execution result
+            Tool execution result as a string.
         """
-        # Get tool from runtime
-        tool = runtime.get_tool(tool_name)
-        if not tool:
-            raise ValueError(f"Tool not found: {tool_name}")
-
-        # Convert arguments to correct types
         tool_args = self.convert_tool_args(tool_args, tool)
-        logger.debug(f"Tool {tool_name} converted args: {tool_args}, types: {[(k, type(v).__name__) for k, v in tool_args.items()]}")
+        logger.debug(
+            "Tool %s converted args: %s, types: %s",
+            tool_name, tool_args,
+            [(k, type(v).__name__) for k, v in tool_args.items()],
+        )
 
-        # Execute tool
         if tool_name == "auto_browser_use":
-            timeout_seconds = 30 * 60  # 30 minutes safety limit for browser tool
+            timeout_seconds = 30 * 60  # 30 minutes safety limit
             try:
-                result = await asyncio.wait_for(tool.ainvoke(tool_args), timeout=timeout_seconds)
-            except asyncio.TimeoutError:
-                logger.warning(f"Tool {tool_name} timed out after {timeout_seconds} seconds")
+                result = await asyncio.wait_for(
+                    tool.execute(**tool_args), timeout=timeout_seconds,
+                )
+            except TimeoutError:
+                logger.warning("Tool %s timed out after %s seconds", tool_name, timeout_seconds)
                 return "No results obtained due to timeout from the browser use for taking too long"
         else:
-            result = await tool.ainvoke(tool_args)
-        # logger.info(f"Tool {tool_name} executed with result: {result}")
-        # Ensure result is string for downstream processing/logging
-        if not isinstance(result, str):
-            result_str = str(result)
-        else:
-            result_str = result
+            result = await tool.execute(**tool_args)
 
-        max_len = 100_000  # 100k chars = 25k tokens
+        # Ensure result is string for downstream processing
+        result_str = result if isinstance(result, str) else str(result)
+
+        max_len = 100_000  # 100k chars ≈ 25k tokens
         if len(result_str) > max_len:
             result_str = result_str[:max_len] + "\n... [Result truncated]"
         elif len(result_str) == 0:
@@ -230,27 +235,26 @@ class ToolCallHandler:
         return result_str
 
     @staticmethod
-    def format_tool_calls_for_message(tool_calls) -> Optional[List[Dict]]:
-        """
-        Format tool calls for message history
+    def format_tool_calls_for_message(tool_calls: Any) -> list[dict[str, Any]] | None:
+        """Format tool calls for message history.
 
         Args:
-            tool_calls: Tool calls from LLM response
+            tool_calls: Tool calls from LLM response.
 
         Returns:
-            Formatted tool calls for message history, or None if no tool calls
+            Formatted tool calls for message history, or None if empty.
         """
         if not tool_calls:
             return None
 
-        formatted = []
-        for tc in tool_calls:
-            formatted.append({
+        return [
+            {
                 "id": tc.id,
                 "type": tc.type,
                 "function": {
                     "name": tc.name,
-                    "arguments": tc.arguments
-                }
-            })
-        return formatted
+                    "arguments": tc.arguments,
+                },
+            }
+            for tc in tool_calls
+        ]
