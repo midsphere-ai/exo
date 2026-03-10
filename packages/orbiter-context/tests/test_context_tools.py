@@ -30,6 +30,9 @@ from orbiter.context.tools import (  # pyright: ignore[reportMissingImports]
     planning_tool_add,
     planning_tool_complete,
     planning_tool_get,
+    planning_tool_remove,
+    planning_tool_set_status,
+    planning_tool_update,
     reload_tool,
 )
 from orbiter.context.workspace import Workspace  # pyright: ignore[reportMissingImports]
@@ -151,6 +154,173 @@ class TestGetTodo:
         result = await planning_tool_get.execute()
         assert "[ ] Task A" in result
         assert "[x] Task B" in result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Enhanced planning tools
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestUpdateTodoSchema:
+    """update_todo has correct schema (no ctx param)."""
+
+    def test_schema_params(self) -> None:
+        schema = planning_tool_update.parameters
+        assert "index" in schema["properties"]
+        assert "item" in schema["properties"]
+        assert "ctx" not in schema["properties"]
+
+    def test_tool_name(self) -> None:
+        assert planning_tool_update.name == "update_todo"
+
+
+class TestUpdateTodo:
+    """update_todo modifies item text."""
+
+    async def test_update_existing(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Old text", "done": False}]})
+        _bind(planning_tool_update, ctx)
+        result = await planning_tool_update.execute(index=0, item="New text")
+        assert "Updated" in result
+        assert ctx.state.get("todos")[0]["item"] == "New text"
+        assert ctx.state.get("todos")[0]["done"] is False  # preserved
+
+    async def test_update_invalid_index(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_update, ctx)
+        result = await planning_tool_update.execute(index=5, item="New")
+        assert "Invalid index" in result
+
+    async def test_update_empty_list(self) -> None:
+        ctx = _ctx()
+        _bind(planning_tool_update, ctx)
+        result = await planning_tool_update.execute(index=0, item="New")
+        assert "No todos" in result
+
+    async def test_update_preserves_status(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False, "status": "IN_PROGRESS"}]})
+        _bind(planning_tool_update, ctx)
+        await planning_tool_update.execute(index=0, item="Updated task")
+        todo = ctx.state.get("todos")[0]
+        assert todo["item"] == "Updated task"
+        assert todo["status"] == "IN_PROGRESS"
+
+
+class TestRemoveTodoSchema:
+    """remove_todo has correct schema (no ctx param)."""
+
+    def test_schema_params(self) -> None:
+        schema = planning_tool_remove.parameters
+        assert "index" in schema["properties"]
+        assert "ctx" not in schema["properties"]
+
+    def test_tool_name(self) -> None:
+        assert planning_tool_remove.name == "remove_todo"
+
+
+class TestRemoveTodo:
+    """remove_todo deletes items by index."""
+
+    async def test_remove_existing(self) -> None:
+        ctx = _ctx(
+            {
+                "todos": [
+                    {"item": "First", "done": False},
+                    {"item": "Second", "done": False},
+                ]
+            }
+        )
+        _bind(planning_tool_remove, ctx)
+        result = await planning_tool_remove.execute(index=0)
+        assert "Removed" in result
+        assert "First" in result
+        todos = ctx.state.get("todos")
+        assert len(todos) == 1
+        assert todos[0]["item"] == "Second"
+
+    async def test_remove_invalid_index(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_remove, ctx)
+        result = await planning_tool_remove.execute(index=5)
+        assert "Invalid index" in result
+
+    async def test_remove_empty_list(self) -> None:
+        ctx = _ctx()
+        _bind(planning_tool_remove, ctx)
+        result = await planning_tool_remove.execute(index=0)
+        assert "No todos" in result
+
+    async def test_remove_last_item(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Only", "done": False}]})
+        _bind(planning_tool_remove, ctx)
+        result = await planning_tool_remove.execute(index=0)
+        assert "Removed" in result
+        assert ctx.state.get("todos") == []
+
+
+class TestSetTodoStatusSchema:
+    """set_todo_status has correct schema (no ctx param)."""
+
+    def test_schema_params(self) -> None:
+        schema = planning_tool_set_status.parameters
+        assert "index" in schema["properties"]
+        assert "status" in schema["properties"]
+        assert "ctx" not in schema["properties"]
+
+    def test_tool_name(self) -> None:
+        assert planning_tool_set_status.name == "set_todo_status"
+
+
+class TestSetTodoStatus:
+    """set_todo_status sets PENDING, IN_PROGRESS, or COMPLETED."""
+
+    async def test_set_pending(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="PENDING")
+        assert "PENDING" in result
+        assert ctx.state.get("todos")[0]["status"] == "PENDING"
+
+    async def test_set_in_progress(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="IN_PROGRESS")
+        assert "IN_PROGRESS" in result
+        assert ctx.state.get("todos")[0]["status"] == "IN_PROGRESS"
+
+    async def test_set_completed(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="COMPLETED")
+        assert "COMPLETED" in result
+        assert ctx.state.get("todos")[0]["status"] == "COMPLETED"
+
+    async def test_invalid_status(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="INVALID")
+        assert "Invalid status" in result
+
+    async def test_invalid_index(self) -> None:
+        ctx = _ctx({"todos": [{"item": "Task", "done": False}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=5, status="PENDING")
+        assert "Invalid index" in result
+
+    async def test_empty_list(self) -> None:
+        ctx = _ctx()
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="PENDING")
+        assert "No todos" in result
+
+    async def test_backward_compatible_no_status(self) -> None:
+        """Items without 'status' key still work — status is additive."""
+        ctx = _ctx({"todos": [{"item": "Legacy", "done": True}]})
+        _bind(planning_tool_set_status, ctx)
+        result = await planning_tool_set_status.execute(index=0, status="IN_PROGRESS")
+        todo = ctx.state.get("todos")[0]
+        assert todo["status"] == "IN_PROGRESS"
+        assert todo["done"] is True  # original fields preserved
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -627,9 +797,16 @@ class TestFactoryFunctions:
 
     def test_get_planning_tools(self) -> None:
         tools = get_planning_tools()
-        assert len(tools) == 3
+        assert len(tools) == 6
         names = {t.name for t in tools}
-        assert names == {"add_todo", "complete_todo", "get_todo"}
+        assert names == {
+            "add_todo",
+            "complete_todo",
+            "get_todo",
+            "update_todo",
+            "remove_todo",
+            "set_todo_status",
+        }
 
     def test_get_knowledge_tools(self) -> None:
         tools = get_knowledge_tools()
@@ -650,7 +827,7 @@ class TestFactoryFunctions:
 
     def test_get_context_tools(self) -> None:
         tools = get_context_tools()
-        assert len(tools) == 12
+        assert len(tools) == 15
         names = {t.name for t in tools}
         assert "add_todo" in names
         assert "get_knowledge" in names

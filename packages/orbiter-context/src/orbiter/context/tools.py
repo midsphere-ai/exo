@@ -122,9 +122,89 @@ planning_tool_get = _ContextTool(
 )
 
 
+# ── Enhanced planning tools ────────────────────────────────────────
+
+
+async def _update_todo(ctx: Any, index: int, item: str) -> str:
+    """Update a todo item's text by its index (0-based).
+
+    Args:
+        index: The 0-based index of the todo item to update.
+        item: The new text for the todo item.
+    """
+    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+    if not todos:
+        return "No todos found."
+    todos = [dict(t) for t in todos]  # defensive copy
+    if index < 0 or index >= len(todos):
+        return f"Invalid index {index}. Have {len(todos)} todos."
+    old_item = todos[index]["item"]
+    todos[index]["item"] = item
+    ctx.state.set("todos", todos)
+    return f"Updated todo #{index}: '{old_item}' -> '{item}'"
+
+
+async def _remove_todo(ctx: Any, index: int) -> str:
+    """Remove a todo item by its index (0-based).
+
+    Args:
+        index: The 0-based index of the todo item to remove.
+    """
+    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+    if not todos:
+        return "No todos found."
+    todos = [dict(t) for t in todos]  # defensive copy
+    if index < 0 or index >= len(todos):
+        return f"Invalid index {index}. Have {len(todos)} todos."
+    removed = todos.pop(index)
+    ctx.state.set("todos", todos)
+    return f"Removed todo #{index}: {removed['item']}"
+
+
+_VALID_TODO_STATUSES = {"PENDING", "IN_PROGRESS", "COMPLETED"}
+
+
+async def _set_todo_status(ctx: Any, index: int, status: str) -> str:
+    """Set the status of a todo item.
+
+    Args:
+        index: The 0-based index of the todo item.
+        status: The status to set — PENDING, IN_PROGRESS, or COMPLETED.
+    """
+    if status not in _VALID_TODO_STATUSES:
+        return f"Invalid status '{status}'. Must be one of: PENDING, IN_PROGRESS, COMPLETED."
+    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+    if not todos:
+        return "No todos found."
+    todos = [dict(t) for t in todos]  # defensive copy
+    if index < 0 or index >= len(todos):
+        return f"Invalid index {index}. Have {len(todos)} todos."
+    todos[index]["status"] = status
+    ctx.state.set("todos", todos)
+    return f"Set todo #{index} status to {status}: {todos[index]['item']}"
+
+
+planning_tool_update = _ContextTool(
+    _update_todo, name="update_todo", description="Update a todo item's text by index."
+)
+planning_tool_remove = _ContextTool(
+    _remove_todo, name="remove_todo", description="Remove a todo item by index."
+)
+planning_tool_set_status = _ContextTool(
+    _set_todo_status, name="set_todo_status", description="Set the status of a todo item."
+)
+
+
 def get_planning_tools() -> list[Tool]:
     """Return all planning tools."""
-    return [planning_tool_add, planning_tool_complete, planning_tool_get]
+    return [
+        planning_tool_add,
+        planning_tool_complete,
+        planning_tool_get,
+        planning_tool_update,
+        planning_tool_remove,
+        planning_tool_set_status,
+    ]
 
 
 # ── Knowledge tool ──────────────────────────────────────────────────
