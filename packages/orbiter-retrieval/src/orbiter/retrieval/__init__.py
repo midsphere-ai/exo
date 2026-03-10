@@ -12,6 +12,7 @@ from orbiter.retrieval.chunker import (  # pyright: ignore[reportMissingImports]
     TokenChunker,
 )
 from orbiter.retrieval.embeddings import Embeddings  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.graph_retriever import GraphRetriever  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.http_embeddings import HTTPEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.hybrid_retriever import HybridRetriever  # pyright: ignore[reportMissingImports]
@@ -55,6 +56,7 @@ __all__ = [
     "Chunker",
     "Document",
     "Embeddings",
+    "GraphRetriever",
     "HTTPEmbeddings",
     "HybridRetriever",
     "InMemoryVectorStore",

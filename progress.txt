@@ -4159,3 +4159,21 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Frozen dataclass works well for Triple (immutable graph data); frozen Pydantic BaseModel used for Chunk/RetrievalResult
   - MockProvider pattern: return configurable `ModelResponse(content=...)` for LLM-dependent tests; use MultiResponseProvider for per-call responses
 ---
+
+## 2026-03-10 - US-049
+- Implemented GraphRetriever: graph-based retriever that expands search results via knowledge graph traversal
+- GraphRetriever(Retriever) takes base_retriever and triples: list[Triple]
+- After initial retrieval, expands by finding triples where retrieved entities appear as subject/object
+- Beam search expansion with configurable beam_width (default 3) and max_hops (default 2)
+- Returns expanded results with graph-traversal metadata (graph_hop, graph_triple, graph_source_entity)
+- Score decay (0.8^hop) ensures base results rank higher than expanded results
+- Case-insensitive entity matching, deduplication by (document_id, index)
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/graph_retriever.py (new)
+  - packages/orbiter-retrieval/tests/test_graph_retriever.py (new, 20 tests)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (added GraphRetriever export)
+- **Learnings for future iterations:**
+  - Beam width applies per entity per hop — seed triples that reference already-seen chunks still consume beam slots, so test fixtures should account for this
+  - Entity extraction uses source_chunk_id matching between triples and result chunks — format is "document_id:index"
+  - Retriever composition pattern: wrap base_retriever, call its retrieve(), then augment results (same as HybridRetriever, AgenticRetriever)
+---
