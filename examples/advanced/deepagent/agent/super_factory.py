@@ -1,19 +1,24 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Factory functions for creating Super agents.
+
+Constructs ``orbiter.agent.Agent`` instances (replacing openjiuwen agents).
+Follows the ``deepsearch/agents.py`` pattern — tools are passed as instances,
+multi-agent orchestration uses ``orbiter.swarm.Swarm(mode="team")``.
 """
-Factory functions for creating Super agents
-"""
 
-from typing import List, Dict, Optional
+from __future__ import annotations
 
-from openjiuwen.core.utils.tool.base import Tool
-from openjiuwen.core.workflow.base import Workflow
-from openjiuwen.core.component.common.configs.model_config import ModelConfig
-from openjiuwen.core.utils.llm.base import BaseModelInfo
-from openjiuwen.agent.common.schema import PluginSchema, WorkflowSchema
+from typing import Any
 
-from agent.super_config import SuperAgentConfig, SuperAgentFactory
-from agent.super_react_agent import SuperReActAgent
+from orbiter.agent import Agent
+from orbiter.swarm import Swarm
+from orbiter.tool import Tool
+
+from .super_config import (
+    ModelInfo,
+    SuperAgentConfig,
+    SuperAgentFactory,
+    SuperModelConfig,
+)
 
 
 def create_super_main_agent(
@@ -26,112 +31,68 @@ def create_super_main_agent(
     system_prompt: str = "",
     max_iteration: int = 20,
     max_tool_calls_per_turn: int = 5,
-    tools: List[Tool] = None,
-    workflows: List[Workflow] = None,
-    sub_agent_configs: Dict[str, SuperAgentConfig] = None,
+    tools: list[Tool] | None = None,
+    sub_agent_configs: dict[str, SuperAgentConfig] | None = None,
     enable_o3_hints: bool = False,
     enable_o3_final_answer: bool = False,
-    o3_api_key: Optional[str] = None,
+    o3_api_key: str | None = None,
     task_guidance: str = "",
-    enable_todo_plan: bool = True
-) -> SuperReActAgent:
-    """
-    Create a Super main agent
+    enable_todo_plan: bool = True,
+) -> Agent:
+    """Create a Super main agent backed by Orbiter's Agent.
 
     Args:
-        agent_id: Agent ID
-        agent_version: Agent version
-        description: Agent description
-        model_name: LLM model name
-        api_key: OpenRouter API key
-        api_base: OpenRouter API base URL
-        system_prompt: System prompt
-        max_iteration: Max iterations for ReAct loop
-        max_tool_calls_per_turn: Max tool calls per turn
-        tools: List of tools
-        workflows: List of workflows
-        sub_agent_configs: Sub-agent configurations
-        enable_o3_hints: Enable O3 hints extraction
-        enable_o3_final_answer: Enable O3 final answer extraction
-        o3_api_key: OpenAI API key for O3
-        task_guidance: Additional guidance for task execution
-        enable_todo_plan: Toggle todo.md plan tracking and context updates
+        agent_id: Agent identifier.
+        agent_version: Agent version string.
+        description: Human-readable agent description.
+        model_name: LLM model name (e.g. ``"anthropic/claude-sonnet-4.5"``).
+        api_key: Provider API key.
+        api_base: Provider base URL.
+        system_prompt: System prompt text.
+        max_iteration: Maximum iterations for the agent loop.
+        max_tool_calls_per_turn: Maximum tool calls per turn.
+        tools: Tool instances available to the agent.
+        sub_agent_configs: Sub-agent configurations (stored on config).
+        enable_o3_hints: Enable reasoning-model hint extraction.
+        enable_o3_final_answer: Enable reasoning-model final answer extraction.
+        o3_api_key: OpenAI API key for reasoning model.
+        task_guidance: Additional task guidance text.
+        enable_todo_plan: Toggle todo.md plan tracking.
 
     Returns:
-        SuperReActAgent instance
+        Configured ``Agent`` instance.
     """
-
-    # Create model config
     model_info = ModelInfo(
         api_key=api_key,
         api_base=api_base,
         model_name=model_name,
-        timeout=600
+        timeout=600,
     )
-
-    model_config = ModelConfig(
-        model_provider="openrouter",
-        model_info=model_info
+    model_config = SuperModelConfig(model_info=model_info)
+    prompt_template = (
+        [{"role": "system", "content": system_prompt}] if system_prompt else []
     )
+    tool_names = [t.name for t in (tools or [])]
 
-    # Create prompt template
-    prompt_template = [
-        {"role": "system", "content": system_prompt}
-    ] if system_prompt else []
-
-    # Create tool and workflow schemas
-    tool_names = [tool.name for tool in (tools or [])]
-
-    plugin_schemas = []
-    for tool in (tools or []):
-        plugin_schemas.append(PluginSchema(
-            id=tool.name,
-            name=tool.name,
-            description=getattr(tool, 'description', ''),
-            inputs={}
-        ))
-
-    workflow_schemas = []
-    for workflow in (workflows or []):
-        wf_config = workflow.config()
-        workflow_schemas.append(WorkflowSchema(
-            id=wf_config.metadata.id,
-            name=wf_config.metadata.name,
-            version=wf_config.metadata.version,
-            description=wf_config.metadata.description
-        ))
-
-    # Create main agent config
     agent_config = SuperAgentFactory.create_main_agent_config(
         agent_id=agent_id,
         agent_version=agent_version,
         description=description,
         model=model_config,
         prompt_template=prompt_template,
-        workflows=workflow_schemas,
-        plugins=plugin_schemas,
         tools=tool_names,
         max_iteration=max_iteration,
         max_tool_calls_per_turn=max_tool_calls_per_turn,
-        enable_o3_hints=enable_o3_hints,
-        enable_o3_final_answer=enable_o3_final_answer,
-        o3_api_key=o3_api_key,
+        enable_question_hints=enable_o3_hints,
+        enable_extract_final_answer=enable_o3_final_answer,
+        open_api_key=o3_api_key,
         task_guidance=task_guidance,
-        enable_todo_plan=enable_todo_plan
+        enable_todo_plan=enable_todo_plan,
     )
-
-    # Add sub-agent configs
     if sub_agent_configs:
         agent_config.sub_agent_configs = sub_agent_configs
 
-    # Create agent instance
-    main_agent = SuperReActAgent(
-        agent_config=agent_config,
-        workflows=workflows,
-        tools=tools
-    )
-
-    return main_agent
+    return _build_agent(agent_config, tools)
 
 
 def create_super_sub_agent(
@@ -144,151 +105,154 @@ def create_super_sub_agent(
     system_prompt: str = "",
     max_iteration: int = 10,
     max_tool_calls_per_turn: int = 3,
-    tools: List[Tool] = None,
-    workflows: List[Workflow] = None,
-    enable_todo_plan: bool = True
-) -> SuperReActAgent:
-    """
-    Create a Super sub-agent
+    tools: list[Tool] | None = None,
+    enable_todo_plan: bool = True,
+) -> Agent:
+    """Create a Super sub-agent backed by Orbiter's Agent.
 
     Args:
-        agent_id: Agent ID (also used as agent type)
-        agent_version: Agent version
-        description: Agent description
-        model_name: LLM model name
-        api_key: OpenRouter API key
-        api_base: OpenRouter API base URL
-        system_prompt: System prompt
-        max_iteration: Max iterations for ReAct loop
-        max_tool_calls_per_turn: Max tool calls per turn
-        tools: List of tools
-        workflows: List of workflows
-        enable_todo_plan: Toggle todo.md plan tracking and context updates
+        agent_id: Agent identifier (also used as agent type).
+        agent_version: Agent version string.
+        description: Human-readable agent description.
+        model_name: LLM model name.
+        api_key: Provider API key.
+        api_base: Provider base URL.
+        system_prompt: System prompt text.
+        max_iteration: Maximum iterations for the agent loop.
+        max_tool_calls_per_turn: Maximum tool calls per turn.
+        tools: Tool instances available to the agent.
+        enable_todo_plan: Toggle todo.md plan tracking.
 
     Returns:
-        SuperReActAgent instance
+        Configured ``Agent`` instance.
     """
-
-    # Create model config
     model_info = ModelInfo(
         api_key=api_key,
         api_base=api_base,
         model_name=model_name,
-        timeout=600
+        timeout=600,
     )
-
-    model_config = ModelConfig(
-        model_provider="openrouter",
-        model_info=model_info
+    model_config = SuperModelConfig(model_info=model_info)
+    prompt_template = (
+        [{"role": "system", "content": system_prompt}] if system_prompt else []
     )
+    tool_names = [t.name for t in (tools or [])]
 
-    # Create prompt template
-    prompt_template = [
-        {"role": "system", "content": system_prompt}
-    ] if system_prompt else []
-
-    # Create tool and workflow schemas
-    tool_names = [tool.name for tool in (tools or [])]
-
-    plugin_schemas = []
-    for tool in (tools or []):
-        plugin_schemas.append(PluginSchema(
-            id=tool.name,
-            name=tool.name,
-            description=getattr(tool, 'description', ''),
-            inputs={}
-        ))
-
-    workflow_schemas = []
-    for workflow in (workflows or []):
-        wf_config = workflow.config()
-        workflow_schemas.append(WorkflowSchema(
-            id=wf_config.metadata.id,
-            name=wf_config.metadata.name,
-            version=wf_config.metadata.version,
-            description=wf_config.metadata.description
-        ))
-
-    # Create sub-agent config
     agent_config = SuperAgentFactory.create_sub_agent_config(
         agent_id=agent_id,
         agent_version=agent_version,
         description=description,
         model=model_config,
         prompt_template=prompt_template,
-        workflows=workflow_schemas,
-        plugins=plugin_schemas,
         tools=tool_names,
         max_iteration=max_iteration,
         max_tool_calls_per_turn=max_tool_calls_per_turn,
-        enable_todo_plan=enable_todo_plan
+        enable_todo_plan=enable_todo_plan,
     )
 
-    # Create agent instance
-    sub_agent = SuperReActAgent(
-        agent_config=agent_config,
-        workflows=workflows,
-        tools=tools
-    )
-
-    return sub_agent
+    return _build_agent(agent_config, tools)
 
 
 def create_agent_system_with_sub_agents(
-    main_agent_params: Dict,
-    sub_agent_configs: Dict[str, Dict]
-) -> SuperReActAgent:
-    """
-    Create a complete agent system with main agent and sub-agents
+    main_agent_params: dict[str, Any],
+    sub_agent_configs: dict[str, dict[str, Any]],
+) -> Swarm:
+    """Create a multi-agent system using Orbiter's Swarm.
+
+    Builds sub-agents and a main agent, then returns a ``Swarm(mode="team")``
+    where the main agent leads and sub-agents are workers.  The Swarm
+    auto-generates ``delegate_to_<worker>`` tools for the lead agent.
 
     Args:
-        main_agent_params: Parameters for main agent (same as create_super_main_agent)
-        sub_agent_configs: Dict mapping agent_name -> sub-agent parameters
+        main_agent_params: Keyword arguments for ``create_super_main_agent``.
+        sub_agent_configs: Mapping of agent name to keyword arguments for
+            ``create_super_sub_agent``.
 
     Returns:
-        Main agent with sub-agents registered
+        Configured ``Swarm`` instance.
 
-    Example:
-        main_agent = create_agent_system_with_sub_agents(
+    Example::
+
+        swarm = create_agent_system_with_sub_agents(
             main_agent_params={
                 "agent_id": "main",
                 "api_key": "...",
                 "system_prompt": "...",
                 "tools": main_tools,
-                "max_iteration": 20
             },
             sub_agent_configs={
                 "agent-browser": {
                     "agent_id": "agent-browser",
-                    "description": "Browser agent for web search",
+                    "description": "Browser agent",
                     "api_key": "...",
-                    "system_prompt": "...",
                     "tools": browser_tools,
-                    "max_iteration": 10
                 },
-                "agent-coder": {
-                    "agent_id": "agent-coder",
-                    "description": "Coding agent",
-                    "api_key": "...",
-                    "system_prompt": "...",
-                    "tools": coder_tools,
-                    "max_iteration": 10
-                }
-            }
+            },
         )
     """
+    workers = [
+        create_super_sub_agent(**params)
+        for params in sub_agent_configs.values()
+    ]
 
-    # Create sub-agents first
-    sub_agents = {}
-    for agent_name, sub_params in sub_agent_configs.items():
-        sub_agent = create_super_sub_agent(**sub_params)
-        sub_agents[agent_name] = sub_agent
+    lead = create_super_main_agent(**main_agent_params)
 
-    # Create main agent
-    main_agent = create_super_main_agent(**main_agent_params)
+    return Swarm(agents=[lead, *workers], mode="team")
 
-    # Register sub-agents with main agent
-    for agent_name, sub_agent in sub_agents.items():
-        main_agent.register_sub_agent(agent_name, sub_agent)
 
-    return main_agent
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_agent(config: SuperAgentConfig, tools: list[Tool] | None) -> Agent:
+    """Construct an ``Agent`` from a ``SuperAgentConfig`` and tool instances.
+
+    Args:
+        config: Agent configuration with model/prompt/constraint settings.
+        tools: Tool instances to attach.
+
+    Returns:
+        Configured ``Agent`` instance.
+    """
+    model_str = _resolve_model_string(config)
+    system_prompt = _extract_system_prompt(config)
+
+    return Agent(
+        name=config.id or "agent",
+        model=model_str,
+        instructions=system_prompt,
+        tools=tools or [],
+        max_steps=config.constrain.max_iteration,
+    )
+
+
+def _resolve_model_string(config: SuperAgentConfig) -> str:
+    """Build an Orbiter ``"provider:model"`` string from config.
+
+    Args:
+        config: Agent configuration.
+
+    Returns:
+        Model string such as ``"openrouter:anthropic/claude-sonnet-4.5"``.
+    """
+    model_name = config.model.model_info.model_name
+    api_base = config.model.model_info.api_base or ""
+    if "openrouter" in api_base:
+        return f"openrouter:{model_name}"
+    return model_name
+
+
+def _extract_system_prompt(config: SuperAgentConfig) -> str:
+    """Extract the system prompt text from the config's prompt_template.
+
+    Args:
+        config: Agent configuration.
+
+    Returns:
+        System prompt string, or empty string if not set.
+    """
+    for entry in config.prompt_template:
+        if entry.get("role") == "system":
+            return entry.get("content", "")
+    return ""
