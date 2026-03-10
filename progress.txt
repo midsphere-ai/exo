@@ -3589,3 +3589,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - When guardrail blocks at PRE_LLM_CALL, the provider.complete is never called — assert_not_called() is a good verification
   - Hooks registered first execute first — guardrail execution order matches attach() call order
 ---
+
+## 2026-03-10 - US-013
+- Produced `docs/design/context-enhancement-design.md` covering all four context enhancement areas
+- Read agent-core's context_engine (offloading, compression, round windowing, token budgeting)
+- Read Orbiter's processor.py, token_tracker.py, config.py, context.py
+- Confirmed new processors plug into existing ProcessorPipeline.register() without any changes
+- Documented interaction with SummarizeProcessor and ToolResultOffloader
+- Typecheck passes (0 errors)
+- Files changed: `docs/design/context-enhancement-design.md` (new), `prd.json`
+- **Learnings for future iterations:**
+  - New processors go in existing `processor.py` — no new files needed; pipeline is event-keyed defaultdict
+  - ContextConfig.extra dict is the extension point for new processor config (e.g., token_budget, token_encoding) without changing the frozen model
+  - ProcessorPipeline fires processors in registration order per event — order matters for pre_llm_call chain: offload → compress → window → summarize → token budget
+  - tiktoken should be an optional dependency (`orbiter-context[tiktoken]`) since only TokenBudgetProcessor needs it
+  - System messages must never be offloaded or trimmed — only user/assistant/tool messages
+  - Round definition: user → assistant(no tool_calls) = 1 round; tool-calling sequences within a round are preserved as a unit
+---
