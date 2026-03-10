@@ -1,92 +1,127 @@
-"""Configuration for the DeepSearch engine."""
+"""DeepAgent configuration — mirrors SkyworkAI DeepResearchAgent settings."""
+
 from __future__ import annotations
+
 import os
-import logging
-from dataclasses import dataclass, field
+from typing import Any
 
-logger = logging.getLogger("deepsearch")
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class DeepSearchConfig:
-    # LLM
-    llm_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+class DeepAgentConfig(BaseModel):
+    """Configuration for the DeepAgent research system.
 
-    # Search
-    search_provider: str = "auto"
-    content_reader: str = "auto"
-    embedding_provider: str = "auto"
+    Mirrors the configuration parameters from SkyworkAI's DeepResearchAgent,
+    adapted for the Orbiter framework.
+    """
 
-    # Self-hosted services
-    searxng_url: str = ""  # e.g. http://localhost:8888
-    reader_url: str = ""   # e.g. http://localhost:3000
+    # Model configuration
+    lead_model: str = Field(
+        default="openai:gpt-4o",
+        description="Model for the lead planning agent.",
+    )
+    researcher_model: str = Field(
+        default="openai:gpt-4o-mini",
+        description="Model for the researcher worker agent.",
+    )
+    tool_model: str = Field(
+        default="openai:gpt-4o-mini",
+        description="Model for internal tool LLM calls (query gen, evaluation, summarization).",
+    )
 
-    # API Keys
-    jina_api_key: str = ""
-    brave_api_key: str = ""
-    serper_api_key: str = ""
+    # Search configuration
+    search_provider: str = Field(
+        default="duckduckgo",
+        description="Search provider: duckduckgo | brave | serper | jina.",
+    )
+    search_num_results: int = Field(
+        default=5,
+        description="Number of search results per query.",
+    )
+    search_max_rounds: int = Field(
+        default=3,
+        description="Maximum search rounds for deep research.",
+    )
 
-    # Budget
-    token_budget: int = 1_000_000
-    max_bad_attempts: int = 2
-    step_sleep: float = 1.0
+    # Content reader configuration
+    content_reader: str = Field(
+        default="httpx",
+        description="Content reader backend: httpx | jina.",
+    )
+    content_max_length: int = Field(
+        default=4096,
+        description="Maximum content length for fetched pages.",
+    )
 
-    # Limits
-    max_urls_per_step: int = 5
-    max_queries_per_step: int = 5
-    max_reflect_per_step: int = 2
+    # LLM search configuration (parallel LLM-based web search)
+    use_llm_search: bool = Field(
+        default=False,
+        description="Whether to use LLM models for parallel web search.",
+    )
+    search_llm_models: list[str] = Field(
+        default_factory=list,
+        description="LLM models for parallel search (e.g. ['openai:o3-mini']).",
+    )
+
+    # Agent configuration
+    lead_max_steps: int = Field(
+        default=15,
+        description="Maximum tool-calling steps for the lead agent.",
+    )
+    researcher_max_steps: int = Field(
+        default=10,
+        description="Maximum tool-calling steps for each worker agent.",
+    )
+
+    # API keys
+    brave_api_key: str | None = Field(default=None, description="Brave Search API key.")
+    serper_api_key: str | None = Field(default=None, description="Serper API key.")
+    jina_api_key: str | None = Field(default=None, description="Jina API key.")
 
     # Output
-    max_returned_urls: int = 100
-    max_references: int = 10
-    min_relevance_score: float = 0.80
+    output_dir: str = Field(
+        default="deepagent_output",
+        description="Directory for saving research reports.",
+    )
 
-    # Features
-    with_images: bool = False
-    team_size: int = 1
-    no_direct_answer: bool = False
+    @classmethod
+    def from_env(cls, **overrides: Any) -> DeepAgentConfig:
+        """Build config from environment variables with optional overrides."""
+        env_map: dict[str, str] = {
+            "lead_model": "DEEPAGENT_LEAD_MODEL",
+            "researcher_model": "DEEPAGENT_RESEARCHER_MODEL",
+            "tool_model": "DEEPAGENT_TOOL_MODEL",
+            "search_provider": "DEEPAGENT_SEARCH_PROVIDER",
+            "search_num_results": "DEEPAGENT_SEARCH_NUM_RESULTS",
+            "search_max_rounds": "DEEPAGENT_SEARCH_MAX_ROUNDS",
+            "content_reader": "DEEPAGENT_CONTENT_READER",
+            "content_max_length": "DEEPAGENT_CONTENT_MAX_LENGTH",
+            "use_llm_search": "DEEPAGENT_USE_LLM_SEARCH",
+            "lead_max_steps": "DEEPAGENT_LEAD_MAX_STEPS",
+            "researcher_max_steps": "DEEPAGENT_RESEARCHER_MAX_STEPS",
+            "brave_api_key": "BRAVE_API_KEY",
+            "serper_api_key": "SERPER_API_KEY",
+            "jina_api_key": "JINA_API_KEY",
+            "output_dir": "DEEPAGENT_OUTPUT_DIR",
+        }
 
-    def __post_init__(self) -> None:
-        # Load from environment
-        if not self.searxng_url:
-            self.searxng_url = os.environ.get("SEARXNG_URL", "")
-        if not self.reader_url:
-            self.reader_url = os.environ.get("READER_URL", "")
-        if not self.jina_api_key:
-            self.jina_api_key = os.environ.get("JINA_API_KEY", "")
-        if not self.brave_api_key:
-            self.brave_api_key = os.environ.get("BRAVE_API_KEY", "")
-        if not self.serper_api_key:
-            self.serper_api_key = os.environ.get("SERPER_API_KEY", "")
+        kwargs: dict[str, Any] = {}
+        for field_name, env_var in env_map.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                # Type coercion for non-string fields
+                field_info = cls.model_fields[field_name]
+                annotation = field_info.annotation
+                if annotation is int or (hasattr(annotation, "__origin__") and annotation.__origin__ is int):
+                    val = int(val)
+                elif annotation is bool:
+                    val = val.lower() in ("true", "1", "yes")
+                kwargs[field_name] = val
 
-        # Auto-detect providers — prefer self-hosted, then API-based, then free
-        if self.search_provider == "auto":
-            if self.searxng_url:
-                self.search_provider = "searxng"
-            elif self.jina_api_key:
-                self.search_provider = "jina"
-            elif self.brave_api_key:
-                self.search_provider = "brave"
-            elif self.serper_api_key:
-                self.search_provider = "serper"
-            else:
-                self.search_provider = "duck"
+        # Parse comma-separated LLM search models
+        llm_models_env = os.environ.get("DEEPAGENT_SEARCH_LLM_MODELS", "")
+        if llm_models_env:
+            kwargs["search_llm_models"] = [m.strip() for m in llm_models_env.split(",") if m.strip()]
 
-        if self.content_reader == "auto":
-            if self.reader_url:
-                self.content_reader = "selfhosted"
-            elif self.jina_api_key:
-                self.content_reader = "jina"
-            else:
-                self.content_reader = "http"
-
-        if self.embedding_provider == "auto":
-            if self.jina_api_key:
-                self.embedding_provider = "jina"
-            else:
-                self.embedding_provider = "local"
-
-    @property
-    def model_string(self) -> str:
-        return f"{self.llm_provider}:{self.model_name}"
+        kwargs.update(overrides)
+        return cls(**kwargs)

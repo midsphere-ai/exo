@@ -23,6 +23,7 @@ members = [
     "packages/orbiter-train",
     "packages/orbiter-web",
     "packages/orbiter",
+    "packages/orbiter-perplexica",
 ]
 
 [dependency-groups]
@@ -72,6 +73,7 @@ orbiter-server = { workspace = true }
 orbiter-train = { workspace = true }
 orbiter-web = { workspace = true }
 orbiter-ai = { workspace = true }
+orbiter-perplexica = { workspace = true }
 
 [tool.ruff]
 target-version = "py311"
