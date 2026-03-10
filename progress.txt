@@ -4008,3 +4008,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use `patch.dict("sys.modules", {"asyncpg": MagicMock()})` to test asyncpg-dependent code without installing asyncpg
   - orbiter-retrieval uses relative imports with `# pyright: ignore[reportMissingImports]` for namespace package compatibility
 ---
+
+## 2026-03-10 - US-039
+- What was implemented: ChromaDB VectorStore backend for local persistent/ephemeral vector search
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/backends/chroma.py (new — ChromaVectorStore wrapping chromadb Collection API)
+  - packages/orbiter-retrieval/tests/test_chroma_store.py (new — 18 tests with mocked ChromaDB client)
+  - packages/orbiter-retrieval/pyproject.toml (updated — added [chroma] optional dependency)
+- **Learnings for future iterations:**
+  - ChromaDB metadata must be flat (str/int/float/bool values) — store nested chunk metadata as JSON string in `chunk_metadata` field
+  - ChromaDB returns cosine distances (0 = identical, 2 = opposite) — convert to similarity via `1 - distance`
+  - ChromaDB `$contains` operator on string metadata field enables filtering by JSON-encoded key-value pairs
+  - For `clear()`, delete and re-create the collection (ChromaDB has no truncate equivalent)
+  - ChromaDB `upsert` is preferred over `add` to handle re-indexing gracefully
+  - Mock chromadb with `patch.dict("sys.modules", {"chromadb": mock_module})` + MagicMock for client/collection — same pattern as asyncpg mocking
+  - Backends are NOT exported from main `__init__.py` — users import directly from `orbiter.retrieval.backends.chroma`
+---
