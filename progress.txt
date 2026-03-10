@@ -4907,3 +4907,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - ContextManager.upsert_system_message signature is (content: str, label: str) — matches ContextUpdateCallback
   - OpenRouterLLM._ainvoke(model_name, messages, tools) is the LLM call interface — wrap in a closure for generic LLMCallable
 ---
+
+## 2026-03-11 05:15 - US-098
+- Port SuperReActAgent Part 2 — MCP and tool registration to Orbiter
+- Replaced 4 openjiuwen imports: Tool → orbiter.tool.Tool, LocalFunction → FunctionTool, Param → removed (JSON Schema), ToolServerConfig → MCPServerConfig, Runner/resource_mgr → MCPServerConnection
+- Rewrote `_make_mcp_call_coroutine` to use `MCPServerConnection.call_tool()` instead of `Runner.run_tool()`
+- Rewrote `_normalize_mcp_server_config` to return `MCPServerConfig` from orbiter-mcp (supports stdio/SSE/streamable_http)
+- Rewrote `_register_mcp_server_as_local_tools` to use `MCPServerConnection` for discovery and `FunctionTool` for wrapping (with overridden JSON Schema parameters from MCP tool inputSchema)
+- Added `_mcp_connections: list[MCPServerConnection]` to `__init__` for connection lifecycle management
+- Added `orbiter-mcp` dependency to deepagent example's pyproject.toml
+- Files changed: examples/advanced/deepagent/agent/super_react_agent.py, examples/advanced/deepagent/pyproject.toml
+- **Learnings for future iterations:**
+  - `FunctionTool` auto-generates schema from function signature — for MCP tools with explicit JSON Schema, override `ft.parameters` after construction
+  - orbiter-mcp uses namespace packages — imports need `# pyright: ignore[reportMissingImports]` comment
+  - `MCPServerConnection` is an async context manager; stored connections need explicit cleanup (add to US-099 scope)
+  - `_execute_tool_call` signature mismatch exists: takes `runtime: Runtime` but ToolCallHandler (US-093) now expects `tools: dict[str, Tool]` — must be fixed in US-099
+  - 135 insertions + 97 deletions = well under the 200 line budget
+---

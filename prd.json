@@ -1709,7 +1709,7 @@
         "Max 200 lines changed"
       ],
       "priority": 98,
-      "passes": false,
+      "passes": true,
       "notes": "Epic 11 \u2014 replaces 4 of the 9 openjiuwen imports in super_react_agent.py. Depends on US-093 (ToolCallHandler port) and US-097 (PlanTracker extraction)."
     },
     {
