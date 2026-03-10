@@ -3403,3 +3403,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Agents with hooks cannot be serialized (to_dict raises ValueError) — same will apply to rails
   - agent-core rail system is in openjiuwen/core/single_agent/rail/ — not in this repo, referenced via analysis doc
 ---
+
+## 2026-03-10 - US-002
+- What was implemented: Typed Pydantic event input models for the agent rail system — InvokeInputs, ModelCallInputs, ToolCallInputs, and RailContext
+- Files changed:
+  - packages/orbiter-core/src/orbiter/rail_types.py (new — 4 Pydantic models, 82 lines)
+  - packages/orbiter-core/tests/test_rail_types.py (new — 22 tests covering creation, validation, mutability, default isolation)
+- **Learnings for future iterations:**
+  - Rail type models are intentionally NOT frozen (no `model_config = {"frozen": True}`) — hooks/rails need to mutate inputs
+  - Use `Field(default_factory=dict)` for mutable defaults (arguments, extra) to avoid shared state between instances
+  - HookPoint enum is imported from orbiter.hooks — rail_types depends on hooks module
+  - All existing types.py models use `model_config = {"frozen": True}` — rail_types intentionally breaks this pattern for mutability
+  - 811 existing tests all pass — zero regressions from adding rail_types
+---
