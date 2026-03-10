@@ -269,6 +269,53 @@ class Swarm:
                 if _passes_filter(_ev):
                     yield _ev
 
+            # Loop node: iterate body agents with streaming
+            if getattr(agent, "is_loop", False):
+                from orbiter._internal.loop_node import BREAK_SENTINEL
+
+                loop_state: dict[str, Any] = {"input": current_input}
+                n_iters = agent._resolve_iterations(loop_state)
+                iteration = 0
+                while True:
+                    if iteration >= agent.max_iterations:
+                        break
+                    if n_iters is not None and iteration >= n_iters:
+                        break
+                    if agent.condition is not None and not agent._check_condition(loop_state):
+                        break
+                    loop_state["iteration"] = iteration
+                    if agent.items is not None:
+                        arr = loop_state.get(agent.items, [])
+                        loop_state["item"] = arr[iteration] if iteration < len(arr) else None
+                    body_input = current_input
+                    broke = False
+                    for body_name in agent.body:
+                        if body_name not in self.agents:
+                            raise SwarmError(
+                                f"Loop '{agent_name}' body references unknown agent '{body_name}'"
+                            )
+                        body_agent = self.agents[body_name]
+                        loop_text_parts: list[str] = []
+                        async for event in run.stream(
+                            body_agent, body_input, messages=messages,
+                            provider=provider, detailed=detailed,
+                            max_steps=max_steps,
+                        ):
+                            if isinstance(event, TextEvent):
+                                loop_text_parts.append(event.text)
+                            if _passes_filter(event):
+                                yield event
+                        body_input = "".join(loop_text_parts)
+                        if BREAK_SENTINEL in body_input:
+                            broke = True
+                            break
+                    current_input = body_input
+                    loop_state["input"] = current_input
+                    iteration += 1
+                    if broke:
+                        break
+                continue
+
             # For groups/nested swarms, delegate to their stream if available
             if getattr(agent, "is_group", False) or getattr(agent, "is_swarm", False):
                 if hasattr(agent, "stream"):
@@ -446,9 +493,10 @@ class Swarm:
         """Execute agents sequentially, chaining output→input.
 
         Supports regular agents, group nodes (``ParallelGroup``,
-        ``SerialGroup``), nested swarms, and branch nodes
-        (``BranchNode``).  Branch nodes evaluate a condition and
-        skip to the chosen target agent in the flow.
+        ``SerialGroup``), nested swarms, branch nodes
+        (``BranchNode``), and loop nodes (``LoopNode``).  Branch
+        nodes evaluate a condition and skip to the chosen target
+        agent in the flow.  Loop nodes iterate body agents.
 
         Returns the ``RunResult`` from the last agent in the flow.
         """
@@ -489,6 +537,52 @@ class Swarm:
                 )
                 return last_result
 
+            # Loop node: iterate body agents
+            if getattr(agent, "is_loop", False):
+                from orbiter._internal.loop_node import BREAK_SENTINEL
+
+                loop_state: dict[str, Any] = {"input": current_input}
+                n_iters = agent._resolve_iterations(loop_state)
+                iteration = 0
+                while True:
+                    if iteration >= agent.max_iterations:
+                        break
+                    if n_iters is not None and iteration >= n_iters:
+                        break
+                    if agent.condition is not None and not agent._check_condition(loop_state):
+                        break
+                    loop_state["iteration"] = iteration
+                    if agent.items is not None:
+                        arr = loop_state.get(agent.items, [])
+                        loop_state["item"] = arr[iteration] if iteration < len(arr) else None
+                    body_input = current_input
+                    broke = False
+                    for body_name in agent.body:
+                        if body_name not in self.agents:
+                            raise SwarmError(
+                                f"Loop '{agent_name}' body references unknown agent '{body_name}'"
+                            )
+                        body_agent = self.agents[body_name]
+                        last_result = await call_runner(
+                            body_agent,
+                            body_input,
+                            messages=messages,
+                            provider=provider,
+                            max_retries=max_retries,
+                        )
+                        body_input = last_result.output
+                        if BREAK_SENTINEL in last_result.output:
+                            broke = True
+                            break
+                    current_input = body_input
+                    loop_state["input"] = current_input
+                    iteration += 1
+                    if broke:
+                        break
+                if last_result is None:
+                    last_result = RunResult(output=current_input)
+                continue
+
             if getattr(agent, "is_group", False) or getattr(agent, "is_swarm", False):
                 last_result = await agent.run(
                     current_input,
@@ -504,7 +598,7 @@ class Swarm:
                     provider=provider,
                     max_retries=max_retries,
                 )
-            current_input = last_result.output
+            current_input = last_result.output  # type: ignore[union-attr]
 
         assert last_result is not None  # guaranteed since agents is non-empty
         return last_result

@@ -7,6 +7,7 @@ __version__ = "0.1.0"
 
 from orbiter._internal.agent_group import ParallelGroup, SerialGroup
 from orbiter._internal.branch_node import BranchNode
+from orbiter._internal.loop_node import LoopNode
 from orbiter._internal.nested import SwarmNode
 from orbiter.agent import Agent
 from orbiter.observability.logging import (  # pyright: ignore[reportMissingImports]
@@ -23,6 +24,7 @@ __all__ = [
     "Agent",
     "BranchNode",
     "FunctionTool",
+    "LoopNode",
     "ParallelGroup",
     "SerialGroup",
     "Swarm",
