@@ -4779,3 +4779,16 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The deepsearch example (already ported) is the reference pattern for config and structure
   - `langgraph`, `sqlalchemy`, `mermaid-py` were openjiuwen transitive deps, not used directly
 ---
+
+## 2026-03-11 - US-089
+- Replaced all openjiuwen logging imports in `agent/utils.py` with Python standard `logging` module
+- `setup_file_logging()` now uses `logging.handlers.RotatingFileHandler` (20 MB, 20 backups) matching original behaviour
+- Module-level `logger = logging.getLogger("deepagent")` replaces openjiuwen's `logger` object
+- Preserved: file logging, real-time flushing, simple format option, rotating file handler
+- Removed ~70 lines of openjiuwen fallback/workaround code
+- Files changed: `examples/advanced/deepagent/agent/utils.py`
+- **Learnings for future iterations:**
+  - No other deepagent files import from `agent.utils` — it's a true leaf dependency
+  - The openjiuwen logger was a wrapper around Python's logging; direct stdlib usage is a clean 1:1 replacement
+  - Use `logging.getLogger("deepagent")` as the module-level logger for all deepagent files being ported
+---
