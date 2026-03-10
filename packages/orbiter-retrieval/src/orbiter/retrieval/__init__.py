@@ -32,6 +32,10 @@ from orbiter.retrieval.retriever import (  # pyright: ignore[reportMissingImport
     VectorRetriever,
 )
 from orbiter.retrieval.sparse_retriever import SparseRetriever  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.triple_extractor import (  # pyright: ignore[reportMissingImports]
+    Triple,
+    TripleExtractor,
+)
 from orbiter.retrieval.types import (  # pyright: ignore[reportMissingImports]
     Chunk,
     Document,
@@ -69,6 +73,8 @@ __all__ = [
     "SparseRetriever",
     "TextParser",
     "TokenChunker",
+    "Triple",
+    "TripleExtractor",
     "VectorRetriever",
     "VectorStore",
     "VertexEmbeddings",

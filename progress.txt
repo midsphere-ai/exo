@@ -4143,3 +4143,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Chunk deduplication key is `(document_id, index)` tuple — this uniquely identifies a chunk across retrieval rounds
   - `_parse_sufficiency` should clamp to [0.0, 1.0] and fall back gracefully (try JSON → bare float → 0.0)
 ---
+
+## 2026-03-10 - US-048
+- Implemented Triple frozen dataclass (subject, predicate, object, confidence, source_chunk_id)
+- Implemented TripleExtractor class with LLM-based triple extraction from Chunk objects
+- Default prompt template for structured JSON triple extraction
+- Robust _parse_triples with JSON extraction, field validation, confidence clamping
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/triple_extractor.py (new)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (exports)
+  - packages/orbiter-retrieval/tests/test_triple_extractor.py (new, 26 tests)
+- **Learnings for future iterations:**
+  - Follow the LLMReranker/QueryRewriter pattern: lazy import `get_provider` + `UserMessage` inside the async method, not at module level
+  - Use `re.DOTALL` flag when extracting JSON arrays that may span multiple lines in LLM responses
+  - Frozen dataclass works well for Triple (immutable graph data); frozen Pydantic BaseModel used for Chunk/RetrievalResult
+  - MockProvider pattern: return configurable `ModelResponse(content=...)` for LLM-dependent tests; use MultiResponseProvider for per-call responses
+---
