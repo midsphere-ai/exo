@@ -10,6 +10,7 @@ from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissin
 from orbiter.context.context import Context  # pyright: ignore[reportMissingImports]
 from orbiter.context.processor import (  # pyright: ignore[reportMissingImports]
     ContextProcessor,
+    MessageOffloader,
     ProcessorError,
     ProcessorPipeline,
     SummarizeProcessor,
@@ -451,3 +452,199 @@ class TestProcessorIntegration:
         }
         await pipeline.fire("post_tool_call", ctx, payload)
         assert ctx.state.get("offloaded_results") is not None
+
+
+# ── MessageOffloader tests ─────────────────────────────────────────
+
+
+class TestMessageOffloader:
+    def test_defaults(self) -> None:
+        proc = MessageOffloader()
+        assert proc.event == "pre_llm_call"
+        assert proc.name == "message_offloader"
+        assert proc.max_message_size == 10000
+
+    def test_custom_max_size(self) -> None:
+        proc = MessageOffloader(max_message_size=500)
+        assert proc.max_message_size == 500
+
+    async def test_no_history(self) -> None:
+        proc = MessageOffloader(max_message_size=10)
+        ctx = _make_ctx()
+        await proc.process(ctx, {})
+        assert ctx.state.get("offloaded_messages") is None
+
+    async def test_empty_history(self) -> None:
+        proc = MessageOffloader(max_message_size=10)
+        ctx = _make_ctx(history=[])
+        await proc.process(ctx, {})
+        # Empty list is falsy, so offloaded_messages should not be set
+        assert ctx.state.get("offloaded_messages") is None
+
+    async def test_message_within_limit_untouched(self) -> None:
+        proc = MessageOffloader(max_message_size=100)
+        ctx = _make_ctx(
+            history=[
+                {"role": "user", "content": "short message"},
+                {"role": "assistant", "content": "short reply"},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        assert history[0]["content"] == "short message"
+        assert history[1]["content"] == "short reply"
+        # offloaded_messages dict should be empty
+        offloaded = ctx.state.get("offloaded_messages")
+        assert offloaded == {}
+
+    async def test_oversized_user_message_replaced(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        large_content = "x" * 50
+        ctx = _make_ctx(
+            history=[
+                {"role": "user", "content": large_content},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        # Content should be replaced with an offload marker
+        assert history[0]["content"].startswith("[[OFFLOAD: handle=")
+        assert history[0]["content"].endswith("]]")
+        # Original should be stored
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 1
+        handle_id = list(offloaded.keys())[0]
+        assert offloaded[handle_id] == large_content
+        assert f"handle={handle_id}" in history[0]["content"]
+
+    async def test_oversized_assistant_message_replaced(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        large_content = "y" * 50
+        ctx = _make_ctx(
+            history=[
+                {"role": "assistant", "content": large_content},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        assert "[[OFFLOAD:" in history[0]["content"]
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 1
+        assert list(offloaded.values())[0] == large_content
+
+    async def test_oversized_tool_message_replaced(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        large_content = "z" * 50
+        ctx = _make_ctx(
+            history=[
+                {"role": "tool", "content": large_content},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        assert "[[OFFLOAD:" in history[0]["content"]
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 1
+
+    async def test_system_message_not_offloaded(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        large_system = "s" * 50
+        ctx = _make_ctx(
+            history=[
+                {"role": "system", "content": large_system},
+                {"role": "user", "content": "short"},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        # System message should be untouched
+        assert history[0]["content"] == large_system
+        # User message within limit also untouched
+        assert history[1]["content"] == "short"
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 0
+
+    async def test_mixed_messages_only_oversized_replaced(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        ctx = _make_ctx(
+            history=[
+                {"role": "system", "content": "a" * 50},
+                {"role": "user", "content": "small"},
+                {"role": "assistant", "content": "b" * 50},
+                {"role": "user", "content": "c" * 50},
+            ]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        # System: untouched (skipped)
+        assert history[0]["content"] == "a" * 50
+        # Short user: untouched
+        assert history[1]["content"] == "small"
+        # Large assistant: offloaded
+        assert "[[OFFLOAD:" in history[2]["content"]
+        # Large user: offloaded
+        assert "[[OFFLOAD:" in history[3]["content"]
+
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 2
+
+    async def test_multiple_offloads_have_unique_handles(self) -> None:
+        proc = MessageOffloader(max_message_size=10)
+        ctx = _make_ctx(
+            history=[
+                {"role": "user", "content": "x" * 20},
+                {"role": "assistant", "content": "y" * 20},
+                {"role": "user", "content": "z" * 20},
+            ]
+        )
+        await proc.process(ctx, {})
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 3
+        # All handles should be unique
+        handles = list(offloaded.keys())
+        assert len(set(handles)) == 3
+
+    async def test_message_at_exact_limit_not_offloaded(self) -> None:
+        proc = MessageOffloader(max_message_size=20)
+        exact_content = "a" * 20
+        ctx = _make_ctx(
+            history=[{"role": "user", "content": exact_content}]
+        )
+        await proc.process(ctx, {})
+        history = ctx.state.get("history")
+        assert history[0]["content"] == exact_content
+
+    async def test_original_stored_correctly(self) -> None:
+        proc = MessageOffloader(max_message_size=10)
+        original = "hello world this is a long message"
+        ctx = _make_ctx(
+            history=[{"role": "user", "content": original}]
+        )
+        await proc.process(ctx, {})
+        offloaded = ctx.state.get("offloaded_messages")
+        assert list(offloaded.values())[0] == original
+
+    async def test_with_pipeline(self) -> None:
+        pipeline = ProcessorPipeline()
+        pipeline.register(MessageOffloader(max_message_size=15))
+        ctx = _make_ctx(
+            history=[
+                {"role": "user", "content": "a" * 30},
+                {"role": "assistant", "content": "ok"},
+            ]
+        )
+        await pipeline.fire("pre_llm_call", ctx)
+        history = ctx.state.get("history")
+        assert "[[OFFLOAD:" in history[0]["content"]
+        assert history[1]["content"] == "ok"
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 1
+
+    async def test_none_content_skipped(self) -> None:
+        proc = MessageOffloader(max_message_size=10)
+        ctx = _make_ctx(
+            history=[{"role": "user", "content": None}]
+        )
+        await proc.process(ctx, {})
+        offloaded = ctx.state.get("offloaded_messages")
+        assert len(offloaded) == 0

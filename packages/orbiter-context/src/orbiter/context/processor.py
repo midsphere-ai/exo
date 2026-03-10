@@ -12,11 +12,14 @@ Built-in processors:
   when history exceeds the configured threshold.
 - ToolResultOffloader — ``post_tool_call``: offloads large tool results to
   workspace when they exceed a size threshold.
+- MessageOffloader    — ``pre_llm_call``: replaces oversized messages with
+  ``[[OFFLOAD: handle=<id>]]`` markers to keep context within budget.
 """
 
 from __future__ import annotations
 
 import contextlib
+import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Any
@@ -250,3 +253,65 @@ class ToolResultOffloader(ContextProcessor):
             f"({len(content)} chars)]"
         )
         payload["tool_result"] = reference
+
+
+class MessageOffloader(ContextProcessor):
+    """Replaces oversized messages with ``[[OFFLOAD: handle=<id>]]`` markers.
+
+    Fires on ``"pre_llm_call"``.  Scans ``ctx.state['history']`` and replaces
+    any user, assistant, or tool message whose content exceeds
+    ``max_message_size`` characters with a short marker.  The original content
+    is stored in ``ctx.state['offloaded_messages']`` keyed by handle ID so it
+    can be recovered later (e.g. via a reload tool).
+
+    System messages are never offloaded.
+
+    Parameters
+    ----------
+    max_message_size:
+        Maximum character length per message before offloading.  Default 10000.
+    name:
+        Processor name.  Default ``"message_offloader"``.
+    """
+
+    __slots__ = ("_event", "_max_message_size", "_name")
+
+    def __init__(
+        self, *, max_message_size: int = 10000, name: str = "message_offloader"
+    ) -> None:
+        super().__init__("pre_llm_call", name=name)
+        self._max_message_size = max_message_size
+
+    @property
+    def max_message_size(self) -> int:
+        """Maximum message content size before offloading."""
+        return self._max_message_size
+
+    async def process(self, ctx: Context, payload: dict[str, Any]) -> None:
+        history: list[dict[str, Any]] | None = ctx.state.get("history")
+        if not history:
+            return
+
+        offloaded: dict[str, str] = ctx.state.get("offloaded_messages") or {}
+
+        for msg in history:
+            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+            if role == "system":
+                continue
+
+            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            if content is None:
+                continue
+            content_str = str(content)
+            if len(content_str) <= self._max_message_size:
+                continue
+
+            handle_id = uuid.uuid4().hex[:12]
+            offloaded[handle_id] = content_str
+            marker = f"[[OFFLOAD: handle={handle_id}]]"
+            if isinstance(msg, dict):
+                msg["content"] = marker
+            else:
+                msg.content = marker  # type: ignore[attr-defined]
+
+        ctx.state.set("offloaded_messages", offloaded)

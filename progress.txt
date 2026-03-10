@@ -3606,3 +3606,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - System messages must never be offloaded or trimmed — only user/assistant/tool messages
   - Round definition: user → assistant(no tool_calls) = 1 round; tool-calling sequences within a round are preserved as a unit
 ---
+
+## 2026-03-10 - US-014
+- What was implemented: MessageOffloader context processor that replaces oversized messages with `[[OFFLOAD: handle=<id>]]` markers
+- Files changed:
+  - `packages/orbiter-context/src/orbiter/context/processor.py` (added MessageOffloader class)
+  - `packages/orbiter-context/src/orbiter/context/__init__.py` (exported MessageOffloader)
+  - `packages/orbiter-context/tests/test_context_processor.py` (added 15 tests for MessageOffloader)
+  - `prd.json` (marked US-014 as passes: true)
+- **Learnings for future iterations:**
+  - MessageOffloader uses uuid4 hex[:12] for unique handle IDs — consistent with the offload marker format `[[OFFLOAD: handle=<id>]]`
+  - Processor stores originals in `ctx.state['offloaded_messages']` as a dict keyed by handle ID — US-015 reload tool will look up from this dict
+  - System messages must be skipped (role == "system") — consistent with existing pattern noted in Codebase Patterns
+  - Messages support both dict-style (`msg.get("role")`) and Pydantic model-style (`getattr(msg, "role", None)`) access per codebase pattern
+  - The `__slots__` on processor subclasses must redeclare parent slots (`_event`, `_name`) plus new ones — see ToolResultOffloader pattern
+---
