@@ -3675,3 +3675,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Use `__new__` + manual attribute assignment to create fallback test instances without triggering `__init__` import
   - All 527 context tests pass, 0 pyright errors
 ---
+
+## 2026-03-10 - US-019
+- What was implemented: Research design document for memory enhancements (Epic 5)
+- Files changed:
+  - docs/design/memory-enhancement-design.md — new design doc covering memory type taxonomy, encryption, deduplication, and migration system
+  - prd.json — marked US-019 as passes: true
+- Key decisions documented:
+  - Memory type taxonomy: new `MemoryCategory` StrEnum (user_profile, semantic, episodic, variable, summary) as optional `category` field on MemoryItem, keeping existing `memory_type` string for conversation-role discrimination
+  - Encryption: decorator/wrapper pattern (`EncryptedMemoryStore`) using Fernet, wraps any MemoryStore — matches MemoryEventEmitter pattern
+  - Deduplication: `MemUpdateChecker` with LLM-based semantic comparison (ADD/UPDATE/SKIP decisions), opt-in on LongTermMemory
+  - Migration: `MigrationRunner` with version-tracked forward-only SQL migrations, backend-specific migration lists
+- All changes are additive — existing APIs unchanged
+- **Learnings for future iterations:**
+  - orbiter-memory's `memory_type` field is used for conversation-role subtypes (system/human/ai/tool), not knowledge categories — don't conflate these two dimensions
+  - EncryptedMemoryStore breaks keyword search (ciphertext is opaque) — vector search still works if embeddings computed pre-encryption
+  - MemoryEventEmitter and EncryptedMemoryStore both use the decorator pattern — they compose: `EncryptedMemoryStore(store)` then `MemoryEventEmitter(encrypted)`
+  - cryptography package is already an indirect dependency via orbiter-web — no new dep needed for Fernet encryption
+  - Pre-existing 206 pyright errors (none from this story — research-only, no code changes)
+---
