@@ -3827,3 +3827,22 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Stream test providers need `mock.stream = async_generator_fn` (not `mock.complete`) — use `_FakeStreamChunk` + `_make_stream_provider` pattern from test_swarm.py
   - Callable condition type should be `Callable[[dict], Any]` not `Callable[[dict], bool]` — supports truthy/falsy evaluation
 ---
+
+## 2026-03-10 - US-028
+- Implemented LoopNode for iteration in workflows (Epic 2)
+- Three modes: count (fixed iterations), items (array iteration), condition (while-loop expression)
+- Break support: body agent output containing `[BREAK]` terminates loop early
+- max_iterations safety limit (default 100)
+- Integrated into Swarm's _run_workflow and _stream_workflow
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/loop_node.py (new)
+  - packages/orbiter-core/tests/test_loop_node.py (new, 38 tests)
+  - packages/orbiter-core/src/orbiter/swarm.py (loop handling in both run and stream)
+  - packages/orbiter-core/src/orbiter/__init__.py (export LoopNode)
+- **Learnings for future iterations:**
+  - Body agents must be in the Swarm's agents list but NOT in the flow after the loop node, otherwise they execute an extra time after the loop completes
+  - Duck-type marker pattern: `is_loop: bool = True` for detection in Swarm
+  - The loop node's state dict is local to the loop execution — use `state["input"]` to track chained output
+  - When adding new node types to swarm.py's _run_workflow, the `continue` after the node block means `last_result` may be None — add a fallback `RunResult(output=current_input)` for 0-iteration loops
+  - pyright requires `# type: ignore[union-attr]` on `last_result.output` due to the None initialization + continue paths
+---
