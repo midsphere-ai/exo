@@ -4496,3 +4496,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Extracted patterns stored as MemoryItem(memory_type="pattern") with when_to_use/pattern_type in metadata.extra dict
   - When model output is invalid (bad JSON, empty array, etc.), gracefully fall back to original items
 ---
+
+## 2026-03-10 - US-069
+- What was implemented: Design document for operator pattern & self-optimization architecture (Epic 10)
+- Files changed:
+  - `docs/design/operator-optimization-design.md` (new)
+- **Learnings for future iterations:**
+  - Agent-core's operator pattern is in `openjiuwen/agent_evolving/` and `openjiuwen/core/operator/base.py`
+  - Operator ABC has 6 methods: operator_id, get_tunables, set_parameter, get_state, load_state, invoke
+  - TunableSpec kinds: prompt, continuous, discrete, tool_selector, memory_selector
+  - Textual gradients pattern: backward() writes string gradients, step() uses LLM to rewrite parameters
+  - Updates type is `dict[tuple[str, str], Any]` keyed by (operator_id, target)
+  - Updater has two modes: SingleDimUpdater (one optimizer) and MultiDimUpdater (multi-domain with attribution)
+  - Agent-core's Trainer is monolithic; Orbiter's maps to OperatorTrainer extending Trainer ABC with validation phases
+  - Candidate selection uses snapshot/rollback on operator states, not agent copies
+  - Agent-core uses Session.tracer() spans for trajectory extraction; Orbiter needs a pluggable TrajectoryExtractor ABC
+  - Checkpointing saves operator states + updater states + progress metadata
+---
