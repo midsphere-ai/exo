@@ -3660,3 +3660,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - In-place mutation via `history[:] = result` maintains list identity so other code holding references to the history list sees the update
   - All 502 context tests pass, 0 pyright errors
 ---
+
+## 2026-03-10 - US-018
+- What was implemented: TiktokenCounter class for accurate token counting via tiktoken with char-based fallback
+- Files changed:
+  - packages/orbiter-context/src/orbiter/context/token_counter.py — new file: TiktokenCounter class with count(text) and count_messages(messages) methods, model→encoding mapping (o200k_base for gpt-4o family, cl100k_base for gpt-4/3.5), char-based fallback (~4 chars/token) when tiktoken not installed
+  - packages/orbiter-context/pyproject.toml — added [project.optional-dependencies] tiktoken = ["tiktoken>=0.7"]
+  - packages/orbiter-context/src/orbiter/context/__init__.py — exported TiktokenCounter in public API
+  - packages/orbiter-context/tests/test_token_counter.py — 25 tests covering: construction, exact counting with known token counts, count_messages with overhead, fallback estimation, unicode, multiline, edge cases
+- **Learnings for future iterations:**
+  - tiktoken encoding mapping: o200k_base for gpt-4o/o1/o3 family, cl100k_base for gpt-4/gpt-3.5-turbo
+  - OpenAI chat message token overhead: 3 tokens per message (role + delimiters) + 3 tokens reply priming after all messages
+  - Fallback heuristic: ~4 chars per token for English text, with min(1) to avoid zero counts
+  - Use `__new__` + manual attribute assignment to create fallback test instances without triggering `__init__` import
+  - All 527 context tests pass, 0 pyright errors
+---

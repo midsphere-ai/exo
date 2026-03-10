@@ -30,6 +30,9 @@ from orbiter.context.prompt_builder import (  # pyright: ignore[reportMissingImp
     PromptBuilder,
 )
 from orbiter.context.state import ContextState  # pyright: ignore[reportMissingImports]
+from orbiter.context.token_counter import (  # pyright: ignore[reportMissingImports]
+    TiktokenCounter,
+)
 from orbiter.context.token_tracker import (  # pyright: ignore[reportMissingImports]
     TokenTracker,
 )
@@ -62,6 +65,7 @@ __all__ = [
     "PromptBuilder",
     "RoundWindowProcessor",
     "SummarizeProcessor",
+    "TiktokenCounter",
     "TokenTracker",
     "ToolResultOffloader",
     "Workspace",

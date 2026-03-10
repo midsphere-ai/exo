@@ -7,6 +7,9 @@ dependencies = [
     "orbiter-core",
 ]
 
+[project.optional-dependencies]
+tiktoken = ["tiktoken>=0.7"]
+
 [tool.uv.sources]
 orbiter-core = { workspace = true }
 
