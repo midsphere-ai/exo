@@ -4392,3 +4392,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - Defensive copy pattern: `todos = [dict(t) for t in todos]` before mutation to avoid aliasing issues with state
   - Factory function tests (get_planning_tools, get_context_tools) count total tools — update counts when adding new tools
 ---
+
+## 2026-03-10 - US-063
+- What was implemented: Task loop architecture with priority event queue for agent task iterations
+- Files changed:
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/task_loop_queue.py (new — TaskLoopEventType IntEnum, TaskLoopEvent dataclass, TaskLoopQueue with heapq priority queue)
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/tools.py (new — _QueueTool pattern, steer_agent and abort_agent tools, get_task_loop_tools())
+  - packages/orbiter-core/src/orbiter/_internal/task_controller/__init__.py (updated — exports for new types and tools)
+  - packages/orbiter-core/src/orbiter/task_controller.py (updated — public re-exports)
+  - packages/orbiter-core/src/orbiter/agent.py (updated — TaskLoopAbort exception, task_loop_queue param on run(), _drain_task_loop_queue helper)
+  - packages/orbiter-core/tests/test_task_loop_queue.py (new — 25 tests covering priority ordering, FIFO within same priority, tools, queue drain, abort raises)
+- **Learnings for future iterations:**
+  - _QueueTool pattern mirrors _ContextTool: strip bound param from schema, bind at setup time, inject at execute time
+  - TaskLoopEvent uses dataclass(order=True) with _seq field for stable FIFO ordering within same priority via heapq
+  - TaskLoopQueue is thread-safe (threading.Lock) since events may be pushed from monitoring threads
+  - Agent queue drain happens after tool execution but before next LLM call — ABORT raises immediately, STEER/FOLLOWUP inject user messages
+  - Pre-existing test failures in test_runner.py and test_swarm.py (14 total) are unrelated to this change
+---

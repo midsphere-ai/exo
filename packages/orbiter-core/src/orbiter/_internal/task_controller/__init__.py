@@ -13,6 +13,16 @@ from orbiter._internal.task_controller.intent_recognizer import (
 )
 from orbiter._internal.task_controller.manager import TaskManager, TaskNotFoundError
 from orbiter._internal.task_controller.scheduler import TaskScheduler
+from orbiter._internal.task_controller.task_loop_queue import (
+    TaskLoopEvent,
+    TaskLoopEventType,
+    TaskLoopQueue,
+)
+from orbiter._internal.task_controller.tools import (
+    abort_agent_tool,
+    get_task_loop_tools,
+    steer_agent_tool,
+)
 from orbiter._internal.task_controller.types import (
     InvalidTransitionError,
     Task,
@@ -31,6 +41,12 @@ __all__ = [
     "TaskEventBus",
     "TaskEventHandler",
     "TaskEventType",
+    "TaskLoopEvent",
+    "TaskLoopEventType",
+    "TaskLoopQueue",
+    "abort_agent_tool",
+    "get_task_loop_tools",
+    "steer_agent_tool",
     "TaskManager",
     "TaskNotFoundError",
     "TaskScheduler",

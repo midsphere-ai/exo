@@ -16,6 +16,11 @@ from orbiter.hooks import Hook, HookManager, HookPoint
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.guardrail.types import GuardrailError  # pyright: ignore[reportMissingImports]
 from orbiter.rail import Rail, RailAbortError, RailManager
+from orbiter._internal.task_controller.task_loop_queue import (
+    TaskLoopEvent,
+    TaskLoopEventType,
+    TaskLoopQueue,
+)
 from orbiter.tool import Tool, ToolError
 from orbiter.types import (
     AgentOutput,
@@ -31,6 +36,10 @@ _log = get_logger(__name__)
 
 class AgentError(OrbiterError):
     """Raised for agent-level errors (duplicate tools, invalid config, etc.)."""
+
+
+class TaskLoopAbort(OrbiterError):
+    """Raised when an ABORT event is consumed from the task loop queue."""
 
 
 class Agent:
@@ -178,6 +187,7 @@ class Agent:
         messages: Sequence[Message] | None = None,
         provider: Any = None,
         max_retries: int = 3,
+        task_loop_queue: TaskLoopQueue | None = None,
     ) -> AgentOutput:
         """Execute the agent's LLM-tool loop with retry logic.
 
@@ -186,18 +196,25 @@ class Agent:
         re-calls the LLM. The loop continues until a text-only response
         is produced or ``max_steps`` is reached.
 
+        Between each tool-loop iteration the optional *task_loop_queue*
+        is drained. ABORT events raise :class:`TaskLoopAbort`; STEER
+        events inject a user message with the steering content; FOLLOWUP
+        events are appended as user messages for the next iteration.
+
         Args:
             input: User query string for this turn.
             messages: Prior conversation history.
             provider: An object with an ``async complete()`` method
                 (e.g. a ``ModelProvider`` instance).
             max_retries: Maximum retry attempts for transient errors.
+            task_loop_queue: Optional priority queue checked between iterations.
 
         Returns:
             Parsed ``AgentOutput`` from the final LLM response.
 
         Raises:
             AgentError: If no provider is supplied or all retries are exhausted.
+            TaskLoopAbort: If an ABORT event is consumed from the queue.
         """
         if provider is None:
             raise AgentError(f"Agent '{self.name}' requires a provider for run()")
@@ -235,6 +252,10 @@ class Agent:
                 thought_signatures=output.thought_signatures,
             ))
             msg_list.extend(tool_results)
+
+            # Check the task loop queue between iterations
+            if task_loop_queue is not None:
+                _drain_task_loop_queue(task_loop_queue, msg_list)
 
         # max_steps exhausted — return last output as-is
         return output
@@ -454,6 +475,23 @@ class Agent:
         if self.handoffs:
             parts.append(f"handoffs={list(self.handoffs.keys())}")
         return f"Agent({', '.join(parts)})"
+
+
+def _drain_task_loop_queue(queue: TaskLoopQueue, msg_list: list[Message]) -> None:
+    """Drain all events from the task loop queue.
+
+    ABORT events raise :class:`TaskLoopAbort` immediately (highest priority
+    is always processed first). STEER and FOLLOWUP events are injected as
+    user messages so the LLM sees them on the next iteration.
+    """
+    while queue:
+        event: TaskLoopEvent | None = queue.pop()
+        if event is None:
+            break
+        if event.type == TaskLoopEventType.ABORT:
+            raise TaskLoopAbort(f"Agent aborted: {event.content}")
+        # STEER and FOLLOWUP — inject as user message
+        msg_list.append(UserMessage(content=f"[{event.type.name}] {event.content}"))
 
 
 def _is_context_length_error(exc: Exception) -> bool:
