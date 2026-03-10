@@ -3715,3 +3715,19 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - MemoryStore protocol's @runtime_checkable isinstance check only verifies method names exist, not signatures — adding optional params to protocol search() is safe
   - All 264 memory tests pass, all 864 core tests pass, 0 pyright errors
 ---
+
+## 2026-03-10 - US-021
+- What was implemented: AES-256-GCM encrypted memory store wrapper (`EncryptedMemoryStore`) with key derivation helper
+- Files changed:
+  - packages/orbiter-memory/src/orbiter/memory/encrypted.py (new — EncryptedMemoryStore wrapper + derive_key helper)
+  - packages/orbiter-memory/tests/test_encrypted.py (new — 16 tests: derive_key, constructor validation, roundtrip, wrong key, protocol conformance)
+  - packages/orbiter-memory/pyproject.toml (added `encryption = ["cryptography>=42.0"]` optional dep)
+  - packages/orbiter-memory/src/orbiter/memory/__init__.py (added EncryptedMemoryStore, derive_key exports)
+- **Learnings for future iterations:**
+  - EncryptedMemoryStore wraps any MemoryStore — encrypts content on add(), decrypts on get()/search()
+  - AES-256-GCM format: 12-byte nonce + ciphertext (includes 16-byte GCM tag), stored as hex string
+  - derive_key uses PBKDF2-HMAC-SHA256 with 480k iterations; returns (key, salt) tuple — caller must persist salt
+  - Wrong key on get() raises MemoryError; wrong key on search() silently skips undecryptable items
+  - Keyword search on encrypted content won't work since inner store sees ciphertext — metadata/type/status filters work normally
+  - `cryptography` package is already available in the workspace venv (no extra install needed for dev)
+---
