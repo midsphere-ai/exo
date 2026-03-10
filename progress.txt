@@ -4629,3 +4629,24 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - RailManager integrates via hook_for() which creates Hook-compatible async callables
   - Pre-existing test failures in test_runner.py/test_swarm.py (reasoning_content attribute) are unrelated to this work
 ---
+
+## 2026-03-10 - US-077
+- Created `docs/porting-guide/guardrails.md` — agent-core to Orbiter mapping for security guardrails (Epic 1)
+- Four sections: agent-core overview, Orbiter equivalent with HookManager integration, side-by-side code examples, migration table
+- Files changed: `docs/porting-guide/guardrails.md` (new)
+- **Learnings for future iterations:**
+  - Porting guide docs follow the same format as `docs/porting-guide/rails.md` — overview, mapping table, code examples, migration table
+  - All orbiter-guardrail public symbols are re-exported from `orbiter.guardrail` package __init__.py
+  - GuardrailError must be in agent.py's except clause alongside RailAbortError to prevent retry loop
+---
+
+## 2026-03-10 - US-078
+- Created docs/porting-guide/context-engine.md — comprehensive mapping of agent-core's context engine to Orbiter's orbiter-context package
+- Covers all 4 sections: agent-core overview (ContextManager, OffloadManager, CompressManager, RoundManager, TokenBudgetManager), Orbiter equivalents (ProcessorPipeline, MessageOffloader, DialogueCompressor, RoundWindowProcessor, TokenBudgetProcessor), configuration comparison (field-by-field mapping), and full migration table
+- Files changed: docs/porting-guide/context-engine.md (new), prd.json (US-078 passes: true)
+- **Learnings for future iterations:**
+  - Porting guide format follows guardrails.md pattern: 4 sections (overview, equivalent, comparison/examples, migration table)
+  - Orbiter's key architectural difference from agent-core: composable ProcessorPipeline vs monolithic ContextManager
+  - Pre-existing pyright error in token_counter.py (tiktoken optional import) — not introduced by doc changes
+  - ContextConfig uses `extra` dict for extensible fields (token_budget, token_encoding) to keep frozen schema stable
+---

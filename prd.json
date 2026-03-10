@@ -1352,7 +1352,7 @@
         "Typecheck passes"
       ],
       "priority": 77,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 1 implementation stories complete. References agent-core's core/security/guardrail/ directory."
     },
     {
@@ -1368,7 +1368,7 @@
         "Typecheck passes"
       ],
       "priority": 78,
-      "passes": false,
+      "passes": true,
       "notes": "Place after Epic 4 implementation stories complete. References agent-core's context/ directory."
     },
     {
