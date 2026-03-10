@@ -4733,3 +4733,18 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - The operator pattern was added alongside EvolutionPipeline (not replacing it) — the two serve different paradigms (parameter optimization vs. data augmentation)
   - orbiter-train has both operator/ subpackage (ABC + concrete operators) and optimizer.py (InstructionOptimizer, ToolOptimizer) at the package level
 ---
+
+## 2026-03-11 - US-086
+- Created docs/porting-guide/index.md — comprehensive porting guide index with architecture comparison
+- Section 1: Introduction to agent-core (openJiuwen) and why features were ported
+- Section 2: Architecture comparison with directory structure diagrams for both frameworks
+- Section 3: Design philosophy differences table (11 dimensions compared)
+- Section 4: Complete package mapping table (15 agent-core directories → Orbiter packages)
+- Section 5: Per-epic guide links table covering all 10 porting guides
+- Section 6: Acknowledgments crediting the openJiuwen project
+- Files changed: docs/porting-guide/index.md (new)
+- **Learnings for future iterations:**
+  - All 10 porting guides follow consistent structure: overview → orbiter equivalent → code examples → migration table
+  - agent-core-vs-orbiter-analysis.md lives at repo root, not in docs/
+  - Porting guides cover Epics 1-10 in separate files; this index ties them together
+---

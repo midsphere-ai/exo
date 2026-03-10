@@ -1500,7 +1500,7 @@
         "Typecheck passes"
       ],
       "priority": 86,
-      "passes": false,
+      "passes": true,
       "notes": "Final documentation story. Requires all other docs stories (US-076 through US-085) to be complete first."
     },
     {
