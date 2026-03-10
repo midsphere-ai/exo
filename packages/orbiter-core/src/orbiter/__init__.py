@@ -6,6 +6,7 @@ __path__ = extend_path(__path__, __name__)
 __version__ = "0.1.0"
 
 from orbiter._internal.agent_group import ParallelGroup, SerialGroup
+from orbiter._internal.branch_node import BranchNode
 from orbiter._internal.nested import SwarmNode
 from orbiter.agent import Agent
 from orbiter.observability.logging import (  # pyright: ignore[reportMissingImports]
@@ -20,6 +21,7 @@ from orbiter.tool import FunctionTool, Tool, tool
 
 __all__ = [
     "Agent",
+    "BranchNode",
     "FunctionTool",
     "ParallelGroup",
     "SerialGroup",

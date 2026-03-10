@@ -215,9 +215,50 @@ class Swarm:
             return event_types is None or event.type in event_types
 
         current_input = input
+        skip_until: str | None = None
 
         for agent_name in self.flow_order:
+            # Branch routing: skip agents until we reach the target
+            if skip_until is not None:
+                if agent_name != skip_until:
+                    continue
+                skip_until = None
+
             agent = self.agents[agent_name]
+
+            # Branch node: evaluate condition and route to target
+            if getattr(agent, "is_branch", False):
+                state = {"input": current_input}
+                target = agent.evaluate(state)
+                if target not in self.agents:
+                    raise SwarmError(
+                        f"Branch '{agent_name}' targets unknown agent '{target}'"
+                    )
+                if detailed:
+                    _ev = StatusEvent(
+                        status="running",
+                        agent_name=agent_name,
+                        message=f"Branch '{agent_name}' routing to '{target}'",
+                    )
+                    if _passes_filter(_ev):
+                        yield _ev
+                # Check if target is ahead in the flow — skip to it
+                remaining = self.flow_order[self.flow_order.index(agent_name) + 1 :]
+                if target in remaining:
+                    skip_until = target
+                    continue
+                # Target not in remaining flow — stream it directly and stop
+                target_agent = self.agents[target]
+                text_parts_branch: list[str] = []
+                async for event in run.stream(
+                    target_agent, current_input, messages=messages,
+                    provider=provider, detailed=detailed, max_steps=max_steps,
+                ):
+                    if isinstance(event, TextEvent):
+                        text_parts_branch.append(event.text)
+                    if _passes_filter(event):
+                        yield event
+                return
 
             if detailed:
                 _ev = StatusEvent(
@@ -404,17 +445,49 @@ class Swarm:
     ) -> RunResult:
         """Execute agents sequentially, chaining output→input.
 
-        Supports both regular agents and group nodes (``ParallelGroup``,
-        ``SerialGroup``).  Groups have an ``is_group`` attribute and
-        their own ``run()`` method.
+        Supports regular agents, group nodes (``ParallelGroup``,
+        ``SerialGroup``), nested swarms, and branch nodes
+        (``BranchNode``).  Branch nodes evaluate a condition and
+        skip to the chosen target agent in the flow.
 
         Returns the ``RunResult`` from the last agent in the flow.
         """
         current_input = input
         last_result: RunResult | None = None
+        skip_until: str | None = None
 
         for agent_name in self.flow_order:
+            # Branch routing: skip agents until we reach the target
+            if skip_until is not None:
+                if agent_name != skip_until:
+                    continue
+                skip_until = None
+
             agent = self.agents[agent_name]
+
+            # Branch node: evaluate condition and route to target
+            if getattr(agent, "is_branch", False):
+                state = {"input": current_input}
+                target = agent.evaluate(state)
+                if target not in self.agents:
+                    raise SwarmError(
+                        f"Branch '{agent_name}' targets unknown agent '{target}'"
+                    )
+                # Check if target is ahead in the flow — skip to it
+                remaining = self.flow_order[self.flow_order.index(agent_name) + 1 :]
+                if target in remaining:
+                    skip_until = target
+                    continue
+                # Target not in remaining flow — execute directly and stop
+                target_agent = self.agents[target]
+                last_result = await call_runner(
+                    target_agent,
+                    current_input,
+                    messages=messages,
+                    provider=provider,
+                    max_retries=max_retries,
+                )
+                return last_result
 
             if getattr(agent, "is_group", False) or getattr(agent, "is_swarm", False):
                 last_result = await agent.run(

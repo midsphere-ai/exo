@@ -1,7 +1,7 @@
 {
   "project": "Orbiter AI",
   "branchName": "ralph/agent-core-feature-port",
-  "description": "Port all significant features from agent-core (openJiuwen) to Orbiter: security guardrails, advanced workflow engine, RAG/retrieval pipeline, context engine enhancements, enhanced memory system, typed agent rails, task management controller, deep agent toolkit, memory evolution algorithms, and operator pattern with self-optimization. Two new packages (orbiter-guardrail, orbiter-retrieval), rest extends existing packages. Zero regressions on all ~2,900 existing tests.",
+  "description": "Port all significant features from agent-core (openJiuwen) to Orbiter: security guardrails, advanced workflow engine, RAG/retrieval pipeline, context engine enhancements, enhanced memory system, typed agent rails, task management controller, deep agent toolkit, memory evolution algorithms, operator pattern with self-optimization, and full DeepAgent example port (Epic 11). Two new packages (orbiter-guardrail, orbiter-retrieval), rest extends existing packages. Zero regressions on all ~2,900 existing tests.",
   "userStories": [
     {
       "id": "US-001",
@@ -489,7 +489,7 @@
         "Tests pass"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
