@@ -11,6 +11,7 @@ from orbiter.retrieval.retriever import (  # pyright: ignore[reportMissingImport
     Retriever,
     VectorRetriever,
 )
+from orbiter.retrieval.sparse_retriever import SparseRetriever  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.types import (  # pyright: ignore[reportMissingImports]
     Chunk,
     Document,
@@ -32,6 +33,7 @@ __all__ = [
     "OpenAIEmbeddings",
     "Retriever",
     "RetrievalError",
+    "SparseRetriever",
     "RetrievalResult",
     "VectorRetriever",
     "VectorStore",

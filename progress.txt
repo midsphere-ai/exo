@@ -4038,3 +4038,17 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - kwargs from retrieve() pass through to store.search() — enables filter and other store-specific params
   - MockEmbeddings with explicit mapping dict is useful for deterministic test vectors
 ---
+
+## 2026-03-10 - US-041
+- What was implemented: SparseRetriever with BM25 scoring for keyword-based search
+- Files changed:
+  - packages/orbiter-retrieval/src/orbiter/retrieval/sparse_retriever.py (new — SparseRetriever with inverted index + BM25 scoring)
+  - packages/orbiter-retrieval/tests/test_sparse_retriever.py (new — 18 tests covering ABC conformance, indexing, basic retrieval, ranking, top_k, BM25 params)
+  - packages/orbiter-retrieval/src/orbiter/retrieval/__init__.py (updated — export SparseRetriever)
+- **Learnings for future iterations:**
+  - SparseRetriever uses sync `index()` method (not async) since it's pure in-memory computation — only `retrieve()` is async per the Retriever ABC
+  - BM25 IDF formula: `log((N - df + 0.5) / (df + 0.5) + 1.0)` with floor at 0 to avoid negative scores for very common terms
+  - Tokenizer is simple alphanumeric regex `[a-zA-Z0-9]+` lowercased — sufficient for BM25 without external NLP deps
+  - `index()` replaces previous data entirely (not incremental) — keeps implementation simple
+  - Only chunks with positive BM25 scores are returned (no-match chunks excluded automatically)
+---
