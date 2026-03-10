@@ -43,6 +43,12 @@ from orbiter.memory.dedup import (  # pyright: ignore[reportMissingImports]
     MergeResult,
     UpdateDecision,
 )
+from orbiter.memory.migrations import (  # pyright: ignore[reportMissingImports]
+    Migration,
+    MigrationError,
+    MigrationRegistry,
+    run_migrations,
+)
 from orbiter.memory.summary import (  # pyright: ignore[reportMissingImports]
     Summarizer,
     SummaryConfig,
@@ -64,6 +70,11 @@ __all__ = [
     "MEMORY_ADDED",
     "MEMORY_CLEARED",
     "MEMORY_SEARCHED",
+    # migrations
+    "Migration",
+    "MigrationError",
+    "MigrationRegistry",
+    "run_migrations",
     # base types
     "AIMemory",
     "MemoryCategory",
