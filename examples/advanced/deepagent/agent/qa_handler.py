@@ -2,17 +2,20 @@
 Handles model calls for hints extraction and final answer extraction with type-specific formatting
 """
 
+import logging
 import re
 from typing import Optional, Dict, Tuple
+
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from openjiuwen.core.common.logging import logger
 from agent.prompt_templates import (
     get_question_hints_prompt,
     get_answer_type_prompt,
     get_final_answer_prompt
 )
+
+logger = logging.getLogger(__name__)
 
 
 class QAHandler:
