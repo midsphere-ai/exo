@@ -358,3 +358,137 @@ def shell_tool(allowed_commands: list[str] | None = None, *, timeout: float = 30
         A configured ``ShellTool`` instance.
     """
     return ShellTool(allowed_commands=allowed_commands, timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# CodeTool (sandboxed code execution, created via code_tool factory)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BLOCKED_NAMES: frozenset[str] = frozenset(
+    {"__import__", "open", "os", "sys", "subprocess", "shutil"}
+)
+
+_CODE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string",
+            "description": "Python code to execute.",
+        },
+    },
+    "required": ["code"],
+}
+
+
+def _build_runner_script(code: str, blocked_names: list[str]) -> str:
+    """Build a Python script that executes *code* in a restricted namespace."""
+    import json
+
+    escaped_code = json.dumps(code)
+    escaped_blocked = json.dumps(blocked_names)
+    return (
+        "import builtins as _b\n"
+        f"_code = {escaped_code}\n"
+        f"_blocked = set({escaped_blocked})\n"
+        "_ns = {'__builtins__': {k: v for k, v in vars(_b).items() if k not in _blocked}}\n"
+        "exec(_code, _ns)\n"  # noqa: S102
+    )
+
+
+class CodeTool(Tool):
+    """Sandboxed Python code execution tool.
+
+    When a ``Sandbox`` is provided, execution is delegated to the sandbox via
+    ``sandbox.run_tool()``.  Otherwise, code runs locally in a restricted
+    namespace (no ``__import__``, ``open``, ``os``, ``sys`` by default) with
+    stdout capture and a configurable timeout.
+    """
+
+    name = "code"
+    description = "Execute Python code in a sandboxed environment."
+    parameters = _CODE_SCHEMA
+
+    def __init__(
+        self,
+        *,
+        sandbox: Any | None = None,
+        blocked_names: frozenset[str] | None = None,
+        timeout: float = 10.0,
+    ) -> None:
+        self._sandbox = sandbox
+        self._blocked: frozenset[str] = (
+            blocked_names if blocked_names is not None else _DEFAULT_BLOCKED_NAMES
+        )
+        self._timeout = timeout
+
+    def _make_namespace(self) -> dict[str, Any]:
+        """Build a restricted globals namespace for ``exec()``."""
+        import builtins as _builtins
+
+        safe_builtins = {
+            k: v
+            for k, v in vars(_builtins).items()
+            if k not in self._blocked
+        }
+        return {"__builtins__": safe_builtins}
+
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+        code: str = kwargs.get("code", "")
+        if not code.strip():
+            raise ToolError("Empty code")
+
+        # Delegate to sandbox if provided
+        if self._sandbox is not None:
+            try:
+                result = await self._sandbox.run_tool("code", {"code": code})
+                return result  # type: ignore[no-any-return]
+            except Exception as exc:
+                raise ToolError(f"Sandbox execution failed: {exc}") from exc
+
+        # Local restricted execution via subprocess for reliable timeout
+        blocked_list = list(self._blocked)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-c",
+                _build_runner_script(code, blocked_list),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self._timeout
+            )
+        except TimeoutError as exc:
+            proc.kill()  # type: ignore[union-attr]
+            raise ToolError(
+                f"Code execution timed out after {self._timeout}s"
+            ) from exc
+
+        stdout_str = stdout.decode(errors="replace") if stdout else ""
+        stderr_str = stderr.decode(errors="replace") if stderr else ""
+
+        if proc.returncode != 0:
+            return f"Error: {stderr_str.strip()}" if stderr_str.strip() else f"Error: exit code {proc.returncode}"
+
+        return stdout_str if stdout_str else "(no output)"
+
+
+def code_tool(
+    sandbox: Any | None = None,
+    *,
+    blocked_names: frozenset[str] | None = None,
+    timeout: float = 10.0,
+) -> CodeTool:
+    """Factory function that creates a sandboxed code execution tool.
+
+    Args:
+        sandbox: Optional Sandbox instance. If provided, code execution is
+            delegated to the sandbox. Otherwise runs locally with restrictions.
+        blocked_names: Names to block from builtins namespace. Defaults to
+            __import__, open, os, sys, subprocess, shutil.
+        timeout: Maximum seconds for code execution (default 10).
+
+    Returns:
+        A configured ``CodeTool`` instance.
+    """
+    return CodeTool(sandbox=sandbox, blocked_names=blocked_names, timeout=timeout)

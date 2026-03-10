@@ -4363,3 +4363,20 @@ Started: Mon Feb 16 08:13:35 PM IST 2026
   - `create_subprocess_exec()` takes a list of args (no shell), safer than `create_subprocess_shell()` used by TerminalTool
   - Path stripping for validation: `rsplit("/", maxsplit=1)[-1]` extracts base command from full paths like /usr/bin/ls
 ---
+
+## 2026-03-10 - US-061
+- Implemented `CodeTool` class and `code_tool()` factory function for sandboxed Python code execution
+- If sandbox provided, delegates to `sandbox.run_tool()`; otherwise runs code in a subprocess with restricted builtins namespace
+- Restricted namespace blocks `__import__`, `open`, `os`, `sys`, `subprocess`, `shutil` by default (configurable via `blocked_names`)
+- Uses `asyncio.create_subprocess_exec()` for reliable timeout enforcement (subprocess can be killed on timeout)
+- Returns stdout capture or error message
+- Files changed:
+  - `packages/orbiter-sandbox/src/orbiter/sandbox/tools.py` — added `_build_runner_script()`, `CodeTool`, `code_tool()` factory, `_DEFAULT_BLOCKED_NAMES`, `_CODE_SCHEMA`
+  - `packages/orbiter-sandbox/tests/test_sandbox_tools.py` — added 22 tests across 6 test classes (safe execution, blocked code, error handling, sandbox delegation, schema, factory)
+  - `packages/orbiter-sandbox/src/orbiter/sandbox/__init__.py` — exported `CodeTool` and `code_tool`
+- **Learnings for future iterations:**
+  - `asyncio.to_thread()` cannot kill busy-spinning threads on timeout — use subprocess for reliable timeout enforcement in code execution tools
+  - `_build_runner_script()` uses `json.dumps()` to safely escape code strings for embedding in generated Python scripts
+  - Subprocess approach avoids GIL contention and gives true process isolation for untrusted code
+  - Blocked names work by filtering `vars(builtins)` — this blocks `import` statements (which need `__import__`) and direct use of blocked functions
+---

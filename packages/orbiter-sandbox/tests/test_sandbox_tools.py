@@ -1,4 +1,4 @@
-"""Tests for built-in sandbox tools (FilesystemTool, TerminalTool, ShellTool)."""
+"""Tests for built-in sandbox tools (FilesystemTool, TerminalTool, ShellTool, CodeTool)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,12 @@ import pytest
 from orbiter.sandbox.tools import (  # pyright: ignore[reportMissingImports]
     _DANGEROUS_COMMANDS,
     _DEFAULT_ALLOWED_COMMANDS,
+    _DEFAULT_BLOCKED_NAMES,
+    CodeTool,
     FilesystemTool,
     ShellTool,
     TerminalTool,
+    code_tool,
     shell_tool,
 )
 from orbiter.tool import ToolError
@@ -414,3 +417,172 @@ class TestShellToolFactory:
     def test_factory_custom_timeout(self) -> None:
         tool = shell_tool(timeout=60.0)
         assert tool._timeout == 60.0
+
+
+# ---------------------------------------------------------------------------
+# CodeTool — safe code execution
+# ---------------------------------------------------------------------------
+
+
+class TestCodeSafeExecution:
+    async def test_simple_print(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="print('hello world')")
+        assert "hello world" in result
+
+    async def test_arithmetic(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="print(2 + 3)")
+        assert "5" in result
+
+    async def test_multiline_code(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="x = 10\ny = 20\nprint(x + y)")
+        assert "30" in result
+
+    async def test_no_output(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="x = 42")
+        assert result == "(no output)"
+
+    async def test_loop(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="for i in range(3):\n    print(i)")
+        assert "0" in result
+        assert "1" in result
+        assert "2" in result
+
+
+# ---------------------------------------------------------------------------
+# CodeTool — blocked code
+# ---------------------------------------------------------------------------
+
+
+class TestCodeBlockedExecution:
+    async def test_import_blocked(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="import os")
+        assert "Error" in result
+
+    async def test_open_blocked(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="open('/etc/passwd')")
+        assert "Error" in result
+
+    async def test_dunder_import_blocked(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="__import__('os')")
+        assert "Error" in result
+
+    async def test_custom_blocked_names(self) -> None:
+        tool = CodeTool(blocked_names=frozenset({"print"}))
+        result = await tool.execute(code="print('hello')")
+        assert "Error" in result
+
+    async def test_default_blocked_names_contents(self) -> None:
+        assert "__import__" in _DEFAULT_BLOCKED_NAMES
+        assert "open" in _DEFAULT_BLOCKED_NAMES
+        assert "os" in _DEFAULT_BLOCKED_NAMES
+        assert "sys" in _DEFAULT_BLOCKED_NAMES
+
+
+# ---------------------------------------------------------------------------
+# CodeTool — error handling
+# ---------------------------------------------------------------------------
+
+
+class TestCodeErrorHandling:
+    async def test_empty_code(self) -> None:
+        tool = CodeTool()
+        with pytest.raises(ToolError, match="Empty code"):
+            await tool.execute(code="")
+
+    async def test_whitespace_only(self) -> None:
+        tool = CodeTool()
+        with pytest.raises(ToolError, match="Empty code"):
+            await tool.execute(code="   ")
+
+    async def test_syntax_error(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="def f(")
+        assert "Error" in result
+
+    async def test_runtime_error(self) -> None:
+        tool = CodeTool()
+        result = await tool.execute(code="1 / 0")
+        assert "Error" in result
+
+    async def test_timeout(self) -> None:
+        tool = CodeTool(timeout=0.1)
+        with pytest.raises(ToolError, match="timed out"):
+            await tool.execute(code="while True:\n    pass")
+
+
+# ---------------------------------------------------------------------------
+# CodeTool — sandbox delegation
+# ---------------------------------------------------------------------------
+
+
+class TestCodeSandboxDelegation:
+    async def test_delegates_to_sandbox(self) -> None:
+        from orbiter.sandbox.base import LocalSandbox  # pyright: ignore[reportMissingImports]
+
+        sandbox = LocalSandbox()
+        await sandbox.start()
+        tool = CodeTool(sandbox=sandbox)
+        result = await tool.execute(code="print('hello')")
+        assert isinstance(result, dict)
+        assert result["tool"] == "code"
+        assert result["arguments"] == {"code": "print('hello')"}
+        await sandbox.cleanup()
+
+    async def test_sandbox_not_running_error(self) -> None:
+        from orbiter.sandbox.base import LocalSandbox  # pyright: ignore[reportMissingImports]
+
+        sandbox = LocalSandbox()
+        # Don't start — should fail
+        tool = CodeTool(sandbox=sandbox)
+        with pytest.raises(ToolError, match="Sandbox execution failed"):
+            await tool.execute(code="print('hello')")
+
+
+# ---------------------------------------------------------------------------
+# CodeTool — schema
+# ---------------------------------------------------------------------------
+
+
+class TestCodeSchema:
+    def test_schema(self) -> None:
+        tool = CodeTool()
+        schema = tool.to_schema()
+        assert schema["function"]["name"] == "code"
+        assert "code" in schema["function"]["parameters"]["properties"]
+
+
+# ---------------------------------------------------------------------------
+# code_tool factory
+# ---------------------------------------------------------------------------
+
+
+class TestCodeToolFactory:
+    def test_factory_default(self) -> None:
+        tool = code_tool()
+        assert isinstance(tool, CodeTool)
+        assert tool._sandbox is None
+        assert tool._blocked == _DEFAULT_BLOCKED_NAMES
+
+    def test_factory_with_sandbox(self) -> None:
+        from orbiter.sandbox.base import LocalSandbox  # pyright: ignore[reportMissingImports]
+
+        sandbox = LocalSandbox()
+        tool = code_tool(sandbox=sandbox)
+        assert tool._sandbox is sandbox
+
+    def test_factory_custom_blocked(self) -> None:
+        blocked = frozenset({"print", "eval"})
+        tool = code_tool(blocked_names=blocked)
+        assert tool._blocked == blocked
+
+    def test_factory_custom_timeout(self) -> None:
+        tool = code_tool(timeout=30.0)
+        assert tool._timeout == 30.0
