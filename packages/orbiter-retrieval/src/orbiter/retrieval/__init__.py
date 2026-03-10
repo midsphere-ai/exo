@@ -7,6 +7,7 @@ __path__ = extend_path(__path__, __name__)
 from orbiter.retrieval.embeddings import Embeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.http_embeddings import HTTPEmbeddings  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings  # pyright: ignore[reportMissingImports]
+from orbiter.retrieval.hybrid_retriever import HybridRetriever  # pyright: ignore[reportMissingImports]
 from orbiter.retrieval.retriever import (  # pyright: ignore[reportMissingImports]
     Retriever,
     VectorRetriever,
@@ -29,6 +30,7 @@ __all__ = [
     "Document",
     "Embeddings",
     "HTTPEmbeddings",
+    "HybridRetriever",
     "InMemoryVectorStore",
     "OpenAIEmbeddings",
     "Retriever",
