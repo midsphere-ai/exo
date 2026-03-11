@@ -1,104 +1,70 @@
-# Ralph Agent Instructions
+# CLAUDE.md
 
-You are an autonomous coding agent working on a software project.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Your Task
+## Project Overview
 
-1. Read the PRD at `prd.json` (in the same directory as this file)
-2. Read the progress log at `progress.txt` (check Codebase Patterns section first)
-3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-4. Pick the **highest priority** user story where `passes: false`
-5. Implement that single user story
-6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
-7. Update CLAUDE.md files if you discover reusable patterns (see below)
-8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
-9. Update the PRD to set `passes: true` for the completed story
-10. Append your progress to `progress.txt`
+Orbiter is a modular multi-agent framework for building LLM-powered applications in Python. It's a UV workspace monorepo with 18 packages under `packages/`, all sharing the `orbiter` namespace.
 
-## Progress Report Format
+## Common Commands
 
-APPEND to progress.txt (never replace, always append):
-```
-## [Date/Time] - [Story ID]
-- What was implemented
-- Files changed
-- **Learnings for future iterations:**
-  - Patterns discovered (e.g., "this codebase uses X for Y")
-  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
-  - Useful context (e.g., "the evaluation panel is in component X")
----
-```
+```bash
+# Install all packages (editable) + dev dependencies
+uv sync
 
-The learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.
+# Run all tests
+uv run pytest
 
-## Consolidate Patterns
+# Run tests for a specific package
+uv run pytest packages/orbiter-core/tests/
 
-If you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:
+# Run a single test
+uv run pytest packages/orbiter-core/tests/test_agent.py::test_agent_calls_tool
 
-```
-## Codebase Patterns
-- Example: Use `sql<number>` template for aggregations
-- Example: Always use `IF NOT EXISTS` for migrations
-- Example: Export types from actions.ts for UI components
+# Lint and format
+uv run ruff check packages/
+uv run ruff check packages/ --fix
+uv run ruff format packages/
+
+# Type check
+uv run pyright packages/orbiter-core/
 ```
 
-Only add patterns that are **general and reusable**, not story-specific details.
+## Architecture
 
-## Update CLAUDE.md Files
+**Package dependency DAG** (bottom-up):
+- `orbiter-core` — Agent, Tool, Swarm, Runner, hooks, events, types. Only depends on `pydantic`.
+- `orbiter-models` — LLM provider abstractions (OpenAI, Anthropic, Gemini, Vertex AI). Depends on core.
+- `orbiter-context`, `orbiter-memory`, `orbiter-mcp`, `orbiter-sandbox`, `orbiter-guardrail`, `orbiter-retrieval`, `orbiter-observability`, `orbiter-distributed` — Feature packages depending on core/models.
+- `orbiter-eval`, `orbiter-a2a`, `orbiter-train`, `orbiter-perplexica` — Higher-level packages.
+- `orbiter-cli`, `orbiter-server`, `orbiter-web` — Top-level entry points.
+- `orbiter` — Meta-package that re-exports everything.
 
-Before committing, check if any edited files have learnings worth preserving in nearby CLAUDE.md files:
+**Key execution flow:** `run()` → `call_runner` → `agent.run` → tool loop
 
-1. **Identify directories with edited files** - Look at which directories you modified
-2. **Check for existing CLAUDE.md** - Look for CLAUDE.md in those directories or parent directories
-3. **Add valuable learnings** - If you discovered something future developers/agents should know:
-   - API patterns or conventions specific to that module
-   - Gotchas or non-obvious requirements
-   - Dependencies between files
-   - Testing approaches for that area
-   - Configuration or environment requirements
+**Core source layout:** `packages/orbiter-core/src/orbiter/` with public modules (`agent.py`, `tool.py`, `runner.py`, `swarm.py`, `types.py`, `hooks.py`, `events.py`, `config.py`) and `_internal/` for implementation details.
 
-**Examples of good CLAUDE.md additions:**
-- "When modifying X, also update Y to keep them in sync"
-- "This module uses pattern Z for all API calls"
-- "Tests require the dev server running on PORT 3000"
-- "Field names must match the template exactly"
+**Model string convention:** `"provider:model_name"` (e.g., `"openai:gpt-4o"`, `"anthropic:claude-sonnet-4-20250514"`). No colon defaults to `"openai"`.
 
-**Do NOT add:**
-- Story-specific implementation details
-- Temporary debugging notes
-- Information already in progress.txt
+## Code Conventions
 
-Only update CLAUDE.md if you have **genuinely reusable knowledge** that would help future work in that directory.
+- **Max ~200 lines per source file.** Split into `_internal/` submodules when larger. Test files can go up to ~300.
+- **Async-first.** All internal functions are `async def`. Single `run.sync()` bridge for sync callers.
+- **Pydantic v2 models** with `model_config = {"frozen": True}` for config/data classes. Use `@field_validator` not `@validator`.
+- **Modern Python type syntax:** `X | None` not `Optional[X]`, lowercase `list`/`dict` not `List`/`Dict`.
+- **Google-style docstrings** on public classes and functions.
+- **Ruff:** line-length=100, double quotes, 4-space indent. Rules: E, F, I, N, W, UP, B, SIM, RUF.
+- **All exceptions** inherit from `OrbiterError`.
+- **Conventional commits:** `feat:`, `fix:`, `docs:`, `chore:`, etc.
 
-## Quality Requirements
+## Testing Conventions
 
-- ALL commits must pass your project's quality checks (typecheck, lint, test)
-- Do NOT commit broken code
-- Keep changes focused and minimal
-- Follow existing code patterns
+- `asyncio_mode = "auto"` — no `@pytest.mark.asyncio` needed on async tests.
+- `--import-mode=importlib` — test file names must be **unique across all packages** (prefix with package name to avoid collisions).
+- **Never make real API calls** — always use mock providers.
+- Cross-package imports in test files use `# pyright: ignore[reportMissingImports]`.
+- Root `pyproject.toml` is NOT a package — it only configures workspace, pytest, ruff, and pyright.
 
-## Browser Testing (If Available)
+## Environment Variables
 
-For any story that changes UI, verify it works in the browser if you have browser testing tools configured (e.g., via MCP):
-
-1. Navigate to the relevant page
-2. Verify the UI changes work as expected
-3. Take a screenshot if helpful for the progress log
-
-If no browser tools are available, note in your progress report that manual browser verification is needed.
-
-## Stop Condition
-
-After completing a user story, check if ALL stories have `passes: true`.
-
-If ALL stories are complete and passing, reply with:
-<promise>COMPLETE</promise>
-
-If there are still stories with `passes: false`, end your response normally (another iteration will pick up the next story).
-
-## Important
-
-- Work on ONE story per iteration
-- Commit frequently
-- Keep CI green
-- Read the Codebase Patterns section in progress.txt before starting
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — only needed for integration tests; unit tests use mocks.
