@@ -13,7 +13,7 @@ class PerplexicaConfig:
     searxng_url: str = ""
     model: str = ""
     fast_model: str = ""
-    embedding_model: str = ""
+    embedding_model: str = "gemini-embedding-2-preview"
     max_results: int = 10
     searxng_timeout: int = 15
     research_mode: str = ""  # speed, balanced, quality

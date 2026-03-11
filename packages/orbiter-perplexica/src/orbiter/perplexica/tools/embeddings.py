@@ -138,6 +138,8 @@ def _get_gemini_embeddings(
         {
             "model": f"models/{model}",
             "content": {"parts": [{"text": t}]},
+            "taskType": "SEMANTIC_SIMILARITY",
+            "outputDimensionality": 3072,
         }
         for t in texts
     ]
@@ -174,7 +176,9 @@ def _get_vertex_embeddings(
         vertexai=True, project=project, location=location
     )
     response = client.models.embed_content(
-        model=model, contents=texts
+        model=model,
+        contents=texts,
+        config={"task_type": "SEMANTIC_SIMILARITY", "output_dimensionality": 3072},
     )
     return [emb.values for emb in response.embeddings]
 
@@ -200,13 +204,13 @@ def _get_embeddings(texts: list[str]) -> list[list[float]] | None:
 
     if gemini_key:
         model = os.environ.get(
-            "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-004"
+            "PERPLEXICA_EMBEDDING_MODEL", "gemini-embedding-2-preview"
         )
         return _get_gemini_embeddings(texts, gemini_key, model)
 
     if gcp_project:
         model = os.environ.get(
-            "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-004"
+            "PERPLEXICA_EMBEDDING_MODEL", "gemini-embedding-2-preview"
         )
         return _get_vertex_embeddings(texts, model)
 
