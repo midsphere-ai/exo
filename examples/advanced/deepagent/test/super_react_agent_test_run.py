@@ -63,6 +63,7 @@ MODEL_NAME = os.getenv("MODEL_NAME", "anthropic/claude-3.7-sonnet")
 MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "openrouter")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your_openai_api_key_here")
 REASONING_MODEL_NAME = os.getenv("REASONING_MODEL_NAME", "o3")
+REASONING_BASE_URL = os.getenv("REASONING_BASE_URL", None)
 os.environ.setdefault("LLM_SSL_VERIFY", "false")
 
 # Prefer the tooling venv for MCP servers so required deps are available.
@@ -409,6 +410,7 @@ async def example_mcp_main_and_sub_agents(queries: list | None = None):
         open_api_key = OPENAI_API_KEY,
         enable_extract_final_answer=True,
         reasoning_model=REASONING_MODEL_NAME,
+        reasoning_base_url=REASONING_BASE_URL,
         enable_todo_plan=False,
     )
 

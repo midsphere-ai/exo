@@ -180,6 +180,7 @@ class SuperReActAgent:
                 api_key=agent_config.open_api_key,
                 enable_message_ids=True,
                 reasoning_model=agent_config.reasoning_model,
+                base_url=agent_config.reasoning_base_url,
             )
 
         # MCP server connections (for lifecycle management)

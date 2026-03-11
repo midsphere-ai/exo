@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Union
+
+from orbiter.types import StreamEvent
+
 from .agents.classifier import classify
-from .agents.researcher import research
-from .agents.writer import write_answer
+from .agents.researcher import research, stream_research
+from .agents.writer import write_answer, stream_write_answer
 from .agents.suggestion_generator import generate_suggestions
 from .config import PerplexicaConfig
-from .types import PerplexicaResponse, Source
+from .types import PerplexicaResponse, PipelineEvent, SearchResult, Source
 
 
 async def run_search_pipeline(
@@ -67,6 +72,91 @@ async def run_search_pipeline(
     ]
 
     return PerplexicaResponse(
+        answer=answer,
+        sources=sources,
+        suggestions=suggestions,
+        query=effective_query,
+        mode=mode,
+    )
+
+
+async def stream_search_pipeline(
+    query: str,
+    chat_history: list[tuple[str, str]] | None = None,
+    mode: str = "balanced",
+    system_instructions: str = "",
+    config: PerplexicaConfig | None = None,
+) -> AsyncIterator[Union[PipelineEvent, StreamEvent, PerplexicaResponse]]:
+    """Stream the full search pipeline.
+
+    Yields:
+        PipelineEvent — stage transitions (classifier started/completed, etc.)
+        StreamEvent — orbiter events from researcher (ToolCallEvent, TextEvent, etc.)
+                      and writer (TextEvent for each token)
+        PerplexicaResponse — final complete response as the last item
+    """
+    cfg = config or PerplexicaConfig()
+    history = chat_history or []
+
+    # Step 1: Classify (fast, non-streaming)
+    yield PipelineEvent(stage="classifier", status="started")
+    classification = await classify(query, history, cfg)
+    effective_query = classification.standalone_follow_up or query
+    yield PipelineEvent(
+        stage="classifier", status="completed",
+        message=f"skip_search={classification.classification.skip_search}",
+    )
+
+    # Step 2: Research (streaming tool calls)
+    search_results: list[SearchResult] = []
+    if not classification.classification.skip_search:
+        yield PipelineEvent(stage="researcher", status="started")
+        async for event in stream_research(
+            query=effective_query,
+            classification=classification,
+            chat_history=history,
+            mode=mode,
+            config=cfg,
+        ):
+            if isinstance(event, SearchResult):
+                search_results.append(event)
+            else:
+                yield event
+        yield PipelineEvent(
+            stage="researcher", status="completed",
+            message=f"{len(search_results)} results",
+        )
+
+    # Step 3: Write answer (streaming text tokens)
+    yield PipelineEvent(stage="writer", status="started")
+    answer_parts: list[str] = []
+    async for event in stream_write_answer(
+        query=effective_query,
+        search_results=search_results,
+        chat_history=history,
+        system_instructions=system_instructions or cfg.system_instructions,
+        mode=mode,
+        config=cfg,
+    ):
+        from orbiter.types import TextEvent
+        if isinstance(event, TextEvent):
+            answer_parts.append(event.text)
+        yield event
+    answer = "".join(answer_parts)
+    yield PipelineEvent(stage="writer", status="completed")
+
+    # Step 4: Suggestions (fast, non-streaming)
+    yield PipelineEvent(stage="suggestions", status="started")
+    updated_history = history + [(query, answer)]
+    suggestions = await generate_suggestions(updated_history, cfg)
+    yield PipelineEvent(stage="suggestions", status="completed")
+
+    # Yield final complete response
+    sources = [
+        Source(title=r.title, url=r.url, content=r.content)
+        for r in search_results
+    ]
+    yield PerplexicaResponse(
         answer=answer,
         sources=sources,
         suggestions=suggestions,

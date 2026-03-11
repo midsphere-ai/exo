@@ -1,83 +1,134 @@
 @import "tailwindcss";
-@import "@fontsource/bricolage-grotesque/400.css";
-@import "@fontsource/bricolage-grotesque/500.css";
-@import "@fontsource/bricolage-grotesque/600.css";
-@import "@fontsource/bricolage-grotesque/700.css";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/roboto-mono/400.css";
+@import "@fontsource/roboto-mono/500.css";
+@import "@fontsource/roboto-mono/700.css";
 
-/* Junicode variable font */
-@font-face {
-  font-family: "Junicode";
-  src: url("/fonts/JunicodeVF-Roman.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Junicode";
-  src: url("/fonts/JunicodeVF-Italic.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: italic;
-  font-display: swap;
-}
-
-/* Design system color tokens as CSS custom properties */
+/* Devin-inspired design system color tokens */
 :root {
-  --zen-paper: #f2f0e3;
-  --zen-dark: #2e2e2e;
-  --zen-muted: #8a877a;
-  --zen-subtle: #e8e6d9;
-  --zen-coral: #f76f53;
-  --zen-blue: #6287f5;
-  --zen-green: #63f78b;
+  /* Backgrounds */
+  --dv-bg-page: #fcfcfc;
+  --dv-bg-wash: #f5f5f5;
+  --dv-bg-elevated: #ffffff;
+  --dv-bg-elevated-wash: rgba(255, 255, 255, 0.94);
+
+  /* Accents */
+  --dv-accent-primary: #3eed9b;
+  --dv-accent-green: rgba(62, 237, 155, 0.12);
+  --dv-accent-red: rgba(245, 59, 58, 0.12);
+  --dv-accent-orange: rgba(245, 142, 58, 0.12);
+  --dv-accent-purple: rgba(149, 108, 222, 0.12);
+
+  /* Text */
+  --dv-text-primary: rgba(0, 0, 0, 0.9);
+  --dv-text-secondary: rgba(0, 0, 0, 0.7);
+  --dv-text-tertiary: rgba(0, 0, 0, 0.5);
+  --dv-text-strong: #000000;
+  --dv-text-inverse: #ffffff;
+  --dv-text-accent: #00a558;
+  --dv-text-green: #00a558;
+  --dv-text-red: #f53b3a;
+  --dv-text-purple: #956cde;
+  --dv-text-orange: #f58e3a;
+  --dv-text-link: rgba(62, 184, 237, 0.85);
+  --dv-text-link-strong: #3eb8ed;
+
+  /* Borders */
+  --dv-border-primary: rgba(0, 0, 0, 0.08);
+  --dv-border-secondary: rgba(0, 0, 0, 0.04);
+  --dv-tint: rgba(0, 0, 0, 0.04);
+
+  /* Destructive */
+  --dv-destructive: #f53b3a;
 }
 
 [data-theme='dark'] {
-  --zen-paper: #1f1f1f;
-  --zen-dark: #d1cfc0;
-  --zen-muted: #8a877a;
-  --zen-subtle: #2e2e2e;
-  --zen-coral: #f76f53;
-  --zen-blue: #6287f5;
-  --zen-green: #63f78b;
+  /* Backgrounds */
+  --dv-bg-page: #141414;
+  --dv-bg-wash: #181a19;
+  --dv-bg-elevated: #1f1f1f;
+  --dv-bg-elevated-wash: rgba(31, 31, 31, 0.94);
+
+  /* Accents */
+  --dv-accent-primary: #00ec7e;
+  --dv-accent-green: rgba(0, 236, 126, 0.08);
+  --dv-accent-red: rgba(245, 59, 58, 0.12);
+  --dv-accent-orange: rgba(245, 142, 58, 0.12);
+  --dv-accent-purple: rgba(149, 108, 222, 0.12);
+
+  /* Text */
+  --dv-text-primary: rgba(255, 255, 255, 0.9);
+  --dv-text-secondary: rgba(255, 255, 255, 0.6);
+  --dv-text-tertiary: rgba(255, 255, 255, 0.4);
+  --dv-text-strong: #ffffff;
+  --dv-text-inverse: #000000;
+  --dv-text-accent: #00a558;
+  --dv-text-green: #00a558;
+  --dv-text-red: #f53b3a;
+  --dv-text-purple: #956cde;
+  --dv-text-orange: #f58e3a;
+  --dv-text-link: rgba(62, 184, 237, 0.85);
+  --dv-text-link-strong: #3eb8ed;
+
+  /* Borders */
+  --dv-border-primary: rgba(255, 255, 255, 0.08);
+  --dv-border-secondary: rgba(255, 255, 255, 0.04);
+  --dv-tint: rgba(255, 255, 255, 0.05);
+
+  /* Destructive */
+  --dv-destructive: #f53b3a;
 }
 
-/* Map design tokens to Tailwind theme variables */
+/* Map design tokens to Tailwind theme — keep old names as aliases for compat */
 @theme {
-  --color-paper: var(--zen-paper);
-  --color-dark: var(--zen-dark);
-  --color-muted: var(--zen-muted);
-  --color-subtle: var(--zen-subtle);
-  --color-coral: var(--zen-coral);
-  --color-zen-blue: var(--zen-blue);
-  --color-zen-green: var(--zen-green);
+  /* New Devin token names */
+  --color-bg-page: var(--dv-bg-page);
+  --color-bg-wash: var(--dv-bg-wash);
+  --color-bg-elevated: var(--dv-bg-elevated);
+  --color-accent: var(--dv-accent-primary);
+  --color-accent-green: var(--dv-accent-green);
+  --color-accent-red: var(--dv-accent-red);
+  --color-accent-orange: var(--dv-accent-orange);
+  --color-accent-purple: var(--dv-accent-purple);
+  --color-destructive: var(--dv-destructive);
 
-  --font-sans: "Bricolage Grotesque", system-ui, sans-serif;
-  --font-junicode: "Junicode", Georgia, serif;
+  /* Old token aliases → new values (keeps existing components working) */
+  --color-paper: var(--dv-bg-page);
+  --color-dark: var(--dv-text-primary);
+  --color-muted: var(--dv-text-secondary);
+  --color-subtle: var(--dv-bg-wash);
+  --color-coral: var(--dv-accent-primary);
+  --color-zen-blue: var(--dv-text-link-strong);
+  --color-zen-green: var(--dv-accent-primary);
+
+  /* Fonts */
+  --font-sans: "Geist Sans", system-ui, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-junicode: "Geist Sans", system-ui, sans-serif;
 }
 
 /* Default body typography */
 body {
   font-family: var(--font-sans);
-  font-weight: 500;
+  font-weight: 400;
+  background-color: var(--dv-bg-page);
+  color: var(--dv-text-primary);
 }
 
-/* Utility class for display headings */
+/* Utility class for display headings — now uses Geist bold */
 .font-junicode {
-  font-family: var(--font-junicode);
+  font-family: var(--font-sans);
+  font-weight: 700;
 }
 
 /* Section divider pattern — gradient line + constrained container */
 .section-divider {
-  border-top: 1px solid transparent;
-  border-image: linear-gradient(
-    to right,
-    transparent,
-    var(--zen-dark),
-    transparent
-  ) 1;
+  border-top: 1px solid var(--dv-border-primary);
   margin-inline: auto;
-  max-width: 72rem; /* max-w-6xl */
+  max-width: 72rem;
   padding-inline: 1rem;
 }
 
@@ -140,15 +191,15 @@ body {
 }
 
 .chat-prose code {
-  background: var(--zen-subtle);
+  background: var(--dv-bg-wash);
   padding: 0.15em 0.35em;
   border-radius: 0.25em;
   font-size: 0.875em;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .chat-prose pre {
-  background: var(--zen-subtle);
+  background: var(--dv-bg-wash);
   border-radius: 0.5em;
   padding: 0.75em 1em;
   overflow-x: auto;
@@ -186,14 +237,14 @@ body {
 }
 
 .chat-prose blockquote {
-  border-left: 3px solid var(--zen-muted);
+  border-left: 3px solid var(--dv-text-tertiary);
   padding-left: 0.75em;
   margin: 0.5em 0;
-  color: var(--zen-muted);
+  color: var(--dv-text-secondary);
 }
 
 .chat-prose a {
-  color: var(--zen-blue);
+  color: var(--dv-text-link-strong);
   text-decoration: underline;
 }
 
@@ -206,19 +257,19 @@ body {
 
 .chat-prose th,
 .chat-prose td {
-  border: 1px solid color-mix(in srgb, var(--zen-dark) 12%, transparent);
+  border: 1px solid var(--dv-border-primary);
   padding: 0.35em 0.75em;
   text-align: left;
 }
 
 .chat-prose th {
   font-weight: 600;
-  background: var(--zen-subtle);
+  background: var(--dv-bg-wash);
 }
 
 .chat-prose hr {
   border: none;
-  border-top: 1px solid color-mix(in srgb, var(--zen-dark) 10%, transparent);
+  border-top: 1px solid var(--dv-border-secondary);
   margin: 0.75em 0;
 }
 

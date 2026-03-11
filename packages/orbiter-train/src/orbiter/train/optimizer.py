@@ -1,4 +1,4 @@
-"""InstructionOptimizer — LLM prompt optimization via textual gradients."""
+"""Optimizers for LLM prompts and tool descriptions."""
 
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ from orbiter.train.evolution import (  # pyright: ignore[reportMissingImports]
 )
 from orbiter.train.operator.llm_call import (  # pyright: ignore[reportMissingImports]
     LLMCallOperator,
+)
+from orbiter.train.operator.tool_call import (  # pyright: ignore[reportMissingImports]
+    ToolCallOperator,
 )
 
 
@@ -244,3 +247,221 @@ class InstructionOptimizer(EvolutionStrategy):
             if tmpl not in rewritten:
                 rewritten = f"{rewritten} {tmpl}"
         return rewritten
+
+
+class ToolOptimizer:
+    """Optimizer that improves tool descriptions via beam search.
+
+    For each :class:`ToolCallOperator`, generates multiple candidate
+    descriptions, evaluates them against the provided cases, selects the
+    best, and optionally refines it — implementing a multi-stage beam
+    search over description space.
+
+    Args:
+        model: Model identifier for meta-LLM calls.
+        operators: Tool call operators whose descriptions will be optimized.
+        llm_fn: Async callable with signature
+            ``(*, system_prompt: str, user_prompt: str, **kw) -> str``.
+            If *None*, the optimizer returns the original descriptions.
+    """
+
+    __slots__ = ("_llm_fn", "_model", "_operators")
+
+    def __init__(
+        self,
+        model: str,
+        operators: list[ToolCallOperator],
+        *,
+        llm_fn: Any = None,
+    ) -> None:
+        self._model = model
+        self._operators = list(operators)
+        self._llm_fn = llm_fn
+
+    @property
+    def model(self) -> str:
+        """Model identifier used for meta-LLM calls."""
+        return self._model
+
+    @property
+    def operators(self) -> list[ToolCallOperator]:
+        """Operators whose descriptions are being optimized."""
+        return list(self._operators)
+
+    async def optimize(
+        self,
+        eval_cases: Sequence[dict[str, Any]],
+        *,
+        beam_width: int = 3,
+    ) -> dict[str, str]:
+        """Run beam search to find optimized tool descriptions.
+
+        Multi-stage pipeline:
+        1. **Generate** — produce *beam_width* candidate descriptions per
+           operator.
+        2. **Evaluate** — score each candidate against *eval_cases*.
+        3. **Select** — pick the highest-scoring candidate.
+        4. **Refine** — improve the selected candidate once more.
+
+        The final description is applied to each operator via
+        ``load_state()``.
+
+        Args:
+            eval_cases: Evaluation cases with ``input``, ``output``,
+                ``expected``, ``score``, ``status``.
+            beam_width: Number of candidate descriptions to generate per
+                operator.
+
+        Returns:
+            Mapping of operator name → optimized description.
+        """
+        if not self._operators:
+            return {}
+
+        result: dict[str, str] = {}
+
+        for op in self._operators:
+            current = op.get_state().get("tool_description", "")
+
+            if self._llm_fn is None:
+                result[op.name] = current
+                continue
+
+            # Stage 1: Generate candidates.
+            candidates = await self._generate_candidates(
+                op.name, current, eval_cases, beam_width
+            )
+
+            # Stage 2: Evaluate candidates.
+            scored = await self._evaluate_candidates(
+                op.name, candidates, eval_cases
+            )
+
+            # Stage 3: Select best.
+            best = max(scored, key=lambda pair: pair[1])[0]
+
+            # Stage 4: Refine.
+            refined = await self._refine(op.name, best, eval_cases)
+
+            # Apply to operator.
+            op.load_state({"tool_description": refined})
+            result[op.name] = refined
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Internal stages
+    # ------------------------------------------------------------------
+
+    async def _generate_candidates(
+        self,
+        tool_name: str,
+        current_desc: str,
+        eval_cases: Sequence[dict[str, Any]],
+        beam_width: int,
+    ) -> list[str]:
+        """Stage 1: Generate *beam_width* candidate descriptions."""
+        assert self._llm_fn is not None
+        candidates: list[str] = []
+        case_summary = self._summarise_cases(eval_cases)
+
+        for i in range(beam_width):
+            raw = await self._llm_fn(
+                system_prompt=(
+                    "You are an expert at writing tool descriptions for AI "
+                    "agents. Generate a single improved tool description. "
+                    "Be concise and specific."
+                ),
+                user_prompt=(
+                    f"Tool name: {tool_name}\n"
+                    f"Current description: {current_desc}\n"
+                    f"Candidate number: {i + 1} of {beam_width}\n\n"
+                    f"Usage context:\n{case_summary}\n\n"
+                    "Write ONE improved description."
+                ),
+                model=self._model,
+            )
+            candidates.append(str(raw))
+
+        return candidates
+
+    async def _evaluate_candidates(
+        self,
+        tool_name: str,
+        candidates: list[str],
+        eval_cases: Sequence[dict[str, Any]],
+    ) -> list[tuple[str, float]]:
+        """Stage 2: Score each candidate description."""
+        assert self._llm_fn is not None
+        scored: list[tuple[str, float]] = []
+        case_summary = self._summarise_cases(eval_cases)
+
+        for candidate in candidates:
+            raw = await self._llm_fn(
+                system_prompt=(
+                    "You are evaluating tool descriptions. Rate the "
+                    "following description on a scale of 0.0 to 1.0 based "
+                    "on clarity, specificity, and usefulness for the given "
+                    "usage context. Reply with ONLY a number."
+                ),
+                user_prompt=(
+                    f"Tool: {tool_name}\n"
+                    f"Description: {candidate}\n\n"
+                    f"Usage context:\n{case_summary}"
+                ),
+                model=self._model,
+            )
+            try:
+                score = float(str(raw).strip())
+                score = max(0.0, min(1.0, score))
+            except (ValueError, TypeError):
+                score = 0.5  # fallback for non-numeric responses
+            scored.append((candidate, score))
+
+        return scored
+
+    async def _refine(
+        self,
+        tool_name: str,
+        description: str,
+        eval_cases: Sequence[dict[str, Any]],
+    ) -> str:
+        """Stage 4: Refine the selected best candidate."""
+        assert self._llm_fn is not None
+        case_summary = self._summarise_cases(eval_cases)
+
+        raw = await self._llm_fn(
+            system_prompt=(
+                "You are an expert at writing tool descriptions for AI "
+                "agents. Refine the given tool description to be maximally "
+                "clear and useful. Be concise."
+            ),
+            user_prompt=(
+                f"Tool: {tool_name}\n"
+                f"Description to refine: {description}\n\n"
+                f"Usage context:\n{case_summary}\n\n"
+                "Write the refined description."
+            ),
+            model=self._model,
+        )
+        return str(raw)
+
+    @staticmethod
+    def _summarise_cases(
+        cases: Sequence[dict[str, Any]],
+        *,
+        max_cases: int = 5,
+    ) -> str:
+        """Build a compact summary of evaluation cases for prompts."""
+        if not cases:
+            return "(no cases)"
+        lines: list[str] = []
+        for i, case in enumerate(cases[:max_cases]):
+            lines.append(
+                f"  {i + 1}. input={case.get('input', '')!r} "
+                f"output={case.get('output', '')!r} "
+                f"score={case.get('score', 'N/A')}"
+            )
+        if len(cases) > max_cases:
+            lines.append(f"  ... and {len(cases) - max_cases} more")
+        return "\n".join(lines)

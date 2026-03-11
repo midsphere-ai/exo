@@ -30,24 +30,31 @@ class QAHandler:
     - Message ID support
     """
 
-    def __init__(self, api_key: str, enable_message_ids: bool = True, reasoning_model: str = "o3"):
+    def __init__(self, api_key: str, enable_message_ids: bool = True, reasoning_model: str = "o3", base_url: str | None = None):
         """
         Initialize QA Handler
 
         Args:
             api_key: e.g., OpenAI API key for O3 model
             enable_message_ids: Whether to add message IDs to requests
+            reasoning_model: Model name for reasoning tasks
+            base_url: Optional base URL for OpenAI-compatible APIs (e.g. Gemini)
         """
-        self.client = AsyncOpenAI(api_key=api_key, timeout=600) # TODO: support more reasoning models
+        client_kwargs: dict = {"api_key": api_key, "timeout": 600}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self.client = AsyncOpenAI(**client_kwargs)
         self.enable_message_ids = enable_message_ids
         self.r_model = reasoning_model
+        # Only use reasoning_effort for known OpenAI reasoning models
+        self._supports_reasoning_effort = reasoning_model in ("o3", "o3-mini", "o1", "o1-mini", "o1-preview")
 
     def _generate_message_id(self) -> str:
         """Generate random message ID using common LLM format"""
         import uuid
         return f"msg_{uuid.uuid4().hex[:8]}"
 
-    @retry(wait=wait_exponential(multiplier=15), stop=stop_after_attempt(1))
+    @retry(wait=wait_exponential(multiplier=15), stop=stop_after_attempt(3))
     async def extract_hints(self, question: str) -> str:
         """
         Use reasoning model to extract task hints
@@ -66,11 +73,13 @@ class QAHandler:
             message_id = self._generate_message_id()
             content = f"[{message_id}] {content}"
 
-        response = await self.client.chat.completions.create(       # TODO: support more reasoning models
-            model=self.r_model,
-            messages=[{"role": "user", "content": content}],
-            reasoning_effort="high"
-        )
+        create_kwargs: dict = {
+            "model": self.r_model,
+            "messages": [{"role": "user", "content": content}],
+        }
+        if self._supports_reasoning_effort:
+            create_kwargs["reasoning_effort"] = "high"
+        response = await self.client.chat.completions.create(**create_kwargs)
 
         logger.debug(f"current reasoning model {self.r_model} hints extraction response: {response}")
 
@@ -102,11 +111,13 @@ class QAHandler:
             message_id = self._generate_message_id()
             content = f"[{message_id}] {content}"
 
-        response = await self.client.chat.completions.create(
-            model="gpt-5",
-            messages=[{"role": "user", "content": content}],
-            reasoning_effort="medium"
-        )
+        create_kwargs: dict = {
+            "model": self.r_model,
+            "messages": [{"role": "user", "content": content}],
+        }
+        if self._supports_reasoning_effort:
+            create_kwargs["reasoning_effort"] = "medium"
+        response = await self.client.chat.completions.create(**create_kwargs)
 
         answer_type = response.choices[0].message.content
 
@@ -149,11 +160,13 @@ class QAHandler:
             message_id = self._generate_message_id()
             content = f"[{message_id}] {content}"
 
-        response = await self.client.chat.completions.create(
-            model=self.r_model,
-            messages=[{"role": "user", "content": content}],
-            reasoning_effort="medium",
-        )
+        create_kwargs: dict = {
+            "model": self.r_model,
+            "messages": [{"role": "user", "content": content}],
+        }
+        if self._supports_reasoning_effort:
+            create_kwargs["reasoning_effort"] = "medium"
+        response = await self.client.chat.completions.create(**create_kwargs)
 
         result = response.choices[0].message.content
 

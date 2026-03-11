@@ -89,8 +89,9 @@ class SuperAgentConfig(BaseModel):
     # Reasoning model integration
     enable_question_hints: bool = Field(default=False, description="Enable question-hints extraction.")
     enable_extract_final_answer: bool = Field(default=False, description="Enable final-answer extraction.")
-    open_api_key: str | None = Field(default=None, description="OpenAI API key for reasoning model.")
+    open_api_key: str | None = Field(default=None, description="API key for reasoning model.")
     reasoning_model: str = Field(default="o3", description="Reasoning model to use.")
+    reasoning_base_url: str | None = Field(default=None, description="Base URL for reasoning model API (for non-OpenAI providers).")
 
     # Context management
     enable_context_limit_retry: bool = Field(
@@ -140,6 +141,7 @@ class SuperAgentFactory:
         enable_extract_final_answer: bool = False,
         open_api_key: str | None = None,
         reasoning_model: str = "o3",
+        reasoning_base_url: str | None = None,
         task_guidance: str = "",
         enable_todo_plan: bool = True,
         agent_type: str = "main",
@@ -165,6 +167,7 @@ class SuperAgentFactory:
             enable_extract_final_answer=enable_extract_final_answer,
             open_api_key=open_api_key,
             reasoning_model=reasoning_model,
+            reasoning_base_url=reasoning_base_url,
             task_guidance=task_guidance,
             enable_todo_plan=enable_todo_plan,
         )

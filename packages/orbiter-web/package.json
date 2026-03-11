@@ -16,6 +16,8 @@
     "@astrojs/react": "^4.4.2",
     "@dagrejs/dagre": "^2.0.4",
     "@fontsource/bricolage-grotesque": "^5.2.10",
+    "@fontsource/geist-sans": "^5.2.5",
+    "@fontsource/roboto-mono": "^5.2.8",
     "@tailwindcss/vite": "^4.1.18",
     "@xyflow/react": "^12.10.0",
     "astro": "^5.0.0",

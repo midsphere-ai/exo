@@ -45,6 +45,7 @@ dev = [
     "orbiter-train",
     "orbiter-web",
     "orbiter-ai",
+    "orbiter-perplexica",
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
     "pytest>=8.0",
@@ -53,6 +54,7 @@ dev = [
     "temporalio>=1.7",
     "ruff>=0.8",
     "pyright>=1.1",
+    "google-genai>=1.66.0",
 ]
 
 [tool.uv.sources]

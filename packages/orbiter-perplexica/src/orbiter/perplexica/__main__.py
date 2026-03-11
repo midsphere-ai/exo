@@ -29,58 +29,49 @@ async def run_search(
     history = conversation.turns if conversation else []
 
     if stream:
-        # For streaming, we run the pipeline and print progressively
-        # Since the new pipeline is programmatic (not swarm-based),
-        # we print status updates at each stage
+        from .pipeline import stream_search_pipeline
+        from .types import PipelineEvent, PerplexicaResponse
+
         print(f"\nSearching ({quality} mode)...\n")
 
-        from .pipeline import run_search_pipeline
-        from .agents.classifier import classify
-        from .agents.researcher import research
-        from .agents.writer import write_answer
-        from .agents.suggestion_generator import generate_suggestions
-        from .types import Source
-
-        print("  [classifier] Classifying query...")
-        classification = await classify(query, history, config)
-        effective_query = classification.standalone_follow_up or query
-        print(f"  [classifier] Done. Skip search: {classification.classification.skip_search}")
-
-        search_results = []
-        if not classification.classification.skip_search:
-            print("  [researcher] Researching...")
-            search_results = await research(
-                query=effective_query,
-                classification=classification,
-                chat_history=history,
-                mode=quality,
-                config=config,
-            )
-            print(f"  [researcher] Found {len(search_results)} results.")
-
-        print("  [writer] Generating answer...")
-        answer = await write_answer(
-            query=effective_query,
-            search_results=search_results,
+        result = None
+        async for event in stream_search_pipeline(
+            query=query,
             chat_history=history,
-            system_instructions=config.system_instructions,
             mode=quality,
             config=config,
-        )
-        print()
-        print(answer)
+        ):
+            if isinstance(event, PipelineEvent):
+                if event.status == "started":
+                    print(f"  [{event.stage}] Starting...", flush=True)
+                else:
+                    msg = f" ({event.message})" if event.message else ""
+                    print(f"  [{event.stage}] Done{msg}", flush=True)
+                    if event.stage == "writer":
+                        print()  # newline after writer completes
+            elif isinstance(event, PerplexicaResponse):
+                result = event
+            else:
+                # StreamEvent — print text tokens in real-time
+                from orbiter.types import TextEvent, ToolCallEvent
+                if isinstance(event, TextEvent) and event.agent_name == "writer":
+                    print(event.text, end="", flush=True)
+                elif isinstance(event, ToolCallEvent) and event.agent_name == "researcher":
+                    print(f"    -> {event.tool_name}()", flush=True)
 
-        print("\n  [suggestions] Generating suggestions...")
-        updated_history = history + [(query, answer)]
-        suggestions = await generate_suggestions(updated_history, config)
+        if result:
+            if result.sources:
+                print("\n---\nSources:")
+                for i, s in enumerate(result.sources, 1):
+                    print(f"  [{i}] {s.title} ({s.url})")
 
-        if suggestions:
-            print("\nSuggested follow-ups:")
-            for i, s in enumerate(suggestions, 1):
-                print(f"  {i}. {s}")
+            if result.suggestions:
+                print("\nSuggested follow-ups:")
+                for i, s in enumerate(result.suggestions, 1):
+                    print(f"  {i}. {s}")
 
-        if conversation:
-            conversation.add_turn(query, answer)
+            if conversation:
+                conversation.add_turn(query, result.answer)
     else:
         from . import search_with_details
 

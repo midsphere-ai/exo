@@ -250,7 +250,7 @@ class ToolCallHandler:
         return [
             {
                 "id": tc.id,
-                "type": tc.type,
+                "type": "function",
                 "function": {
                     "name": tc.name,
                     "arguments": tc.arguments,

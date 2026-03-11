@@ -53,6 +53,14 @@ class SuggestionOutput(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
 
 
+class PipelineEvent(BaseModel):
+    """Pipeline stage transition event."""
+    type: str = "pipeline"
+    stage: str  # "classifier", "researcher", "writer", "suggestions"
+    status: str  # "started", "completed"
+    message: str = ""
+
+
 class PerplexicaResponse(BaseModel):
     """Final structured search response."""
     answer: str

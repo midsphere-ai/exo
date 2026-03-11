@@ -227,7 +227,7 @@ class ContextManager:
                 messages.append({"role": "user", "content": prompt})
 
                 # Call LLM
-                response = await self._llm.complete(messages, tools=[])  # type: ignore[arg-type]
+                response = await self._llm.complete(messages)  # type: ignore[arg-type]
 
                 if response.content:
                     logger.info("Summary generated successfully")

@@ -99,17 +99,21 @@ def _map_finish_reason(raw: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
-    """Convert Orbiter ``Message`` objects to OpenAI chat message dicts.
+def _to_openai_messages(messages: list[Message] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert Orbiter ``Message`` objects or raw dicts to OpenAI chat message dicts.
 
     Args:
-        messages: Orbiter message sequence.
+        messages: Orbiter message sequence or raw message dicts.
 
     Returns:
         List of dicts suitable for the OpenAI ``messages`` parameter.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
+        # Handle raw dict messages (e.g. from ContextManager)
+        if isinstance(msg, dict):
+            result.append(msg)
+            continue
         if isinstance(msg, SystemMessage):
             result.append({"role": "system", "content": msg.content})
         elif isinstance(msg, UserMessage):
@@ -245,7 +249,7 @@ class OpenRouterLLM(ModelProvider):
                 "stream": False,
             }
 
-            if tools:
+            if tools:  # Only add non-empty tool lists (some APIs reject tools=[])
                 params["tools"] = tools
                 logger.debug("Added %d tools to API call", len(tools))
 

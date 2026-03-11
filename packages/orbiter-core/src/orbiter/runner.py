@@ -464,9 +464,9 @@ def _resolve_provider(agent: Any) -> Any:
     let Agent.run() raise its own error for missing provider).
     """
     try:
-        from orbiter.models.provider import get_provider  # pyright: ignore[reportMissingImports]
+        from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
 
-        return get_provider(agent.provider_name)
+        return get_provider(agent.model)
     except Exception:
         return None
 

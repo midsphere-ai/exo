@@ -11,7 +11,7 @@ from ..types import ClassifierOutput
 
 def _resolve_provider(model: str):
     try:
-        from orbiter.models.provider import get_provider
+        from orbiter.models import get_provider
         return get_provider(model)
     except Exception:
         return None

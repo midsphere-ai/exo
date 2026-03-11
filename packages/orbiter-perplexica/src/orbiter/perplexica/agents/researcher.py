@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from orbiter import Agent, run
+from orbiter.types import StreamEvent
 
 from ..config import PerplexicaConfig
 from ..prompts.instructions import (
@@ -28,7 +31,7 @@ from ..types import ClassifierOutput, SearchResult
 
 def _resolve_provider(model: str):
     try:
-        from orbiter.models.provider import get_provider
+        from orbiter.models import get_provider
         return get_provider(model)
     except Exception:
         return None
@@ -154,3 +157,67 @@ async def research(
             ))
 
     return results
+
+
+async def stream_research(
+    query: str,
+    classification: ClassifierOutput,
+    chat_history: list[tuple[str, str]],
+    mode: str = "balanced",
+    config: PerplexicaConfig | None = None,
+) -> AsyncIterator[SearchResult | StreamEvent]:
+    """Stream researcher events, then yield collected SearchResults at the end.
+
+    Yields StreamEvent objects during execution (TextEvent, ToolCallEvent, etc.),
+    then yields SearchResult objects once the agent finishes.
+    """
+    from ..config import PerplexicaConfig as Cfg
+    cfg = config or Cfg()
+
+    max_iterations = _get_max_iterations(mode)
+    tools, action_desc = _build_tools_and_action_desc(
+        classification, cfg.sources, mode
+    )
+
+    instructions = get_researcher_prompt(
+        action_desc=action_desc,
+        mode=mode,
+        iteration=1,
+        max_iteration=max_iterations,
+    )
+
+    parts = []
+    for q, a in chat_history:
+        parts.append(f"User: {q}")
+        short_a = a[:500] + "..." if len(a) > 500 else a
+        parts.append(f"Assistant: {short_a}")
+    parts.append(f"User: {query}")
+    formatted_input = "\n".join(parts)
+
+    researcher = Agent(
+        name="researcher",
+        model=cfg.model,
+        instructions=instructions,
+        tools=tools,
+        temperature=0.1,
+        max_steps=max_iterations * 3,
+    )
+
+    clear_collected_results()
+
+    provider = _resolve_provider(cfg.model)
+    async for event in run.stream(researcher, formatted_input, provider=provider, detailed=True):
+        yield event
+
+    # Yield collected search results
+    raw_results = get_collected_results()
+    seen_urls: set[str] = set()
+    for r in raw_results:
+        url = r.get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            yield SearchResult(
+                title=r.get("title", ""),
+                url=url,
+                content=r.get("content", ""),
+            )

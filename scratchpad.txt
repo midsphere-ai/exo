@@ -1,0 +1,211 @@
+mplement the following plan:
+
+# DeepAgent: Port SkyworkAI DeepResearchAgent to Orbiter
+
+## Context
+
+The existing Jina DeepSearch implementation at `examples/advanced/deepsearch/` has unusable
+performance. We're replacing it with a port of SkyworkAI's DeepResearchAgent — #1 on the GAIA
+benchmark (82.42%), beating OpenAI Deep Research and Manus. Source is cloned at
+`/tmp/DeepResearchAgent/`.
+
+
+
+## Architecture: Key Insight
+
+Orbiter's `Swarm(mode="team")` already provides exactly the orchestration that SkyworkAI
+implements manually with PlanningAgent + AgentBus + ToolCallingAgent:
+
+**SkyworkAI:** `PlanningAgent → PlanDecision{dispatches} → AgentBus → ToolCallingAgent → results
+back`
+**Orbiter:** `Swarm(team) → Lead Agent calls delegate_to_researcher(task="...") → Worker runs →
+result returned as tool output → Lead continues`
+
+The `_DelegateTool` in `swarm.py:918-966` wraps each worker as a tool. This eliminates
+PlanDecision structured output, AgentBus, and ToolCallingAgent entirely.
+
+## File Structure
+
+```
+examples/advanced/deepagent/
+├── __init__.py              # Package marker
+├── config.py                # DeepAgentConfig dataclass, env var loading
+├── prompts.py               # System prompts for lead and workers
+├── agents.py                # Agent + Swarm assembly (build_deep_agent())
+├── cli.py                   # CLI entry point (argparse + asyncio)
+├── tools/
+│   ├── __init__.py
+│   ├── web_search.py        # Multi-provider search (DDG/Brave/Serper/Jina)
+│   ├── content_reader.py    # HTTP+BS4 page fetcher, Jina optional
+│   ├── deep_researcher.py   # Multi-round research Tool (core logic)
+│   └── file_analyzer.py     # File reading + analysis tool
+└── README.md
+```
+
+## Component Mapping
+
+| SkyworkAI | Orbiter DeepAgent |
+|-----------|-------------------|
+| PlanningAgent | Orbiter Agent as Swarm team lead |
+| ToolCallingAgent | NOT needed — Agent.run() has tool loop |
+| AgentBus orchestration | Swarm._run_team() handles automatically |
+| DeepResearcherTool | Custom Tool subclass with internal multi-round loop |
+| DeepAnalyzerTool | FileAnalyzerTool (Tool subclass) |
+| model_manager | orbiter.models.provider.get_provider() |
+| MMEngine registry | Not needed — direct Python wiring |
+
+## Module Design
+
+### 1. `config.py`
+
+```python
+class DeepAgentConfig(BaseModel):
+    lead_model: str = "openai:gpt-4o"
+    researcher_model: str = "openai:gpt-4o-mini"
+    tool_model: str = "openai:gpt-4o-mini"       # For internal tool LLM calls
+    search_provider: str = "duckduckgo"            # duckduckgo | brave | serper | jina
+    search_num_results: int = 5
+    search_max_rounds: int = 3
+    content_reader: str = "httpx"                  # httpx | jina
+    content_max_length: int = 4096
+    llm_search_models: list[str] = []              # e.g. ["openai:o3-mini"] for parallel LLM
+search
+    lead_max_steps: int = 15
+    researcher_max_steps: int = 10
+    brave_api_key: str | None = None
+    serper_api_key: str | None = None
+    jina_api_key: str | None = None
+    output_dir: str = "deepagent_output"
+
+    @classmethod
+    def from_env(cls) -> DeepAgentConfig: ...
+```
+
+### 2. `tools/web_search.py` — Tool subclass, multi-backend
+
+- `WebSearchTool(Tool)` with `execute(query, num_results=5) -> str`
+- Backends: `_search_duckduckgo()` (free, `DDGS().text()` via `asyncio.to_thread()`),
+`_search_brave()`, `_search_serper()`, `_search_jina()` (all via httpx)
+- Returns formatted string: title, URL, snippet per result
+
+### 3. `tools/content_reader.py` — Tool subclass
+
+- `ContentReaderTool(Tool)` with `execute(url) -> str`
+- Default: httpx + beautifulsoup4, 20s timeout, max_length truncation
+- Optional: Jina Reader API when configured
+
+### 4. `tools/deep_researcher.py` — Core research logic (port of SkyworkAI DeepResearcherTool)
+
+- `DeepResearcherTool(Tool)` with `execute(task, max_rounds=3) -> str`
+- **Internal multi-round loop** (ported from
+`/tmp/DeepResearchAgent/src/tool/workflow_tools/deep_researcher.py`):
+  1. Generate search query via internal LLM call (`_generate_search_query()`)
+  2. Parallel search: web_search + optional LLM search models (`_parallel_search()`)
+  3. Merge results (`_merge_search_results()`)
+  4. Evaluate completeness via structured LLM output (`_evaluate_completeness()`)
+  5. If complete → break, else → next round
+  6. Generate final summary (`_generate_summary()`)
+- Gets its own `ModelProvider` via `get_provider(tool_model)` in constructor for internal LLM
+calls
+- Uses `CompletenessEvaluation(BaseModel)` Pydantic model for structured eval
+
+### 5. `tools/file_analyzer.py` — Simplified DeepAnalyzerTool port
+
+- `FileAnalyzerTool(Tool)` with `execute(task, file_path) -> str`
+- Reads local files or fetches URLs, returns content summary
+
+### 6. `prompts.py` — System prompts
+
+- `LEAD_PROMPT`: Planning agent that delegates to workers via `delegate_to_researcher(task=...)`
+and `delegate_to_analyzer(task=...)`, synthesizes results
+- `RESEARCHER_PROMPT`: Research specialist with deep_research, web_search, read_webpage tools
+- `ANALYZER_PROMPT`: File analysis specialist
+
+### 7. `agents.py` — Assembly
+
+```python
+def build_deep_agent(config: DeepAgentConfig | None = None) -> Swarm:
+    cfg = config or DeepAgentConfig.from_env()
+
+    # Tools
+    web_search = WebSearchTool(provider=cfg.search_provider, ...)
+    content_reader = ContentReaderTool(mode=cfg.content_reader, ...)
+    deep_researcher = DeepResearcherTool(tool_model=cfg.tool_model, web_search=web_search, ...)
+    file_analyzer = FileAnalyzerTool(...)
+
+    # Workers
+    researcher = Agent(name="researcher", model=cfg.researcher_model,
+                       instructions=RESEARCHER_PROMPT,
+                       tools=[deep_researcher, web_search, content_reader],
+                       max_steps=cfg.researcher_max_steps)
+    analyzer = Agent(name="analyzer", model=cfg.researcher_model,
+                     instructions=ANALYZER_PROMPT,
+                     tools=[file_analyzer, content_reader],
+                     max_steps=cfg.researcher_max_steps)
+
+    # Lead (Swarm auto-adds delegate_to_researcher, delegate_to_analyzer)
+    lead = Agent(name="planner", model=cfg.lead_model,
+                 instructions=LEAD_PROMPT, max_steps=cfg.lead_max_steps)
+
+    return Swarm(agents=[lead, researcher, analyzer], mode="team")
+```
+
+### 8. `cli.py` — Entry point
+
+```python
+python -m deepagent "What are the effects of climate change on coral reefs?"
+python -m deepagent --model openai:gpt-4o --search brave --stream "query"
+```
+
+## Dependencies
+
+- `httpx` — Already in orbiter-models
+- `beautifulsoup4` — HTML text extraction
+- `duckduckgo-search` — Zero-API-key search baseline
+- Optional: `BRAVE_API_KEY`, `SERPER_API_KEY`, `JINA_API_KEY` for premium search/reader
+
+## Critical Files to Reference
+
+- `packages/orbiter-core/src/orbiter/swarm.py` — `_run_team()` (L800-853) and `_DelegateTool`
+(L918-966)
+- `packages/orbiter-core/src/orbiter/agent.py` — `Agent.run()` tool loop (L174-240)
+- `packages/orbiter-core/src/orbiter/tool.py` — `Tool` ABC for subclassing
+- `packages/orbiter-models/src/orbiter/models/provider.py` — `get_provider()` factory
+- `/tmp/DeepResearchAgent/src/tool/workflow_tools/deep_researcher.py` — Source for multi-round
+logic
+
+## Implementation Order
+
+1. `config.py` — No deps
+2. `tools/web_search.py` — Depends on duckduckgo-search + httpx
+3. `tools/content_reader.py` — Depends on httpx + bs4
+4. `tools/deep_researcher.py` — Depends on web_search, content_reader, get_provider
+5. `tools/file_analyzer.py` — Depends on content_reader
+6. `prompts.py` — No deps
+7. `agents.py` — Depends on all tools + prompts + Orbiter Agent/Swarm
+8. `cli.py` — Depends on agents.py
+9. `__init__.py` files
+10. Delete/replace existing deepagent directory content
+
+## Verification
+
+1. **Unit tests** (no API keys): Mock DDGS, httpx, and providers. Verify search formatting,
+content extraction, multi-round loop logic (query gen → search → eval → continue/stop), Swarm
+structure (team mode, correct tools per agent)
+2. **Integration test**: `python -m deepagent "What is the population of Tokyo?"` — verify sourced
+ answer
+3. **Streaming test**: `python -m deepagent --stream "query"` — verify TextEvent streaming
+4. **Multi-provider test**: Run with `--search brave` / `--search serper` to verify backend
+switching
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error
+messages, or content you generated), read the full transcript at:
+/home/atg/.claude/projects/-home-atg-Github-orbiter-ai/bc6a9657-92ec-44db-9633-3d5bd990f833.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate
+tool to create a team and parallelize the work.
+
+
+As you are cloning SkyworkAI's DeepResearchAgent, make it a 1:1, 100% accurate replication, instead of trying your own stuff.
+The new code should be at: `examples/advanced/deepsearch`, replacing existing deep research.

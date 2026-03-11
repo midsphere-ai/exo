@@ -84,6 +84,63 @@ class DeepAgentConfig(BaseModel):
         description="Directory for saving research reports.",
     )
 
+    # === New fields from SkyworkAI full port ===
+
+    # Working directory for agent operations
+    workdir: str = Field(
+        default=".",
+        description="Working directory for agent file operations.",
+    )
+
+    # Memory system
+    use_memory: bool = Field(
+        default=False,
+        description="Enable/disable memory system.",
+    )
+
+    # Todo system
+    use_todo: bool = Field(
+        default=True,
+        description="Enable/disable todo tracking.",
+    )
+
+    # Review steps
+    review_steps: int = Field(
+        default=3,
+        description="Number of recent steps to show in full.",
+    )
+
+    # Browser tool
+    browser_model: str = Field(
+        default="openrouter/gpt-4.1",
+        description="Model for browser tool.",
+    )
+    browser_max_steps: int = Field(
+        default=50,
+        description="Max steps for browser automation.",
+    )
+
+    # Mdify
+    mdify_timeout: int = Field(
+        default=60,
+        description="Timeout for file conversion (seconds).",
+    )
+
+    # Bash
+    bash_timeout: int = Field(
+        default=30,
+        description="Timeout for bash commands (seconds).",
+    )
+
+    # Python interpreter
+    python_authorized_imports: list[str] = Field(
+        default_factory=lambda: [
+            "subprocess", "pandas", "numpy", "matplotlib", "seaborn",
+            "scipy", "sklearn", "json", "csv", "os",
+        ],
+        description="Allowed Python imports for the interpreter.",
+    )
+
     @classmethod
     def from_env(cls, **overrides: Any) -> DeepAgentConfig:
         """Build config from environment variables with optional overrides."""
@@ -103,6 +160,14 @@ class DeepAgentConfig(BaseModel):
             "serper_api_key": "SERPER_API_KEY",
             "jina_api_key": "JINA_API_KEY",
             "output_dir": "DEEPAGENT_OUTPUT_DIR",
+            "workdir": "DEEPAGENT_WORKDIR",
+            "use_memory": "DEEPAGENT_USE_MEMORY",
+            "use_todo": "DEEPAGENT_USE_TODO",
+            "review_steps": "DEEPAGENT_REVIEW_STEPS",
+            "browser_model": "DEEPAGENT_BROWSER_MODEL",
+            "browser_max_steps": "DEEPAGENT_BROWSER_MAX_STEPS",
+            "mdify_timeout": "DEEPAGENT_MDIFY_TIMEOUT",
+            "bash_timeout": "DEEPAGENT_BASH_TIMEOUT",
         }
 
         kwargs: dict[str, Any] = {}
@@ -122,6 +187,11 @@ class DeepAgentConfig(BaseModel):
         llm_models_env = os.environ.get("DEEPAGENT_SEARCH_LLM_MODELS", "")
         if llm_models_env:
             kwargs["search_llm_models"] = [m.strip() for m in llm_models_env.split(",") if m.strip()]
+
+        # Parse comma-separated Python authorized imports
+        py_imports_env = os.environ.get("DEEPAGENT_PYTHON_AUTHORIZED_IMPORTS", "")
+        if py_imports_env:
+            kwargs["python_authorized_imports"] = [m.strip() for m in py_imports_env.split(",") if m.strip()]
 
         kwargs.update(overrides)
         return cls(**kwargs)

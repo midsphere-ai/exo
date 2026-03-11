@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from orbiter import Agent, run
+from orbiter.types import StreamEvent
 
 from ..config import PerplexicaConfig
 from ..prompts.instructions import get_writer_prompt
@@ -11,7 +14,7 @@ from ..types import SearchResult
 
 def _resolve_provider(model: str):
     try:
-        from orbiter.models.provider import get_provider
+        from orbiter.models import get_provider
         return get_provider(model)
     except Exception:
         return None
@@ -64,3 +67,39 @@ async def write_answer(
     provider = _resolve_provider(cfg.model)
     result = await run(writer, formatted_input, provider=provider)
     return result.output
+
+
+async def stream_write_answer(
+    query: str,
+    search_results: list[SearchResult],
+    chat_history: list[tuple[str, str]],
+    system_instructions: str = "",
+    mode: str = "balanced",
+    config: PerplexicaConfig | None = None,
+) -> AsyncIterator[StreamEvent]:
+    """Stream writer text tokens as they are generated."""
+    from ..config import PerplexicaConfig as Cfg
+    cfg = config or Cfg()
+
+    context = format_results_as_context(search_results)
+    instructions = get_writer_prompt(context, system_instructions, mode)
+
+    parts = []
+    for q, a in chat_history:
+        parts.append(f"User: {q}")
+        short_a = a[:500] + "..." if len(a) > 500 else a
+        parts.append(f"Assistant: {short_a}")
+    parts.append(f"User: {query}")
+    formatted_input = "\n".join(parts)
+
+    writer = Agent(
+        name="writer",
+        model=cfg.model,
+        instructions=instructions,
+        temperature=0.7,
+        max_steps=1,
+    )
+
+    provider = _resolve_provider(cfg.model)
+    async for event in run.stream(writer, formatted_input, provider=provider):
+        yield event
