@@ -37,19 +37,29 @@ def _resolve_provider(model: str):
         return None
 
 
-def _get_max_iterations(mode: str) -> int:
-    if mode == "speed":
-        return 2
-    elif mode == "balanced":
-        return 6
-    else:  # quality
-        return 25
+_MODE_ITERATIONS = {"speed": 2, "balanced": 6, "quality": 25}
+
+# Gemini thinking models that have built-in reasoning — reasoning_preamble is redundant.
+_THINKING_MODEL_PATTERNS = ("gemini-2.5", "gemini-3",)
+
+
+def _get_max_iterations(mode: str, override: int | None = None) -> int:
+    if override is not None:
+        return override
+    return _MODE_ITERATIONS.get(mode, 25)
+
+
+def _is_thinking_model(model: str) -> bool:
+    """Check if the model has built-in thinking/reasoning capabilities."""
+    model_lower = model.lower()
+    return any(p in model_lower for p in _THINKING_MODEL_PATTERNS)
 
 
 def _build_tools_and_action_desc(
     classification: ClassifierOutput,
     sources: list[str],
     mode: str,
+    include_reasoning_preamble: bool = True,
 ) -> tuple[list, str]:
     """Build available tools and action descriptions based on classification."""
     tools = []
@@ -80,8 +90,8 @@ def _build_tools_and_action_desc(
     tools.append(done)
     action_lines.append(f"- done: {DONE_PROMPT}")
 
-    # Reasoning preamble (not in speed mode)
-    if mode != "speed":
+    # Reasoning preamble (skip for speed mode and thinking models)
+    if include_reasoning_preamble and mode != "speed":
         tools.append(reasoning_preamble)
         action_lines.append(f"- reasoning_preamble: {REASONING_PREAMBLE_PROMPT}")
 
@@ -104,14 +114,24 @@ async def research(
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
 
-    max_iterations = _get_max_iterations(mode)
+    max_iterations = _get_max_iterations(mode, cfg.max_iterations)
+
+    # Determine whether to include reasoning_preamble tool
+    if cfg.use_reasoning_preamble is not None:
+        include_reasoning = cfg.use_reasoning_preamble
+    else:
+        # Auto-detect: skip for thinking models that reason internally
+        include_reasoning = not _is_thinking_model(cfg.model)
+
     tools, action_desc = _build_tools_and_action_desc(
-        classification, cfg.sources, mode
+        classification, cfg.sources, mode, include_reasoning
     )
 
+    # Use no-reasoning-preamble prompt variant for thinking models
+    effective_mode = mode if include_reasoning else f"{mode}_no_reasoning"
     instructions = get_researcher_prompt(
         action_desc=action_desc,
-        mode=mode,
+        mode=effective_mode,
         iteration=1,
         max_iteration=max_iterations,
     )
@@ -174,14 +194,21 @@ async def stream_research(
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
 
-    max_iterations = _get_max_iterations(mode)
+    max_iterations = _get_max_iterations(mode, cfg.max_iterations)
+
+    if cfg.use_reasoning_preamble is not None:
+        include_reasoning = cfg.use_reasoning_preamble
+    else:
+        include_reasoning = not _is_thinking_model(cfg.model)
+
     tools, action_desc = _build_tools_and_action_desc(
-        classification, cfg.sources, mode
+        classification, cfg.sources, mode, include_reasoning
     )
 
+    effective_mode = mode if include_reasoning else f"{mode}_no_reasoning"
     instructions = get_researcher_prompt(
         action_desc=action_desc,
-        mode=mode,
+        mode=effective_mode,
         iteration=1,
         max_iteration=max_iterations,
     )

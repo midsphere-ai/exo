@@ -45,7 +45,7 @@ async def write_answer(
     cfg = config or Cfg()
 
     context = format_results_as_context(search_results)
-    instructions = get_writer_prompt(context, system_instructions, mode)
+    instructions = get_writer_prompt(context, system_instructions, mode, cfg.max_writer_words)
 
     # Build messages with chat history
     parts = []
@@ -82,7 +82,7 @@ async def stream_write_answer(
     cfg = config or Cfg()
 
     context = format_results_as_context(search_results)
-    instructions = get_writer_prompt(context, system_instructions, mode)
+    instructions = get_writer_prompt(context, system_instructions, mode, cfg.max_writer_words)
 
     parts = []
     for q, a in chat_history:

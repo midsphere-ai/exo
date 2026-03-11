@@ -20,6 +20,11 @@ class PerplexicaConfig:
     system_instructions: str = ""  # user custom instructions for writer
     sources: list[str] = field(default_factory=lambda: ["web"])
 
+    # Performance tuning
+    max_iterations: int | None = None  # override per-mode default (speed=2, balanced=6, quality=25)
+    use_reasoning_preamble: bool | None = None  # None=auto-detect thinking models, True/False=force
+    max_writer_words: int | None = None  # override quality mode 2000-word minimum
+
     def __post_init__(self) -> None:
         if not self.searxng_url:
             self.searxng_url = os.environ.get(
