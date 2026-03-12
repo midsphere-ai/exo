@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 from orbiter.types import StreamEvent
 
 from .agents.classifier import classify
-from .agents.researcher import parallel_research, research, stream_research
+from .agents.researcher import direct_search, parallel_research
 from .agents.suggestion_generator import generate_suggestions
 from .agents.writer import stream_write_answer, write_answer
 from .config import PerplexicaConfig
@@ -33,40 +35,44 @@ async def run_search_pipeline(
     cfg = config or PerplexicaConfig()
     history = chat_history or []
 
-    # Step 1: Classify
-    classification = await classify(query, history, cfg)
-
-    # Use the standalone follow-up as the effective query
+    # Step 1 + 2: Classify and research
+    search_results: list[SearchResult] = []
+    if mode == "speed":
+        # Fast path: classifier and direct SearXNG search in parallel
+        classification, search_results = await asyncio.gather(
+            classify(query, history, cfg),
+            direct_search(query),
+        )
+    else:
+        classification = await classify(query, history, cfg)
+        if not classification.classification.skip_search:
+            search_results = await parallel_research(
+                query=classification.standalone_follow_up or query,
+                classification=classification,
+                chat_history=history,
+                mode=mode,
+                config=cfg,
+            )
     effective_query = classification.standalone_follow_up or query
 
-    # Step 2: Research (if needed)
-    search_results = []
-    if not classification.classification.skip_search:
-        _research = parallel_research if mode == "quality" else research
-        search_results = await _research(
-            query=effective_query,
-            classification=classification,
-            chat_history=history,
-            mode=mode,
-            config=cfg,
-        )
+    # Cap sources for the writer — fewer sources = faster generation
+    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
+    writer_results = search_results[:writer_cap]
 
-    # Cap sources for the writer so citation indices stay accurate
-    writer_results = search_results[:cfg.max_writer_sources]
+    # Speed mode uses fast model for writing too
+    writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
-    # Step 3: Write answer
-    answer = await write_answer(
+    # Step 3 + 4: Write answer and generate suggestions in parallel
+    write_task = write_answer(
         query=effective_query,
         search_results=writer_results,
         chat_history=history,
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
-        config=cfg,
+        config=writer_cfg,
     )
-
-    # Step 4: Generate suggestions
-    updated_history = history + [(query, answer)]
-    suggestions = await generate_suggestions(updated_history, cfg)
+    suggest_task = generate_suggestions(history + [(query, "")], cfg)
+    answer, suggestions = await asyncio.gather(write_task, suggest_task)
 
     # Sources list matches what the writer cited (same order, same indices)
     sources = [
@@ -101,21 +107,29 @@ async def stream_search_pipeline(
     cfg = config or PerplexicaConfig()
     history = chat_history or []
 
-    # Step 1: Classify (fast, non-streaming)
-    yield PipelineEvent(stage="classifier", status="started")
-    classification = await classify(query, history, cfg)
-    effective_query = classification.standalone_follow_up or query
-    yield PipelineEvent(
-        stage="classifier", status="completed",
-        message=f"skip_search={classification.classification.skip_search}",
-    )
-
-    # Step 2: Research (streaming tool calls)
+    # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
-    if not classification.classification.skip_search:
-        yield PipelineEvent(stage="researcher", status="started")
-        if mode == "quality":
-            # Parallel sub-researchers — no per-event streaming, but ~5x faster
+    if mode == "speed":
+        yield PipelineEvent(stage="classifier", status="started")
+        classification, search_results = await asyncio.gather(
+            classify(query, history, cfg),
+            direct_search(query),
+        )
+        yield PipelineEvent(stage="classifier", status="completed")
+        yield PipelineEvent(
+            stage="researcher", status="completed",
+            message=f"{len(search_results)} results (direct)",
+        )
+    else:
+        yield PipelineEvent(stage="classifier", status="started")
+        classification = await classify(query, history, cfg)
+        effective_query = classification.standalone_follow_up or query
+        yield PipelineEvent(
+            stage="classifier", status="completed",
+            message=f"skip_search={classification.classification.skip_search}",
+        )
+        if not classification.classification.skip_search:
+            yield PipelineEvent(stage="researcher", status="started")
             search_results = await parallel_research(
                 query=effective_query,
                 classification=classification,
@@ -123,25 +137,23 @@ async def stream_search_pipeline(
                 mode=mode,
                 config=cfg,
             )
-        else:
-            async for event in stream_research(
-                query=effective_query,
-                classification=classification,
-                chat_history=history,
-                mode=mode,
-                config=cfg,
-            ):
-                if isinstance(event, SearchResult):
-                    search_results.append(event)
-                else:
-                    yield event
-        yield PipelineEvent(
-            stage="researcher", status="completed",
-            message=f"{len(search_results)} results",
-        )
+            yield PipelineEvent(
+                stage="researcher", status="completed",
+                message=f"{len(search_results)} results",
+            )
+    effective_query = classification.standalone_follow_up or query
 
-    # Cap sources for the writer so citation indices stay accurate
-    writer_results = search_results[:cfg.max_writer_sources]
+    # Cap sources for the writer — fewer sources = faster generation
+    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
+    writer_results = search_results[:writer_cap]
+
+    # Speed mode uses fast model for writing too
+    writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
+
+    # Start suggestions concurrently with writer
+    suggest_task = asyncio.create_task(
+        generate_suggestions(history + [(query, "")], cfg)
+    )
 
     # Step 3: Write answer (streaming text tokens)
     yield PipelineEvent(stage="writer", status="started")
@@ -152,7 +164,7 @@ async def stream_search_pipeline(
         chat_history=history,
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
-        config=cfg,
+        config=writer_cfg,
     ):
         from orbiter.types import TextEvent
         if isinstance(event, TextEvent):
@@ -161,10 +173,9 @@ async def stream_search_pipeline(
     answer = "".join(answer_parts)
     yield PipelineEvent(stage="writer", status="completed")
 
-    # Step 4: Suggestions (fast, non-streaming)
+    # Step 4: Suggestions (should be done by now)
     yield PipelineEvent(stage="suggestions", status="started")
-    updated_history = history + [(query, answer)]
-    suggestions = await generate_suggestions(updated_history, cfg)
+    suggestions = await suggest_task
     yield PipelineEvent(stage="suggestions", status="completed")
 
     # Sources list matches what the writer cited (same order, same indices)

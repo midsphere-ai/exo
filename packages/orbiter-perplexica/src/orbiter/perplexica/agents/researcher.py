@@ -24,6 +24,7 @@ from ..tools.searxng import (
     academic_search,
     clear_collected_results,
     get_collected_results,
+    search_and_collect,
     social_search,
     web_search,
 )
@@ -253,6 +254,28 @@ async def stream_research(
 
 
 # ---------------------------------------------------------------------------
+# Direct search — no LLM researcher, fastest path
+# ---------------------------------------------------------------------------
+
+
+async def direct_search(query: str) -> list[SearchResult]:
+    """Fast-path: query SearXNG directly, no LLM researcher overhead."""
+    raw = await search_and_collect([query])
+    seen_urls: set[str] = set()
+    results: list[SearchResult] = []
+    for r in raw:
+        url = r.get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            results.append(SearchResult(
+                title=r.get("title", ""),
+                url=url,
+                content=r.get("content", ""),
+            ))
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Parallel research — fan-out across research angles
 # ---------------------------------------------------------------------------
 
@@ -264,25 +287,31 @@ _RESEARCH_ANGLES = [
     "limitations, critiques, and technical challenges",
 ]
 
+# Minimum iterations each worker needs to be useful per mode.
+_ITERS_PER_WORKER = {"speed": 1, "balanced": 2, "quality": 3}
+
 
 async def parallel_research(
     query: str,
     classification: ClassifierOutput,
     chat_history: list[tuple[str, str]],
-    mode: str = "quality",
+    mode: str = "balanced",
     config: PerplexicaConfig | None = None,
 ) -> list[SearchResult]:
     """Run multiple sub-researchers in parallel, each covering one angle.
 
-    Splits the iteration budget across workers so total coverage matches
-    serial quality mode but completes in wall-clock time of a single worker.
+    Worker count is computed dynamically from the iteration budget:
+      speed   (2 iters)  -> 2 workers x 1 iter each
+      balanced (6 iters) -> 3 workers x 2 iters each
+      quality (25 iters) -> 5 workers x 5 iters each
     """
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
 
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
-    num_workers = min(len(_RESEARCH_ANGLES), 5)
-    iters_per_worker = max(2, max_iterations // num_workers)
+    min_iters = _ITERS_PER_WORKER.get(mode, 2)
+    num_workers = min(len(_RESEARCH_ANGLES), max(1, max_iterations // min_iters))
+    iters_per_worker = max(1, max_iterations // num_workers)
 
     # Build chat history context once
     parts: list[str] = []
@@ -295,7 +324,9 @@ async def parallel_research(
 
     clear_collected_results()
 
-    provider = _resolve_provider(cfg.model)
+    # Researchers just pick search queries — fast model suffices for speed/balanced
+    research_model = cfg.model if mode == "quality" else cfg.fast_model
+    provider = _resolve_provider(research_model)
 
     async def _run_worker(angle: str) -> None:
         tools, action_desc = _build_tools_and_action_desc(
@@ -308,7 +339,7 @@ async def parallel_research(
         )
         agent = Agent(
             name=f"researcher-{angle.split(',')[0].strip()[:20]}",
-            model=cfg.model,
+            model=research_model,
             instructions=instructions,
             tools=tools,
             temperature=0.1,

@@ -10,11 +10,12 @@ It will be shared a detailed conversation history and a user query and it has to
 
 <labels>
 NOTE: BY GENERAL KNOWLEDGE WE MEAN INFORMATION THAT IS OBVIOUS, WIDELY KNOWN, OR CAN BE INFERRED WITHOUT EXTERNAL SOURCES FOR EXAMPLE MATHEMATICAL FACTS, BASIC SCIENTIFIC KNOWLEDGE, COMMON HISTORICAL EVENTS, ETC.
-1. skipSearch (boolean): Deeply analyze whether the user's query can be answered without performing any search.
-   - Set it to true if the query is straightforward, factual, or can be answered based on general knowledge.
-   - Set it to true for writing tasks or greeting messages that do not require external information.
+1. skipSearch (boolean): Determine if the query can be answered WITHOUT any web search.
+   - IMPORTANT: This is a SEARCH ENGINE. The user came here specifically to get search-backed, cited answers. DEFAULT TO FALSE.
+   - ONLY set it to true for greetings ("hello", "hi"), pure writing tasks ("write me a poem"), or trivial math ("what is 2+2").
    - Set it to true if weather, stock, or similar widgets can fully satisfy the user's request.
-   - Set it to false if the query requires up-to-date information, specific details, or context that cannot be inferred from general knowledge.
+   - Set it to FALSE for ANY factual, informational, or knowledge question — even if you think you know the answer. The user wants sourced information, not your general knowledge.
+   - Set it to FALSE for ANY question about technology, science, history, current events, people, places, products, or comparisons.
    - ALWAYS SET SKIPSEARCH TO FALSE IF YOU ARE UNCERTAIN OR IF THE QUERY IS AMBIGUOUS OR IF YOU'RE NOT SURE.
 2. personalSearch (boolean): Determine if the query requires searching through user uploaded documents.
    - Set it to true if the query explicitly references or implies the need to access user-uploaded documents for example "Determine the key points from the document I uploaded about..." or "Who is the author?", "Summarize the content of the document"
