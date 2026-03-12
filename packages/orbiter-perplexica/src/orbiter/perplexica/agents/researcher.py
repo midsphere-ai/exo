@@ -258,9 +258,18 @@ async def stream_research(
 # ---------------------------------------------------------------------------
 
 
+def _split_query(query: str) -> list[str]:
+    """Split a compound question into focused sub-queries for SearXNG."""
+    import re
+    parts = re.split(r",\s*and\s+|;\s+|\?\s+", query)
+    queries = [p.strip().rstrip("?") for p in parts if len(p.strip()) > 10]
+    return queries[:3] if queries else [query]
+
+
 async def direct_search(query: str) -> list[SearchResult]:
     """Fast-path: query SearXNG directly, no LLM researcher overhead."""
-    raw = await search_and_collect([query])
+    queries = _split_query(query)
+    raw = await search_and_collect(queries)
     seen_urls: set[str] = set()
     results: list[SearchResult] = []
     for r in raw:
@@ -279,16 +288,40 @@ async def direct_search(query: str) -> list[SearchResult]:
 # Parallel research — fan-out across research angles
 # ---------------------------------------------------------------------------
 
-_RESEARCH_ANGLES = [
-    "core overview, definition, and key features",
-    "comparisons with alternatives and competitors",
-    "recent news, updates, and developments",
-    "expert reviews, opinions, and real-world use cases",
-    "limitations, critiques, and technical challenges",
+_BREADTH_ANGLES = [
+    "recent developments, timeline, and current state",
+    "expert analysis, specific data points, and named entities",
+    "broader context, comparisons, and implications",
 ]
+
+_MAX_ANGLES = 5
 
 # Minimum iterations each worker needs to be useful per mode.
 _ITERS_PER_WORKER = {"speed": 1, "balanced": 2, "quality": 3}
+
+
+def _derive_research_angles(query: str) -> list[str]:
+    """Derive research angles from the question's own parts, not topic depth.
+
+    Splits multi-part questions on conjunctions and question words so each
+    sub-researcher covers a distinct PART of the question rather than a
+    different depth of the same topic.
+    """
+    import re
+
+    parts = re.split(
+        r"[,;]\s+and\s+|[;?]\s+|,\s+(?=(?:what|how|who|when|where|why)\b)",
+        query,
+        flags=re.IGNORECASE,
+    )
+    angles = [p.strip().rstrip("?,. ") for p in parts if len(p.strip()) > 15]
+
+    # Pad with general breadth angles to reach _MAX_ANGLES
+    for g in _BREADTH_ANGLES:
+        if len(angles) >= _MAX_ANGLES:
+            break
+        angles.append(g)
+    return angles[:_MAX_ANGLES]
 
 
 async def parallel_research(
@@ -308,9 +341,10 @@ async def parallel_research(
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
 
+    angles = _derive_research_angles(query)
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
     min_iters = _ITERS_PER_WORKER.get(mode, 2)
-    num_workers = min(len(_RESEARCH_ANGLES), max(1, max_iterations // min_iters))
+    num_workers = min(len(angles), max(1, max_iterations // min_iters))
     iters_per_worker = max(1, max_iterations // num_workers)
 
     # Build chat history context once
@@ -347,8 +381,9 @@ async def parallel_research(
         )
         await run(agent, formatted_input, provider=provider)
 
+    active_angles = angles[:num_workers]
     results = await asyncio.gather(
-        *[_run_worker(angle) for angle in _RESEARCH_ANGLES[:num_workers]],
+        *[_run_worker(angle) for angle in active_angles],
         return_exceptions=True,
     )
 
@@ -358,7 +393,7 @@ async def parallel_research(
             import logging
             logging.getLogger(__name__).warning(
                 "Sub-researcher '%s' failed: %s",
-                _RESEARCH_ANGLES[i], result,
+                active_angles[i], result,
             )
 
     # Collect and deduplicate from the shared collector
