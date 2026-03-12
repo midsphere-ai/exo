@@ -48,6 +48,12 @@ class Source(BaseModel):
     content: str = ""
 
 
+class QueryPlan(BaseModel):
+    """Structured output for adaptive query generation."""
+    queries: list[str] = Field(default_factory=list)
+    sufficient: bool = Field(default=False)
+
+
 class SuggestionOutput(BaseModel):
     """Structured suggestion output."""
     suggestions: list[str] = Field(default_factory=list)

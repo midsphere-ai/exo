@@ -363,6 +363,8 @@ async def parallel_research(
     provider = _resolve_provider(research_model)
 
     async def _run_worker(angle: str) -> None:
+        # Sub-researchers always use "speed" tool descriptions — the balanced/quality
+        # web_search prompts reference reasoning_preamble which sub-researchers lack.
         tools, action_desc = _build_tools_and_action_desc(
             classification, cfg.sources, "speed", include_reasoning_preamble=False,
         )

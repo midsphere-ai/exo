@@ -9,10 +9,13 @@ from dataclasses import replace
 from orbiter.types import StreamEvent
 
 from .agents.classifier import classify
-from .agents.researcher import direct_search, parallel_research
+from .agents.query_planner import hybrid_research
+from .agents.researcher import direct_search
 from .agents.suggestion_generator import generate_suggestions
 from .agents.writer import stream_write_answer, write_answer
 from .config import PerplexicaConfig
+from .tools.embeddings import rerank_search_results
+from .tools.web_fetcher import enrich_results
 from .types import PerplexicaResponse, PipelineEvent, SearchResult, Source
 
 
@@ -46,7 +49,7 @@ async def run_search_pipeline(
     else:
         classification = await classify(query, history, cfg)
         if not classification.classification.skip_search:
-            search_results = await parallel_research(
+            search_results = await hybrid_research(
                 query=classification.standalone_follow_up or query,
                 classification=classification,
                 chat_history=history,
@@ -55,15 +58,31 @@ async def run_search_pipeline(
             )
     effective_query = classification.standalone_follow_up or query
 
-    # Cap sources for the writer — fewer sources = faster generation
-    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
+    # Rerank by relevance (skip for speed — not worth the latency)
+    if mode != "speed" and search_results:
+        search_results = await rerank_search_results(effective_query, search_results)
+
+    # Cap sources — speed stays lean, balanced/quality get all results
+    writer_cap = {"speed": 10}.get(mode, cfg.max_writer_sources)
     writer_results = search_results[:writer_cap]
 
     # Speed mode uses fast model for writing too
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
-    # Step 3 + 4: Write answer and generate suggestions in parallel
-    write_task = write_answer(
+    # Start suggestions early (independent of enrichment and writing)
+    suggest_task = asyncio.create_task(
+        generate_suggestions(history + [(query, "")], cfg)
+    )
+
+    # Enrich top results with full page content (skip for speed)
+    enrich_cap = {"balanced": 5, "quality": 10}.get(mode, 0)
+    if enrich_cap > 0 and writer_results:
+        writer_results = await enrich_results(
+            writer_results, cfg.jina_reader_url, max_results=enrich_cap,
+        )
+
+    # Step 3: Write answer
+    answer = await write_answer(
         query=effective_query,
         search_results=writer_results,
         chat_history=history,
@@ -71,8 +90,9 @@ async def run_search_pipeline(
         mode=mode,
         config=writer_cfg,
     )
-    suggest_task = generate_suggestions(history + [(query, "")], cfg)
-    answer, suggestions = await asyncio.gather(write_task, suggest_task)
+
+    # Step 4: Get suggestions (should be done by now)
+    suggestions = await suggest_task
 
     # Sources list matches what the writer cited (same order, same indices)
     sources = [
@@ -130,7 +150,7 @@ async def stream_search_pipeline(
         )
         if not classification.classification.skip_search:
             yield PipelineEvent(stage="researcher", status="started")
-            search_results = await parallel_research(
+            search_results = await hybrid_research(
                 query=effective_query,
                 classification=classification,
                 chat_history=history,
@@ -143,17 +163,33 @@ async def stream_search_pipeline(
             )
     effective_query = classification.standalone_follow_up or query
 
-    # Cap sources for the writer — fewer sources = faster generation
-    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
+    # Rerank by relevance (skip for speed)
+    if mode != "speed" and search_results:
+        search_results = await rerank_search_results(effective_query, search_results)
+
+    # Cap sources — speed stays lean, balanced/quality get all results
+    writer_cap = {"speed": 10}.get(mode, cfg.max_writer_sources)
     writer_results = search_results[:writer_cap]
 
     # Speed mode uses fast model for writing too
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
-    # Start suggestions concurrently with writer
+    # Start suggestions concurrently (independent of enrichment and writing)
     suggest_task = asyncio.create_task(
         generate_suggestions(history + [(query, "")], cfg)
     )
+
+    # Enrich top results with full page content (skip for speed)
+    enrich_cap = {"balanced": 5, "quality": 10}.get(mode, 0)
+    if enrich_cap > 0 and writer_results:
+        yield PipelineEvent(stage="enrichment", status="started")
+        writer_results = await enrich_results(
+            writer_results, cfg.jina_reader_url, max_results=enrich_cap,
+        )
+        yield PipelineEvent(
+            stage="enrichment", status="completed",
+            message=f"{min(enrich_cap, len(writer_results))} pages scraped",
+        )
 
     # Step 3: Write answer (streaming text tokens)
     yield PipelineEvent(stage="writer", status="started")

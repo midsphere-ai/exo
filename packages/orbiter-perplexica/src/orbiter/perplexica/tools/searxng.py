@@ -41,6 +41,10 @@ def clear_collected_results() -> None:
 # ---------------------------------------------------------------------------
 
 
+_MAX_RETRIES = 3
+_RETRY_DELAY = 2  # seconds between retries
+
+
 def _searxng_search(
     query: str,
     categories: str = "general",
@@ -48,7 +52,12 @@ def _searxng_search(
     num_results: int = 10,
     timeout: int = 15,
 ) -> list[dict]:
-    """Execute a search against SearXNG, returning structured results."""
+    """Execute a search against SearXNG with retry on empty results.
+
+    Retries up to _MAX_RETRIES times when engines are suspended/rate-limited,
+    giving them time to recover between attempts.
+    """
+    import time
     import urllib.request
 
     base_url = os.environ.get("SEARXNG_URL", "http://localhost:8888")
@@ -61,27 +70,32 @@ def _searxng_search(
     if engines:
         url += f"&engines={quote_plus(engines)}"
 
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception:
-        return [
-            {
-                "title": f"Example result for '{query}'",
-                "url": f"https://example.com/{quote_plus(query)}",
-                "content": f"Placeholder result for '{query}' (SearXNG unavailable)",
-            }
-        ]
+    for attempt in range(_MAX_RETRIES):
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        except Exception:
+            if attempt < _MAX_RETRIES - 1:
+                time.sleep(_RETRY_DELAY * (attempt + 1))
+                continue
+            return []
 
-    results = []
-    for item in data.get("results", [])[:num_results]:
-        results.append({
-            "title": item.get("title", "Untitled"),
-            "url": item.get("url", ""),
-            "content": item.get("content", "") or item.get("title", ""),
-        })
-    return results
+        results = []
+        for item in data.get("results", [])[:num_results]:
+            results.append({
+                "title": item.get("title", "Untitled"),
+                "url": item.get("url", ""),
+                "content": item.get("content", "") or item.get("title", ""),
+            })
+
+        if results or attempt == _MAX_RETRIES - 1:
+            return results
+
+        # Engines likely suspended — wait and retry
+        time.sleep(_RETRY_DELAY * (attempt + 1))
+
+    return []
 
 
 async def _multi_search(

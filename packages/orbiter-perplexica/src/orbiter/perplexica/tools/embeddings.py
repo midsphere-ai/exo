@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -215,6 +216,44 @@ def _get_embeddings(texts: list[str]) -> list[list[float]] | None:
         return _get_vertex_embeddings(texts, model)
 
     return None
+
+
+async def rerank_search_results(
+    query: str,
+    results: list,
+    top_k: int | None = None,
+) -> list:
+    """Rerank SearchResult objects by semantic relevance to the query.
+
+    Uses embedding cosine similarity when an API key is available,
+    falls back to keyword overlap scoring otherwise.
+    """
+    if not results:
+        return results
+    if top_k is None:
+        top_k = len(results)
+
+    texts = [query] + [f"{r.title} {r.content[:500]}" for r in results]
+
+    scored: list[tuple[float, object]] = []
+    try:
+        embeddings = await asyncio.to_thread(_get_embeddings, texts)
+        if embeddings is not None:
+            query_emb = embeddings[0]
+            for i, r in enumerate(results):
+                sim = _cosine_similarity(query_emb, embeddings[i + 1])
+                scored.append((sim, r))
+        else:
+            raise ValueError("No embedding provider available")
+    except Exception:
+        query_words = query.lower().split()
+        for r in results:
+            text = f"{r.title} {r.content[:500]}"
+            score = _keyword_score(query_words, text)
+            scored.append((score, r))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in scored[:top_k]]
 
 
 @tool

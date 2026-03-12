@@ -60,7 +60,7 @@ async def write_answer(
         name="writer",
         model=cfg.model,
         instructions=instructions,
-        temperature=0.7,
+        temperature=0.2,
         max_steps=1,
     )
 
@@ -96,7 +96,7 @@ async def stream_write_answer(
         name="writer",
         model=cfg.model,
         instructions=instructions,
-        temperature=0.7,
+        temperature=0.2,
         max_steps=1,
     )
 

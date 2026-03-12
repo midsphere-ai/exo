@@ -25,6 +25,7 @@ class PerplexicaConfig:
     use_reasoning_preamble: bool | None = None  # None=auto-detect thinking models, True/False=force
     max_writer_words: int | None = None  # override quality mode 2000-word target
     max_writer_sources: int = 30  # cap sources passed to writer for citation accuracy
+    jina_reader_url: str = ""  # Jina Reader for full-page content extraction
 
     def __post_init__(self) -> None:
         if not self.searxng_url:
@@ -44,4 +45,8 @@ class PerplexicaConfig:
         if not self.research_mode:
             self.research_mode = os.environ.get(
                 "PERPLEXICA_RESEARCH_MODE", "balanced"
+            )
+        if not self.jina_reader_url:
+            self.jina_reader_url = os.environ.get(
+                "JINA_READER_URL", "http://127.0.0.1:3000"
             )

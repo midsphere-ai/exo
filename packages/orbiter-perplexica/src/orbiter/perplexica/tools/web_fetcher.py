@@ -12,20 +12,33 @@ from __future__ import annotations
 import asyncio
 import html
 import json
+import os
 import re
 from urllib.parse import quote, urlparse
 
 from orbiter import tool
 
-_MAX_CHARS = 6000
+_MAX_CHARS = 10_000
 
 
-def _fetch_page(url: str) -> str:
-    """Fetch a web page and extract its readable text content.
+def _fetch_via_jina(url: str, jina_url: str, max_chars: int = _MAX_CHARS) -> str:
+    """Fetch page content as clean markdown via a Jina Reader instance."""
+    import urllib.request
 
-    Args:
-        url: Fully-qualified URL to fetch.
-    """
+    reader_url = f"{jina_url}/{url}"
+    req = urllib.request.Request(reader_url, headers={"X-Respond-With": "markdown"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            text = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n\n... [truncated]"
+    return text
+
+
+def _fetch_page_fallback(url: str) -> str:
+    """Fetch a web page via direct HTTP and extract text with regex stripping."""
     import urllib.request
 
     parsed = urlparse(url)
@@ -33,35 +46,26 @@ def _fetch_page(url: str) -> str:
         return f"Error: unsupported scheme '{parsed.scheme}'. Use http or https."
 
     safe_url = quote(url, safe=":/?#[]@!$&'()*+,;=-._~%")
-    req = urllib.request.Request(
-        safe_url,
-        headers={"User-Agent": "OrbiterBot/1.0"},
-    )
+    req = urllib.request.Request(safe_url, headers={"User-Agent": "OrbiterBot/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
         return f"Error fetching {url}: {exc}"
 
-    # Strip non-content elements.
     text = re.sub(r"<script[^>]*>.*?</script>", "", raw, flags=re.S)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.S)
     text = re.sub(r"<nav[^>]*>.*?</nav>", "", text, flags=re.S)
     text = re.sub(r"<footer[^>]*>.*?</footer>", "", text, flags=re.S)
     text = re.sub(r"<header[^>]*>.*?</header>", "", text, flags=re.S)
 
-    # Try to extract content from <article> or <main> tags first.
-    article_match = re.search(
-        r"<article[^>]*>(.*?)</article>", text, flags=re.S
-    )
+    article_match = re.search(r"<article[^>]*>(.*?)</article>", text, flags=re.S)
     main_match = re.search(r"<main[^>]*>(.*?)</main>", text, flags=re.S)
-
     if article_match:
         text = article_match.group(1)
     elif main_match:
         text = main_match.group(1)
 
-    # Strip remaining HTML tags and clean up.
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -69,6 +73,16 @@ def _fetch_page(url: str) -> str:
     if len(text) > _MAX_CHARS:
         text = text[:_MAX_CHARS] + "... [truncated]"
     return text
+
+
+def _fetch_page(url: str) -> str:
+    """Fetch a page, trying Jina Reader first then falling back to direct fetch."""
+    jina_url = os.environ.get("JINA_READER_URL", "")
+    if jina_url:
+        result = _fetch_via_jina(url, jina_url)
+        if result:
+            return result
+    return _fetch_page_fallback(url)
 
 
 @tool
@@ -135,3 +149,39 @@ async def scrape_url(urls: list[str]) -> str:
         else:
             sections.append(f"=== {url} ===\n{result}")
     return "\n\n".join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline helper — enrich SearchResults with full page content
+# ---------------------------------------------------------------------------
+
+
+async def enrich_results(
+    results: list,
+    jina_url: str,
+    max_results: int = 5,
+) -> list:
+    """Scrape full page content for the top results via Jina Reader.
+
+    Returns a new list with enriched content for the first ``max_results``
+    items and original snippets for the rest. Falls back gracefully when
+    Jina Reader is unavailable or a page fails to fetch.
+    """
+    from ..types import SearchResult
+
+    if not jina_url or not results:
+        return results
+
+    to_enrich = results[:max_results]
+    tasks = [asyncio.to_thread(_fetch_via_jina, r.url, jina_url) for r in to_enrich]
+    contents = await asyncio.gather(*tasks, return_exceptions=True)
+
+    enriched: list[SearchResult] = []
+    for r, content in zip(to_enrich, contents, strict=True):
+        if isinstance(content, Exception) or not content:
+            enriched.append(r)
+        else:
+            enriched.append(SearchResult(title=r.title, url=r.url, content=content))
+
+    enriched.extend(results[max_results:])
+    return enriched
