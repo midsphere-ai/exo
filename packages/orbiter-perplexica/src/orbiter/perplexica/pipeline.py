@@ -56,7 +56,7 @@ async def run_search_pipeline(
     effective_query = classification.standalone_follow_up or query
 
     # Cap sources for the writer — fewer sources = faster generation
-    writer_cap = {"speed": 10, "balanced": 30, "quality": 50}.get(mode, cfg.max_writer_sources)
+    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
     writer_results = search_results[:writer_cap]
 
     # Speed mode uses fast model for writing too
@@ -144,7 +144,7 @@ async def stream_search_pipeline(
     effective_query = classification.standalone_follow_up or query
 
     # Cap sources for the writer — fewer sources = faster generation
-    writer_cap = {"speed": 10, "balanced": 30, "quality": 50}.get(mode, cfg.max_writer_sources)
+    writer_cap = {"speed": 10, "balanced": 20}.get(mode, cfg.max_writer_sources)
     writer_results = search_results[:writer_cap]
 
     # Speed mode uses fast model for writing too
