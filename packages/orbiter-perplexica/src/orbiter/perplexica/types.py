@@ -30,6 +30,7 @@ class ClassifierOutput(BaseModel):
     """Full classifier response."""
     classification: Classification
     standalone_follow_up: str = Field(default="", alias="standaloneFollowUp")
+    sub_questions: list[str] = Field(default_factory=list, alias="subQuestions")
 
     model_config = {"populate_by_name": True}
 

@@ -21,14 +21,16 @@ def _resolve_provider(model: str):
 
 
 _INITIAL_PROMPT = """\
-You are a search query strategist. Given the user's question, generate exactly 3 \
+You are a search query strategist. Given the user's question, generate {num_queries} \
 targeted search queries that will find the most relevant, authoritative information.
 
 Today's date: {today}
 
+{sub_questions_block}\
 Requirements:
 - Queries must be SEO-friendly keywords, NOT full sentences
-- Cover different aspects/parts of the question
+- CRITICAL: Generate at least one query per sub-question listed above. \
+Do NOT cluster all queries on a single sub-question.
 - Add year qualifiers for recent topics (e.g., "2025", "2026")
 - Include specific entity names, technical terms, and domain keywords
 
@@ -42,20 +44,52 @@ _FOLLOWUP_PROMPT = """\
 You are a search query strategist refining a research plan. The user asked:
 "{query}"
 
+{sub_questions_block}\
 Here are the search results found so far:
 {results_summary}
 
-Identify what's MISSING or SHALLOW, then generate 3 targeted follow-up queries \
-to fill those gaps. Focus on:
-- Parts of the question not yet covered by any result
+Check each sub-question above against the results. Identify which sub-questions \
+have ZERO or WEAK coverage, then generate 3 targeted follow-up queries to fill \
+those gaps. Prioritize:
+- Sub-questions with no matching results (most critical)
 - Claims that need primary sources or specific data
 - Recent developments that might have newer coverage
 
 Today's date: {today}
 
-If the existing results already comprehensively cover ALL parts of the question, \
-set "sufficient" to true and return an empty queries list.
+Set "sufficient" to true ONLY if every sub-question has at least 2-3 relevant results.
 """
+
+
+def _format_sub_questions_block(sub_questions: list[str]) -> str:
+    """Format sub-questions as a numbered block for prompts."""
+    if not sub_questions:
+        return ""
+    lines = [
+        "The question decomposes into these sub-questions (each needs coverage):",
+    ]
+    for i, sq in enumerate(sub_questions, 1):
+        lines.append(f"  {i}. {sq}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _sub_questions_to_queries(sub_questions: list[str]) -> list[str]:
+    """Convert sub-questions to keyword-style search queries (deterministic fallback)."""
+    import re
+
+    year = datetime.date.today().year
+    queries = []
+    for sq in sub_questions:
+        kw = re.sub(
+            r"^(what|how|who|when|where|why|does|is|are|do|did|has|have|was|were)\s+",
+            "", sq, flags=re.IGNORECASE,
+        )
+        kw = kw.rstrip("?. ")
+        if str(year) not in kw and str(year - 1) not in kw:
+            kw = f"{kw} {year}"
+        queries.append(kw)
+    return queries
 
 
 async def _generate_query_plan(
@@ -63,12 +97,18 @@ async def _generate_query_plan(
     chat_history: list[tuple[str, str]],
     existing_results: list[SearchResult],
     config: PerplexicaConfig,
+    sub_questions: list[str] | None = None,
 ) -> QueryPlan:
     """Generate a query plan — initial queries or gap-filling follow-ups."""
     today = datetime.date.today().strftime("%B %d, %Y")
+    sq_block = _format_sub_questions_block(sub_questions or [])
+
+    num_queries = max(3, len(sub_questions)) if sub_questions else 3
 
     if not existing_results:
-        prompt = _INITIAL_PROMPT.format(today=today)
+        prompt = _INITIAL_PROMPT.format(
+            today=today, sub_questions_block=sq_block, num_queries=num_queries,
+        )
     else:
         lines = []
         for i, r in enumerate(existing_results[:20], 1):
@@ -76,6 +116,7 @@ async def _generate_query_plan(
             lines.append(f"  {i}. {r.title}: {snippet}")
         prompt = _FOLLOWUP_PROMPT.format(
             query=query, results_summary="\n".join(lines), today=today,
+            sub_questions_block=sq_block,
         )
 
     parts = []
@@ -99,9 +140,24 @@ async def _generate_query_plan(
     result = await run(planner, formatted_input, provider=provider)
 
     try:
-        return QueryPlan.model_validate_json(result.output)
+        plan = QueryPlan.model_validate_json(result.output)
     except Exception:
-        return QueryPlan(queries=[query], sufficient=False)
+        plan = QueryPlan(queries=[query], sufficient=False)
+
+    # Validate: if the LLM returned too few queries or full-sentence queries
+    # (>100 chars), fall back to deterministic sub-question conversion.
+    bad_queries = not plan.queries or (
+        sub_questions
+        and len(sub_questions) > 1
+        and (len(plan.queries) < len(sub_questions) or any(len(q) > 100 for q in plan.queries))
+    )
+    if bad_queries and sub_questions:
+        plan = QueryPlan(
+            queries=_sub_questions_to_queries(sub_questions),
+            sufficient=False,
+        )
+
+    return plan
 
 
 def _merge_results(
@@ -123,24 +179,28 @@ async def adaptive_research(
     chat_history: list[tuple[str, str]],
     mode: str,
     config: PerplexicaConfig,
+    sub_questions: list[str] | None = None,
 ) -> list[SearchResult]:
     """Adaptive multi-round research using structured output query generation.
 
     Each round the LLM sees existing results and either generates follow-up
     queries to fill gaps or signals that coverage is sufficient.
     """
-    max_rounds = {"balanced": 2, "quality": 4}.get(mode, 2)
+    max_rounds = {"balanced": 2, "quality": 3}.get(mode, 2)
     all_results: list[SearchResult] = []
 
     for round_num in range(max_rounds):
-        plan = await _generate_query_plan(query, chat_history, all_results, config)
+        plan = await _generate_query_plan(
+            query, chat_history, all_results, config, sub_questions,
+        )
 
         if plan.sufficient and round_num > 0:
             break
         if not plan.queries:
             break
 
-        raw = await search_and_collect(plan.queries[:3])
+        query_cap = max(3, len(sub_questions)) if sub_questions else 3
+        raw = await search_and_collect(plan.queries[:query_cap])
         new_results = [
             SearchResult(
                 title=r.get("title", ""),
@@ -160,6 +220,7 @@ async def hybrid_research(
     chat_history: list[tuple[str, str]],
     mode: str = "balanced",
     config: PerplexicaConfig | None = None,
+    sub_questions: list[str] | None = None,
 ) -> list[SearchResult]:
     """Hybrid research: adaptive structured queries + parallel researchers.
 
@@ -172,16 +233,18 @@ async def hybrid_research(
     cfg = config or PerplexicaConfig()
 
     async def _timed_agents() -> list[SearchResult]:
-        timeout = {"balanced": 15, "quality": 60}.get(mode, 15)
+        timeout = {"balanced": 30, "quality": 60}.get(mode, 30)
         try:
             return await asyncio.wait_for(
-                parallel_research(query, classification, chat_history, mode, cfg),
+                parallel_research(
+                    query, classification, chat_history, mode, cfg, sub_questions,
+                ),
                 timeout=timeout,
             )
         except Exception:
             return []
 
-    structured_task = adaptive_research(query, chat_history, mode, cfg)
+    structured_task = adaptive_research(query, chat_history, mode, cfg, sub_questions)
     agent_task = _timed_agents()
 
     results = await asyncio.gather(structured_task, agent_task)

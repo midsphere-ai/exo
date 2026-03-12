@@ -330,6 +330,7 @@ async def parallel_research(
     chat_history: list[tuple[str, str]],
     mode: str = "balanced",
     config: PerplexicaConfig | None = None,
+    sub_questions: list[str] | None = None,
 ) -> list[SearchResult]:
     """Run multiple sub-researchers in parallel, each covering one angle.
 
@@ -341,7 +342,16 @@ async def parallel_research(
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
 
-    angles = _derive_research_angles(query)
+    # Prefer classifier-provided sub-questions over regex splitting
+    if sub_questions and len(sub_questions) > 1:
+        angles = sub_questions[:_MAX_ANGLES]
+        # Pad with breadth angles if needed
+        for g in _BREADTH_ANGLES:
+            if len(angles) >= _MAX_ANGLES:
+                break
+            angles.append(g)
+    else:
+        angles = _derive_research_angles(query)
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
     min_iters = _ITERS_PER_WORKER.get(mode, 2)
     num_workers = min(len(angles), max(1, max_iterations // min_iters))

@@ -51,6 +51,22 @@ Do not contain excess information or everything that has been discussed before, 
 The standalone follow-up should be concise and to the point.
 </standalone_followup>
 
+<sub_questions>
+Decompose the user's query into distinct sub-questions that each require separate research.
+Rules:
+- If the query asks about multiple topics, entities, or aspects, list each as a separate sub-question.
+- If the query is a comparison ("X vs Y", "how does X compare to Y"), create one sub-question per entity/side PLUS one for the comparison itself.
+- If the query is simple and single-focus, return a list with just that one question.
+- Each sub-question should be self-contained and searchable on its own.
+- Keep sub-questions concise (one sentence each).
+- Maximum 5 sub-questions.
+
+Examples:
+- "What is the CHIPS Act and how does it compare to the EU's chip initiative?" -> ["What is the US CHIPS Act?", "What is the EU Chips Act / European semiconductor initiative?", "How do the US CHIPS Act and EU Chips Act compare?"]
+- "What is quantum computing?" -> ["What is quantum computing?"]
+- "Compare Tesla Model 3 and BMW i4 in terms of range, price, and features" -> ["What is the Tesla Model 3 range, price, and features?", "What is the BMW i4 range, price, and features?", "How do Tesla Model 3 and BMW i4 compare on range, price, and features?"]
+</sub_questions>
+
 <output_format>
 You must respond in the following JSON format without any extra text, explanations or filler sentences:
 {{
@@ -63,7 +79,8 @@ You must respond in the following JSON format without any extra text, explanatio
     "showStockWidget": boolean,
     "showCalculationWidget": boolean,
   }},
-  "standaloneFollowUp": string
+  "standaloneFollowUp": string,
+  "subQuestions": [string, ...]
 }}
 </output_format>
 """

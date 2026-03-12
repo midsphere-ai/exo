@@ -55,6 +55,7 @@ async def run_search_pipeline(
                 chat_history=history,
                 mode=mode,
                 config=cfg,
+                sub_questions=classification.sub_questions,
             )
     effective_query = classification.standalone_follow_up or query
 
@@ -156,6 +157,7 @@ async def stream_search_pipeline(
                 chat_history=history,
                 mode=mode,
                 config=cfg,
+                sub_questions=classification.sub_questions,
             )
             yield PipelineEvent(
                 stage="researcher", status="completed",

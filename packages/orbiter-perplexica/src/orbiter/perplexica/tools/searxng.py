@@ -18,7 +18,6 @@ from urllib.parse import quote_plus
 
 from orbiter import tool
 
-
 # ---------------------------------------------------------------------------
 # Shared result collector — tools append here, pipeline reads after run()
 # ---------------------------------------------------------------------------
@@ -45,6 +44,21 @@ _MAX_RETRIES = 3
 _RETRY_DELAY = 2  # seconds between retries
 
 
+def _search(
+    query: str,
+    categories: str = "general",
+    engines: str = "",
+    num_results: int = 10,
+    timeout: int = 15,
+) -> list[dict]:
+    """Dispatch to Serper (if SERPER_API_KEY is set) or SearXNG."""
+    if os.environ.get("SERPER_API_KEY"):
+        from .serper import serper_search
+
+        return serper_search(query, categories, engines, num_results, timeout)
+    return _searxng_search(query, categories, engines, num_results, timeout)
+
+
 def _searxng_search(
     query: str,
     categories: str = "general",
@@ -61,12 +75,7 @@ def _searxng_search(
     import urllib.request
 
     base_url = os.environ.get("SEARXNG_URL", "http://localhost:8888")
-    url = (
-        f"{base_url}/search"
-        f"?q={quote_plus(query)}"
-        f"&format=json"
-        f"&categories={quote_plus(categories)}"
-    )
+    url = f"{base_url}/search?q={quote_plus(query)}&format=json&categories={quote_plus(categories)}"
     if engines:
         url += f"&engines={quote_plus(engines)}"
 
@@ -83,11 +92,13 @@ def _searxng_search(
 
         results = []
         for item in data.get("results", [])[:num_results]:
-            results.append({
-                "title": item.get("title", "Untitled"),
-                "url": item.get("url", ""),
-                "content": item.get("content", "") or item.get("title", ""),
-            })
+            results.append(
+                {
+                    "title": item.get("title", "Untitled"),
+                    "url": item.get("url", ""),
+                    "content": item.get("content", "") or item.get("title", ""),
+                }
+            )
 
         if results or attempt == _MAX_RETRIES - 1:
             return results
@@ -107,10 +118,7 @@ async def _multi_search(
     """Run multiple queries in parallel, collect results, and return formatted text."""
     queries = queries[:3]
 
-    tasks = [
-        asyncio.to_thread(_searxng_search, q, categories, engines, num_results)
-        for q in queries
-    ]
+    tasks = [asyncio.to_thread(_search, q, categories, engines, num_results) for q in queries]
     all_results = await asyncio.gather(*tasks)
 
     # Flatten and deduplicate by URL
@@ -139,11 +147,8 @@ async def search_and_collect(
     queries: list[str], categories: str = "general", engines: str = ""
 ) -> list[dict]:
     """Search and return raw structured results (for pipeline use, not a tool)."""
-    queries = queries[:3]
-    tasks = [
-        asyncio.to_thread(_searxng_search, q, categories, engines)
-        for q in queries
-    ]
+    queries = queries[:5]
+    tasks = [asyncio.to_thread(_search, q, categories, engines) for q in queries]
     all_results = await asyncio.gather(*tasks)
     seen_urls: set[str] = set()
     unique: list[dict] = []
@@ -172,9 +177,7 @@ async def academic_search(queries: list[str]) -> str:
     Args:
         queries: List of academic search queries.
     """
-    return await _multi_search(
-        queries, categories="science", engines="arxiv,google scholar,pubmed"
-    )
+    return await _multi_search(queries, categories="science", engines="arxiv,google scholar,pubmed")
 
 
 @tool
@@ -184,6 +187,4 @@ async def social_search(queries: list[str]) -> str:
     Args:
         queries: List of social search queries.
     """
-    return await _multi_search(
-        queries, categories="social media", engines="reddit"
-    )
+    return await _multi_search(queries, categories="social media", engines="reddit")
