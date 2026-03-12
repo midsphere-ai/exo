@@ -464,11 +464,12 @@ def get_writer_prompt(
         word_target = max_writer_words or 2000
         quality_instruction = (
             f"- YOU ARE CURRENTLY SET IN QUALITY MODE. GENERATE A DEEP, DETAILED AND"
-            f" COMPREHENSIVE RESPONSE USING THE FULL CONTEXT PROVIDED. YOUR RESPONSE"
-            f" MUST BE APPROXIMATELY {word_target} WORDS (DO NOT EXCEED THIS LIMIT)."
-            f" COVER THE MOST IMPORTANT POINTS AND FRAME IT LIKE A RESEARCH REPORT."
-            f" END WITH A '## Summary' SECTION (3-5 bullet points) THAT CONCISELY"
-            f" CAPTURES THE KEY FINDINGS."
+            f" COMPREHENSIVE RESPONSE USING THE FULL CONTEXT PROVIDED. AIM FOR"
+            f" APPROXIMATELY {word_target} WORDS — YOU MAY EXCEED THIS IF NEEDED TO"
+            f" COVER THE TOPIC THOROUGHLY, BUT DO NOT PAD WITH FILLER. FRAME IT LIKE"
+            f" A RESEARCH REPORT. EVERY FACTUAL CLAIM MUST HAVE A CITATION — THIS IS"
+            f" NON-NEGOTIABLE. END WITH A '## Summary' SECTION (3-5 bullet points)"
+            f" THAT CONCISELY CAPTURES THE KEY FINDINGS."
         )
     current_date = datetime.datetime.now(datetime.UTC).isoformat()
 

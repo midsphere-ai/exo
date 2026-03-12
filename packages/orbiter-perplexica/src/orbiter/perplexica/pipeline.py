@@ -51,10 +51,13 @@ async def run_search_pipeline(
             config=cfg,
         )
 
+    # Cap sources for the writer so citation indices stay accurate
+    writer_results = search_results[:cfg.max_writer_sources]
+
     # Step 3: Write answer
     answer = await write_answer(
         query=effective_query,
-        search_results=search_results,
+        search_results=writer_results,
         chat_history=history,
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
@@ -65,10 +68,10 @@ async def run_search_pipeline(
     updated_history = history + [(query, answer)]
     suggestions = await generate_suggestions(updated_history, cfg)
 
-    # Build sources from search results
+    # Sources list matches what the writer cited (same order, same indices)
     sources = [
         Source(title=r.title, url=r.url, content=r.content)
-        for r in search_results
+        for r in writer_results
     ]
 
     return PerplexicaResponse(
@@ -137,12 +140,15 @@ async def stream_search_pipeline(
             message=f"{len(search_results)} results",
         )
 
+    # Cap sources for the writer so citation indices stay accurate
+    writer_results = search_results[:cfg.max_writer_sources]
+
     # Step 3: Write answer (streaming text tokens)
     yield PipelineEvent(stage="writer", status="started")
     answer_parts: list[str] = []
     async for event in stream_write_answer(
         query=effective_query,
-        search_results=search_results,
+        search_results=writer_results,
         chat_history=history,
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
@@ -161,10 +167,10 @@ async def stream_search_pipeline(
     suggestions = await generate_suggestions(updated_history, cfg)
     yield PipelineEvent(stage="suggestions", status="completed")
 
-    # Yield final complete response
+    # Sources list matches what the writer cited (same order, same indices)
     sources = [
         Source(title=r.title, url=r.url, content=r.content)
-        for r in search_results
+        for r in writer_results
     ]
     yield PerplexicaResponse(
         answer=answer,

@@ -23,7 +23,8 @@ class PerplexicaConfig:
     # Performance tuning
     max_iterations: int | None = None  # override per-mode default (speed=2, balanced=6, quality=25)
     use_reasoning_preamble: bool | None = None  # None=auto-detect thinking models, True/False=force
-    max_writer_words: int | None = None  # override quality mode 2000-word minimum
+    max_writer_words: int | None = None  # override quality mode 2000-word target
+    max_writer_sources: int = 30  # cap sources passed to writer for citation accuracy
 
     def __post_init__(self) -> None:
         if not self.searxng_url:
