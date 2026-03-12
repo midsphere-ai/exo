@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 from orbiter import Agent, run
@@ -9,23 +10,24 @@ from orbiter.types import StreamEvent
 
 from ..config import PerplexicaConfig
 from ..prompts.instructions import (
-    get_researcher_prompt,
-    get_web_search_prompt,
     ACADEMIC_SEARCH_PROMPT,
-    SOCIAL_SEARCH_PROMPT,
-    SCRAPE_URL_PROMPT,
     DONE_PROMPT,
     REASONING_PREAMBLE_PROMPT,
+    SCRAPE_URL_PROMPT,
+    SOCIAL_SEARCH_PROMPT,
+    get_researcher_prompt,
+    get_sub_researcher_prompt,
+    get_web_search_prompt,
 )
+from ..tools.researcher_tools import done, reasoning_preamble
 from ..tools.searxng import (
-    web_search,
     academic_search,
-    social_search,
     clear_collected_results,
     get_collected_results,
+    social_search,
+    web_search,
 )
 from ..tools.web_fetcher import scrape_url
-from ..tools.researcher_tools import done, reasoning_preamble
 from ..types import ClassifierOutput, SearchResult
 
 
@@ -248,3 +250,97 @@ async def stream_research(
                 url=url,
                 content=r.get("content", ""),
             )
+
+
+# ---------------------------------------------------------------------------
+# Parallel research — fan-out across research angles
+# ---------------------------------------------------------------------------
+
+_RESEARCH_ANGLES = [
+    "core overview, definition, and key features",
+    "comparisons with alternatives and competitors",
+    "recent news, updates, and developments",
+    "expert reviews, opinions, and real-world use cases",
+    "limitations, critiques, and technical challenges",
+]
+
+
+async def parallel_research(
+    query: str,
+    classification: ClassifierOutput,
+    chat_history: list[tuple[str, str]],
+    mode: str = "quality",
+    config: PerplexicaConfig | None = None,
+) -> list[SearchResult]:
+    """Run multiple sub-researchers in parallel, each covering one angle.
+
+    Splits the iteration budget across workers so total coverage matches
+    serial quality mode but completes in wall-clock time of a single worker.
+    """
+    from ..config import PerplexicaConfig as Cfg
+    cfg = config or Cfg()
+
+    max_iterations = _get_max_iterations(mode, cfg.max_iterations)
+    num_workers = min(len(_RESEARCH_ANGLES), 5)
+    iters_per_worker = max(2, max_iterations // num_workers)
+
+    # Build chat history context once
+    parts: list[str] = []
+    for q, a in chat_history:
+        parts.append(f"User: {q}")
+        short_a = a[:500] + "..." if len(a) > 500 else a
+        parts.append(f"Assistant: {short_a}")
+    parts.append(f"User: {query}")
+    formatted_input = "\n".join(parts)
+
+    clear_collected_results()
+
+    provider = _resolve_provider(cfg.model)
+
+    async def _run_worker(angle: str) -> None:
+        tools, action_desc = _build_tools_and_action_desc(
+            classification, cfg.sources, "speed", include_reasoning_preamble=False,
+        )
+        instructions = get_sub_researcher_prompt(
+            action_desc=action_desc,
+            angle=angle,
+            max_iteration=iters_per_worker,
+        )
+        agent = Agent(
+            name=f"researcher-{angle.split(',')[0].strip()[:20]}",
+            model=cfg.model,
+            instructions=instructions,
+            tools=tools,
+            temperature=0.1,
+            max_steps=iters_per_worker * 3,
+        )
+        await run(agent, formatted_input, provider=provider)
+
+    results = await asyncio.gather(
+        *[_run_worker(angle) for angle in _RESEARCH_ANGLES[:num_workers]],
+        return_exceptions=True,
+    )
+
+    # Log failures but don't abort — partial results are still valuable
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            import logging
+            logging.getLogger(__name__).warning(
+                "Sub-researcher '%s' failed: %s",
+                _RESEARCH_ANGLES[i], result,
+            )
+
+    # Collect and deduplicate from the shared collector
+    raw_results = get_collected_results()
+    seen_urls: set[str] = set()
+    search_results: list[SearchResult] = []
+    for r in raw_results:
+        url = r.get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            search_results.append(SearchResult(
+                title=r.get("title", ""),
+                url=url,
+                content=r.get("content", ""),
+            ))
+    return search_results

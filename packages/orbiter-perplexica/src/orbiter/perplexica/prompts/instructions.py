@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 
-
 CLASSIFIER_PROMPT = """\
 <role>
 Assistant is an advanced AI system designed to analyze the user query and the conversation history to determine the most appropriate classification for the search operation.
@@ -463,8 +462,15 @@ def get_writer_prompt(
         quality_instruction = ""
     else:
         word_target = max_writer_words or 2000
-        quality_instruction = f"- YOU ARE CURRENTLY SET IN QUALITY MODE, GENERATE VERY DEEP, DETAILED AND COMPREHENSIVE RESPONSES USING THE FULL CONTEXT PROVIDED. ASSISTANT'S RESPONSES SHALL NOT BE LESS THAN AT LEAST {word_target} WORDS, COVER EVERYTHING AND FRAME IT LIKE A RESEARCH REPORT."
-    current_date = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        quality_instruction = (
+            f"- YOU ARE CURRENTLY SET IN QUALITY MODE. GENERATE A DEEP, DETAILED AND"
+            f" COMPREHENSIVE RESPONSE USING THE FULL CONTEXT PROVIDED. YOUR RESPONSE"
+            f" MUST BE APPROXIMATELY {word_target} WORDS (DO NOT EXCEED THIS LIMIT)."
+            f" COVER THE MOST IMPORTANT POINTS AND FRAME IT LIKE A RESEARCH REPORT."
+            f" END WITH A '## Summary' SECTION (3-5 bullet points) THAT CONCISELY"
+            f" CAPTURES THE KEY FINDINGS."
+        )
+    current_date = datetime.datetime.now(datetime.UTC).isoformat()
 
     return f"""
 You are Vane, an AI model skilled in web search and crafting detailed, engaging, and well-structured answers. You excel at summarizing web pages and extracting relevant information to create professional, blog-style responses.
@@ -517,7 +523,7 @@ You are Vane, an AI model skilled in web search and crafting detailed, engaging,
 
 
 def get_suggestion_prompt() -> str:
-    current_date = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    current_date = datetime.datetime.now(datetime.UTC).isoformat()
 
     return f"""
 You are an AI suggestion generator for an AI powered search engine. You will be given a conversation below. You need to generate 4-5 suggestions based on the conversation. The suggestion should be relevant to the conversation that can be used by the user to ask the chat model for more information.
@@ -632,6 +638,32 @@ Here are some examples of good plans:
 </examples>
 
 YOU CAN NEVER CALL ANY OTHER TOOL BEFORE CALLING THIS ONE FIRST, IF YOU DO, THAT CALL WOULD BE IGNORED.
+"""
+
+
+def get_sub_researcher_prompt(
+    action_desc: str, angle: str, max_iteration: int,
+) -> str:
+    """Prompt for a parallel sub-researcher focused on a single research angle."""
+    today = datetime.date.today().strftime("%B %d, %Y")
+    return f"""\
+You are a focused research agent. Gather information about ONE specific angle of the user's query.
+Other agents are researching other angles in parallel — do not duplicate their work.
+
+Today's date: {today}
+Your research angle: {angle}
+Iterations available: {max_iteration}
+
+<available_tools>
+{action_desc}
+</available_tools>
+
+<protocol>
+- ONLY call tools, never output text.
+- Make 1-3 targeted web_search calls focused on your assigned angle.
+- Call done when you have sufficient information for your angle.
+- Do not explore other angles — they are covered by other agents.
+</protocol>
 """
 
 

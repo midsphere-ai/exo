@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Union
 
 from orbiter.types import StreamEvent
 
 from .agents.classifier import classify
-from .agents.researcher import research, stream_research
-from .agents.writer import write_answer, stream_write_answer
+from .agents.researcher import parallel_research, research, stream_research
 from .agents.suggestion_generator import generate_suggestions
+from .agents.writer import stream_write_answer, write_answer
 from .config import PerplexicaConfig
 from .types import PerplexicaResponse, PipelineEvent, SearchResult, Source
 
@@ -43,7 +42,8 @@ async def run_search_pipeline(
     # Step 2: Research (if needed)
     search_results = []
     if not classification.classification.skip_search:
-        search_results = await research(
+        _research = parallel_research if mode == "quality" else research
+        search_results = await _research(
             query=effective_query,
             classification=classification,
             chat_history=history,
@@ -86,7 +86,7 @@ async def stream_search_pipeline(
     mode: str = "balanced",
     system_instructions: str = "",
     config: PerplexicaConfig | None = None,
-) -> AsyncIterator[Union[PipelineEvent, StreamEvent, PerplexicaResponse]]:
+) -> AsyncIterator[PipelineEvent | StreamEvent | PerplexicaResponse]:
     """Stream the full search pipeline.
 
     Yields:
@@ -111,17 +111,27 @@ async def stream_search_pipeline(
     search_results: list[SearchResult] = []
     if not classification.classification.skip_search:
         yield PipelineEvent(stage="researcher", status="started")
-        async for event in stream_research(
-            query=effective_query,
-            classification=classification,
-            chat_history=history,
-            mode=mode,
-            config=cfg,
-        ):
-            if isinstance(event, SearchResult):
-                search_results.append(event)
-            else:
-                yield event
+        if mode == "quality":
+            # Parallel sub-researchers — no per-event streaming, but ~5x faster
+            search_results = await parallel_research(
+                query=effective_query,
+                classification=classification,
+                chat_history=history,
+                mode=mode,
+                config=cfg,
+            )
+        else:
+            async for event in stream_research(
+                query=effective_query,
+                classification=classification,
+                chat_history=history,
+                mode=mode,
+                config=cfg,
+            ):
+                if isinstance(event, SearchResult):
+                    search_results.append(event)
+                else:
+                    yield event
         yield PipelineEvent(
             stage="researcher", status="completed",
             message=f"{len(search_results)} results",
