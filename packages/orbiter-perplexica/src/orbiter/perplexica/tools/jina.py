@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 
 _log = get_logger(__name__)
+
+_RETRYABLE = ("Connection reset", "Errno 104", "RemoteDisconnected", "timed out", "TimeoutError")
 
 _HEADERS_BASE = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -55,23 +58,28 @@ def jina_search(
     num_results = min(num_results, 5)  # Jina caps at 5
 
     payload = json.dumps({"q": query, "num": num_results}).encode()
-    req = urllib.request.Request(
-        "https://s.jina.ai/",
-        data=payload,
-        headers={
-            **_HEADERS_BASE,
-            "Authorization": f"Bearer {api_key}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-    )
+    headers = {
+        **_HEADERS_BASE,
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
 
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception as exc:
-        _log.warning("jina_search failed: %s", exc)
-        return []
+    data: dict = {}
+    for attempt in range(3):
+        req = urllib.request.Request("https://s.jina.ai/", data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            break
+        except Exception as exc:
+            retryable = any(k in str(exc) for k in _RETRYABLE)
+            if retryable and attempt < 2:
+                _log.debug("jina_search retry %d: %s", attempt + 1, exc)
+                time.sleep(1 * (attempt + 1))
+                continue
+            _log.warning("jina_search failed: %s", exc)
+            return []
 
     items = data.get("data", [])[:num_results]
     results: list[dict] = []
@@ -104,23 +112,29 @@ def jina_reader_fetch(
         timeout: HTTP request timeout in seconds.
     """
     _log.debug("jina_reader url=%r", url)
-    req = urllib.request.Request(
-        f"https://r.jina.ai/{url}",
-        headers={
-            **_HEADERS_BASE,
-            "Authorization": f"Bearer {api_key}",
-            "X-Respond-With": "markdown",
-            "X-With-Generated-Alt": "true",
-            "X-Timeout": str(timeout),
-        },
-    )
+    headers = {
+        **_HEADERS_BASE,
+        "Authorization": f"Bearer {api_key}",
+        "X-Respond-With": "markdown",
+        "X-With-Generated-Alt": "true",
+        "X-Timeout": str(timeout),
+    }
 
-    try:
-        with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
-            text = resp.read().decode("utf-8", errors="replace")
-    except Exception as exc:
-        _log.warning("jina_reader failed: %s", exc)
-        return ""
+    text = ""
+    for attempt in range(3):
+        req = urllib.request.Request(f"https://r.jina.ai/{url}", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+            break
+        except Exception as exc:
+            retryable = any(k in str(exc) for k in _RETRYABLE)
+            if retryable and attempt < 2:
+                _log.debug("jina_reader retry %d for %s: %s", attempt + 1, url, exc)
+                time.sleep(1 * (attempt + 1))
+                continue
+            _log.warning("jina_reader failed: %s", exc)
+            return ""
 
     if len(text) > max_chars:
         text = text[:max_chars] + "\n\n... [truncated]"
