@@ -35,6 +35,28 @@ def clear_collected_results() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Search backend config — set from PerplexicaConfig before each pipeline run
+# ---------------------------------------------------------------------------
+
+_search_keys: dict[str, str] = {}
+
+
+def configure_search_keys(
+    serper_api_key: str = "",
+    jina_api_key: str = "",
+    searxng_url: str = "",
+) -> None:
+    """Set search backend API keys from config (falls back to env vars)."""
+    _search_keys.clear()
+    if serper_api_key:
+        _search_keys["serper"] = serper_api_key
+    if jina_api_key:
+        _search_keys["jina"] = jina_api_key
+    if searxng_url:
+        _search_keys["searxng_url"] = searxng_url
+
+
+# ---------------------------------------------------------------------------
 # SearXNG query helper
 # ---------------------------------------------------------------------------
 
@@ -52,32 +74,41 @@ def _search(
 ) -> list[dict]:
     """Dispatch to Serper by default, fall back to SearXNG.
 
-    Uses Serper when ``SERPER_API_KEY`` is set (the expected default).
-    Falls back to SearXNG when no Serper key is available or when
-    ``SEARXNG_URL`` is explicitly set without a Serper key.
+    Reads API keys from module-level ``_search_keys`` (set via
+    ``configure_search_keys``), falling back to environment variables.
     """
-    serper_key = os.environ.get("SERPER_API_KEY")
-    searxng_explicit = os.environ.get("SEARXNG_URL")
+    serper_key = _search_keys.get("serper") or os.environ.get("SERPER_API_KEY")
+    jina_key = _search_keys.get("jina") or os.environ.get("JINA_API_KEY")
+    searxng_url = _search_keys.get("searxng_url") or os.environ.get("SEARXNG_URL", "")
 
     # Prefer Serper (faster, no retry/backoff needed)
     if serper_key:
         from .serper import serper_search
 
-        return serper_search(query, categories, engines, num_results, timeout)
+        return serper_search(
+            query,
+            categories,
+            engines,
+            num_results,
+            timeout,
+            api_key=serper_key,
+        )
 
-    # Jina Cloud Search when API key is set
-    jina_key = os.environ.get("JINA_API_KEY")
+    # Jina Cloud Search
     if jina_key:
         from .jina import jina_search
 
-        return jina_search(query, categories, engines, num_results, timeout)
+        return jina_search(
+            query,
+            categories,
+            engines,
+            num_results,
+            timeout,
+            api_key=jina_key,
+        )
 
     # Fall back to SearXNG
-    if searxng_explicit:
-        return _searxng_search(query, categories, engines, num_results, timeout)
-
-    # Neither configured — try SearXNG at default URL as last resort
-    return _searxng_search(query, categories, engines, num_results, timeout)
+    return _searxng_search(query, categories, engines, num_results, timeout, searxng_url)
 
 
 def _searxng_search(
@@ -86,6 +117,7 @@ def _searxng_search(
     engines: str = "",
     num_results: int = 10,
     timeout: int = 15,
+    searxng_url: str = "",
 ) -> list[dict]:
     """Execute a search against SearXNG with retry on empty results.
 
@@ -95,7 +127,7 @@ def _searxng_search(
     import time
     import urllib.request
 
-    base_url = os.environ.get("SEARXNG_URL", "http://localhost:8888")
+    base_url = searxng_url or os.environ.get("SEARXNG_URL", "http://localhost:8888")
     url = f"{base_url}/search?q={quote_plus(query)}&format=json&categories={quote_plus(categories)}"
     if engines:
         url += f"&engines={quote_plus(engines)}"

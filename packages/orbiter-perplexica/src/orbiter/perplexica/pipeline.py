@@ -15,6 +15,7 @@ from .agents.suggestion_generator import generate_suggestions
 from .agents.writer import stream_write_answer, write_answer
 from .config import PerplexicaConfig
 from .tools.embeddings import rerank_search_results
+from .tools.searxng import configure_search_keys
 from .tools.web_fetcher import enrich_results
 from .types import PerplexicaResponse, PipelineEvent, SearchResult, Source
 
@@ -37,6 +38,7 @@ async def run_search_pipeline(
     """
     cfg = config or PerplexicaConfig()
     history = chat_history or []
+    configure_search_keys(cfg.serper_api_key, cfg.jina_api_key, cfg.searxng_url)
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
@@ -131,6 +133,7 @@ async def stream_search_pipeline(
     """
     cfg = config or PerplexicaConfig()
     history = chat_history or []
+    configure_search_keys(cfg.serper_api_key, cfg.jina_api_key, cfg.searxng_url)
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []

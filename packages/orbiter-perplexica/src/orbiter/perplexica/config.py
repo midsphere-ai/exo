@@ -27,6 +27,7 @@ class PerplexicaConfig:
     max_writer_sources: int = 30  # cap sources passed to writer for citation accuracy
     jina_reader_url: str = ""  # Jina Reader for full-page content extraction
     jina_api_key: str = ""  # Jina Cloud API key (enables r.jina.ai / s.jina.ai)
+    serper_api_key: str = ""  # Serper API key for Google Search
 
     def __post_init__(self) -> None:
         if not self.searxng_url:
@@ -45,3 +46,5 @@ class PerplexicaConfig:
             self.jina_reader_url = os.environ.get("JINA_READER_URL", "http://127.0.0.1:3000")
         if not self.jina_api_key:
             self.jina_api_key = os.environ.get("JINA_API_KEY", "")
+        if not self.serper_api_key:
+            self.serper_api_key = os.environ.get("SERPER_API_KEY", "")

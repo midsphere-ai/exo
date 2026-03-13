@@ -18,6 +18,7 @@ def jina_search(
     engines: str = "",
     num_results: int = 5,
     timeout: int = 15,
+    api_key: str = "",
 ) -> list[dict]:
     """Execute a search against the Jina Cloud Search API.
 
@@ -29,8 +30,9 @@ def jina_search(
             the query is scoped to ``site:reddit.com``.
         num_results: Maximum number of results to return (Jina caps at 5).
         timeout: HTTP request timeout in seconds.
+        api_key: Jina API key. Falls back to ``JINA_API_KEY`` env var.
     """
-    api_key = os.environ.get("JINA_API_KEY", "")
+    api_key = api_key or os.environ.get("JINA_API_KEY", "")
     if not api_key:
         return []
 
