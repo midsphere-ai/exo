@@ -191,7 +191,7 @@ async def adaptive_research(
         seed_results: Pre-fetched results from speculative search to bootstrap
             the first round (avoids redundant initial queries).
     """
-    max_rounds = {"balanced": 1, "quality": 2}.get(mode, 1)
+    max_rounds = {"balanced": 1, "quality": 3}.get(mode, 1)
     all_results: list[SearchResult] = list(seed_results) if seed_results else []
 
     for round_num in range(max_rounds):
