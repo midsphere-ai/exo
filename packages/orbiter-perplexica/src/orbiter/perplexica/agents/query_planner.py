@@ -33,14 +33,15 @@ Today's date: {today}
 
 {sub_questions_block}\
 Requirements:
-- Queries must be SEO-friendly keywords, NOT full sentences
+- Each query MUST be under 100 characters — short keyword phrases only
+- NO full sentences, NO question marks, NO filler words (the, a, of, in, for)
 - CRITICAL: Generate at least one query per sub-question listed above. \
 Do NOT cluster all queries on a single sub-question.
 - Add year qualifiers for recent topics (e.g., "2025", "2026")
 - Include specific entity names, technical terms, and domain keywords
 
 Good: "nuclear fusion breakthroughs 2025 tokamak", "solar energy LCOE cost MWh 2025"
-Bad: "What are the latest developments in fusion?" (sentence), "fusion" (too broad)
+Bad: "What are the latest developments in fusion energy research?" (too long, sentence)
 
 Set "sufficient" to false (you haven't searched yet).
 """
@@ -97,6 +98,27 @@ def _sub_questions_to_queries(sub_questions: list[str]) -> list[str]:
             kw = f"{kw} {year}"
         queries.append(kw)
     return queries
+
+
+def _trim_query(query: str, max_len: int = 200) -> str:
+    """Compress a verbose LLM query into keyword-style search terms."""
+    import re
+
+    if len(query) <= max_len:
+        return query
+    # Strip question phrasing and filler
+    q = re.sub(
+        r"^(what|how|who|when|where|why|does|is|are|do|did|has|have|was|were|"
+        r"find|search|look up|can you|please|tell me about)\s+",
+        "",
+        query,
+        flags=re.IGNORECASE,
+    )
+    q = re.sub(r"\b(the|a|an|of|in|on|for|to|and|or|with|that|this|from)\b", " ", q)
+    q = re.sub(r"\s+", " ", q).strip().rstrip("?. ")
+    if len(q) > max_len:
+        q = " ".join(q[:max_len].rsplit(" ", 1)[0:1])
+    return q
 
 
 async def _generate_query_plan(
@@ -157,17 +179,18 @@ async def _generate_query_plan(
     except Exception:
         plan = QueryPlan(queries=[query], sufficient=False)
 
-    # Validate and salvage: keep good LLM queries, replace bad ones with
-    # deterministic sub-question conversions. A query is "bad" if it exceeds
-    # 150 chars (likely a full sentence rather than keywords).
+    # Validate and salvage: trim overly long queries, then fill gaps.
+    plan = QueryPlan(
+        queries=[_trim_query(q) for q in plan.queries],
+        sufficient=plan.sufficient,
+    )
     if plan.queries and sub_questions and len(sub_questions) > 1:
         fallback_queries = _sub_questions_to_queries(sub_questions)
-        good = [q for q in plan.queries if len(q) <= 150]
+        good = [q for q in plan.queries if len(q) <= 200]
         if not good:
             _log.warning("query_plan all queries bad, using sub-question conversion")
             plan = QueryPlan(queries=fallback_queries, sufficient=False)
         elif len(good) < len(sub_questions):
-            # Fill gaps with deterministic queries not already covered
             needed = len(sub_questions) - len(good)
             extras = [q for q in fallback_queries if q not in good][:needed]
             _log.debug("query_plan salvaged %d/%d, added %d fallback", len(good), len(plan.queries), len(extras))
