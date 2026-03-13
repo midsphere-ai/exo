@@ -5,18 +5,22 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from orbiter import Agent, run
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.types import StreamEvent
 
 from ..config import PerplexicaConfig
 from ..prompts.instructions import get_writer_prompt
 from ..types import SearchResult
 
+_log = get_logger(__name__)
+
 
 def _resolve_provider(model: str):
     try:
         from orbiter.models import get_provider
         return get_provider(model)
-    except Exception:
+    except Exception as exc:
+        _log.warning("provider resolution failed for %s: %s", model, exc)
         return None
 
 
@@ -43,6 +47,7 @@ async def write_answer(
     """Generate final answer using Perplexica's writer prompt with context."""
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
+    _log.debug("writer query=%r sources=%d model=%s", query, len(search_results), cfg.model)
 
     context = format_results_as_context(search_results)
     instructions = get_writer_prompt(context, system_instructions, mode, cfg.max_writer_words)
@@ -66,6 +71,7 @@ async def write_answer(
 
     provider = _resolve_provider(cfg.model)
     result = await run(writer, formatted_input, provider=provider)
+    _log.info("writer done len=%d", len(result.output))
     return result.output
 
 
@@ -80,6 +86,7 @@ async def stream_write_answer(
     """Stream writer text tokens as they are generated."""
     from ..config import PerplexicaConfig as Cfg
     cfg = config or Cfg()
+    _log.debug("stream_writer query=%r sources=%d model=%s", query, len(search_results), cfg.model)
 
     context = format_results_as_context(search_results)
     instructions = get_writer_prompt(context, system_instructions, mode, cfg.max_writer_words)

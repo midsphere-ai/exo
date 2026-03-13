@@ -17,6 +17,9 @@ import re
 from urllib.parse import quote, urlparse
 
 from orbiter import tool
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
 
 _MAX_CHARS = 10_000
 
@@ -33,6 +36,7 @@ def _fetch_via_jina(
     for faster fetches with image captioning. Otherwise falls back to a
     self-hosted Jina Reader instance at ``jina_url``.
     """
+    _log.debug("fetch url=%r method=%s", url, "jina_cloud" if api_key else "jina_self_hosted")
     if api_key:
         from .jina import jina_reader_fetch
 
@@ -45,7 +49,8 @@ def _fetch_via_jina(
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             text = resp.read().decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        _log.warning("jina reader failed for %s: %s", url, exc)
         return ""
     if len(text) > max_chars:
         text = text[:max_chars] + "\n\n... [truncated]"
@@ -54,6 +59,7 @@ def _fetch_via_jina(
 
 def _fetch_page_fallback(url: str) -> str:
     """Fetch a web page via direct HTTP and extract text with regex stripping."""
+    _log.debug("fetch fallback url=%r", url)
     import urllib.request
 
     parsed = urlparse(url)
@@ -66,6 +72,7 @@ def _fetch_page_fallback(url: str) -> str:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
+        _log.warning("fetch fallback failed for %s: %s", url, exc)
         return f"Error fetching {url}: {exc}"
 
     text = re.sub(r"<script[^>]*>.*?</script>", "", raw, flags=re.S)
@@ -195,6 +202,7 @@ async def enrich_results(
         return results
 
     to_enrich = results[:max_results]
+    _log.debug("enrich targets=%d/%d", min(max_results, len(results)), len(results))
 
     async def _timed_fetch(url: str) -> str:
         return await asyncio.wait_for(
@@ -225,6 +233,9 @@ async def enrich_results(
                     content=content,
                     enriched=True,
                 )
+
+    enriched_count = sum(1 for r in enriched[:len(to_enrich)] if r.enriched)
+    _log.info("enriched %d/%d pages", enriched_count, len(to_enrich))
 
     enriched.extend(results[max_results:])
     return enriched

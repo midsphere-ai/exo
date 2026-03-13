@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
+
 
 @dataclass
 class PerplexicaConfig:
@@ -48,3 +52,9 @@ class PerplexicaConfig:
             self.jina_api_key = os.environ.get("JINA_API_KEY", "")
         if not self.serper_api_key:
             self.serper_api_key = os.environ.get("SERPER_API_KEY", "")
+        _log.debug(
+            "config model=%s fast=%s search=%s",
+            self.model,
+            self.fast_model,
+            self.searxng_url,
+        )

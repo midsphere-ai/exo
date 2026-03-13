@@ -16,6 +16,9 @@ import os
 from urllib.parse import quote_plus
 
 from orbiter import tool
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared result collector — tools append here, pipeline reads after run()
@@ -81,6 +84,9 @@ def _search(
     jina_key = _search_keys.get("jina") or os.environ.get("JINA_API_KEY")
     searxng_url = _search_keys.get("searxng_url") or os.environ.get("SEARXNG_URL", "")
 
+    backend = "serper" if serper_key else ("jina" if jina_key else "searxng")
+    _log.debug("search backend=%s query=%r", backend, query)
+
     # Prefer Serper (faster, no retry/backoff needed)
     if serper_key:
         from .serper import serper_search
@@ -133,14 +139,17 @@ def _searxng_search(
         url += f"&engines={quote_plus(engines)}"
 
     for attempt in range(_MAX_RETRIES):
+        _log.debug("searxng attempt=%d/%d query=%r", attempt + 1, _MAX_RETRIES, query)
         try:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8", errors="replace"))
-        except Exception:
+        except Exception as exc:
+            _log.warning("searxng attempt %d failed: %s", attempt + 1, exc)
             if attempt < _MAX_RETRIES - 1:
                 time.sleep(_RETRY_DELAY * (attempt + 1))
                 continue
+            _log.warning("searxng all retries exhausted for query=%r", query)
             return []
 
         results = []
@@ -183,6 +192,8 @@ async def _multi_search(
                 seen_urls.add(r["url"])
                 unique_results.append(r)
 
+    _log.debug("multi_search queries=%s total_results=%d", queries, len(unique_results))
+
     # Side-effect: collect results for the pipeline
     _collected_results.extend(unique_results)
 
@@ -210,6 +221,7 @@ async def search_and_collect(
             if r["url"] not in seen_urls:
                 seen_urls.add(r["url"])
                 unique.append(r)
+    _log.debug("search_and_collect queries=%d results=%d", len(queries), len(unique))
     return unique
 
 

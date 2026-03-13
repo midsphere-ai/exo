@@ -11,6 +11,10 @@ import json
 import os
 import urllib.request
 
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
+
 _SERPER_BASE = "https://google.serper.dev"
 
 
@@ -48,6 +52,7 @@ def serper_search(
     else:
         endpoint = "/search"
 
+    _log.debug("serper endpoint=%s query=%r", endpoint, query)
     url = f"{_SERPER_BASE}{endpoint}"
     payload = json.dumps({"q": query, "num": num_results}).encode()
     req = urllib.request.Request(
@@ -62,7 +67,8 @@ def serper_search(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception:
+    except Exception as exc:
+        _log.warning("serper request failed: %s", exc)
         return []
 
     # Scholar returns results under "organic"; news under "news"; search under "organic"
@@ -76,4 +82,5 @@ def serper_search(
                 "content": item.get("snippet", "") or item.get("title", ""),
             }
         )
+    _log.debug("serper results=%d", len(results))
     return results

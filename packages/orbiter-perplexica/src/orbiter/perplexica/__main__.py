@@ -14,8 +14,15 @@ import argparse
 import asyncio
 import sys
 
+from orbiter.observability.logging import (  # pyright: ignore[reportMissingImports]
+    configure_logging,
+    get_logger,
+)
+
 from .config import PerplexicaConfig
 from .conversation import ConversationManager
+
+_log = get_logger(__name__)
 
 
 async def run_search(
@@ -156,6 +163,9 @@ def main() -> None:
     parser.add_argument(
         "--serve", action="store_true", help="Start FastAPI server"
     )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
     parser.add_argument("--model", default=None, help="Override LLM model")
     parser.add_argument(
         "--host", default="0.0.0.0", help="Server host (default: 0.0.0.0)"
@@ -166,12 +176,15 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    configure_logging(level="DEBUG" if args.verbose else "WARNING")
+
     # Build config
     config = PerplexicaConfig()
     if args.model:
         config.model = args.model
     config.sources = [s.strip() for s in args.sources.split(",")]
     config.research_mode = args.quality
+    _log.info("config model=%s fast=%s mode=%s", config.model, config.fast_model, args.quality)
 
     # Server mode
     if args.serve:

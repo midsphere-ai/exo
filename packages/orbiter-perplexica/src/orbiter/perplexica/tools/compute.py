@@ -16,6 +16,9 @@ import os
 from urllib.parse import quote_plus
 
 from orbiter import tool
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
 
 # Allowed function names and their implementations.
 _SAFE_FUNCTIONS: dict[str, object] = {
@@ -110,6 +113,7 @@ async def calculate(expression: str) -> str:
         expression: Mathematical expression to evaluate
             (e.g. "sqrt(144) + 2 ** 3").
     """
+    _log.debug("calculate expr=%r", expression)
     try:
         result = _safe_eval(expression)
     except (ValueError, SyntaxError, TypeError, ZeroDivisionError) as exc:
@@ -135,6 +139,7 @@ async def wolfram_query(query: str) -> str:
     """
     import urllib.request
 
+    _log.debug("wolfram query=%r", query)
     app_id = os.environ.get("WOLFRAM_APP_ID", "")
     if not app_id:
         return (

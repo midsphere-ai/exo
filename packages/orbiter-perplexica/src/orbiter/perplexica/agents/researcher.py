@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from orbiter import Agent, run
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.types import StreamEvent
 
 from ..config import PerplexicaConfig
@@ -31,13 +32,16 @@ from ..tools.searxng import (
 from ..tools.web_fetcher import scrape_url
 from ..types import ClassifierOutput, SearchResult
 
+_log = get_logger(__name__)
+
 
 def _resolve_provider(model: str):
     try:
         from orbiter.models import get_provider
 
         return get_provider(model)
-    except Exception:
+    except Exception as exc:
+        _log.warning("provider resolution failed for %s: %s", model, exc)
         return None
 
 
@@ -127,6 +131,7 @@ async def research(
     from ..config import PerplexicaConfig as Cfg
 
     cfg = config or Cfg()
+    _log.debug("research query=%r mode=%s", query, mode)
 
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
 
@@ -176,6 +181,7 @@ async def research(
 
     # Get results from the shared collector (populated by tool side-effects)
     raw_results = get_collected_results()
+    _log.info("research complete results=%d", len(raw_results))
 
     # Deduplicate and convert to SearchResult objects
     seen_urls: set[str] = set()
@@ -286,6 +292,7 @@ def _split_query(query: str) -> list[str]:
 async def direct_search(query: str) -> list[SearchResult]:
     """Fast-path: query SearXNG directly, no LLM researcher overhead."""
     queries = _split_query(query)
+    _log.debug("direct_search queries=%s", queries)
     raw = await search_and_collect(queries)
     seen_urls: set[str] = set()
     results: list[SearchResult] = []
@@ -301,6 +308,7 @@ async def direct_search(query: str) -> list[SearchResult]:
                     enriched=r.get("enriched", False),
                 )
             )
+    _log.info("direct_search results=%d", len(results))
     return results
 
 
@@ -377,6 +385,7 @@ async def parallel_research(
     min_iters = _ITERS_PER_WORKER.get(mode, 2)
     num_workers = min(len(angles), max(1, max_iterations // min_iters))
     iters_per_worker = max(1, max_iterations // num_workers)
+    _log.info("parallel workers=%d iters_each=%d angles=%s", num_workers, iters_per_worker, angles)
 
     # Build chat history context once
     parts: list[str] = []
@@ -426,13 +435,7 @@ async def parallel_research(
     # Log failures but don't abort — partial results are still valuable
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "Sub-researcher '%s' failed: %s",
-                active_angles[i],
-                result,
-            )
+            _log.warning("sub-researcher '%s' failed: %s", active_angles[i], result)
 
     # Collect and deduplicate from the shared collector
     raw_results = get_collected_results()
@@ -450,4 +453,5 @@ async def parallel_research(
                     enriched=r.get("enriched", False),
                 )
             )
+    _log.info("parallel_research total=%d", len(search_results))
     return search_results

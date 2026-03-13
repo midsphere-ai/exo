@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import replace
 
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from orbiter.types import StreamEvent
 
 from .agents.classifier import classify
@@ -18,6 +19,8 @@ from .tools.embeddings import rerank_search_results
 from .tools.searxng import configure_search_keys
 from .tools.web_fetcher import enrich_results
 from .types import PerplexicaResponse, PipelineEvent, SearchResult, Source
+
+_log = get_logger(__name__)
 
 
 async def run_search_pipeline(
@@ -39,6 +42,7 @@ async def run_search_pipeline(
     cfg = config or PerplexicaConfig()
     history = chat_history or []
     configure_search_keys(cfg.serper_api_key, cfg.jina_api_key, cfg.searxng_url)
+    _log.info("pipeline query=%r mode=%s", query, mode)
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
@@ -66,9 +70,15 @@ async def run_search_pipeline(
                 seed_results=seed_results,
             )
     effective_query = classification.standalone_follow_up or query
+    _log.info(
+        "classifier done skip_search=%s results=%d",
+        classification.classification.skip_search,
+        len(search_results),
+    )
 
     # Rerank by relevance (skip for speed — not worth the latency)
     if mode != "speed" and search_results:
+        _log.debug("reranking %d results", len(search_results))
         search_results = await rerank_search_results(effective_query, search_results)
 
     # Cap sources — speed stays lean, balanced/quality get all results
@@ -84,6 +94,7 @@ async def run_search_pipeline(
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
+        _log.debug("enriching top %d results", enrich_cap)
         writer_results = await enrich_results(
             writer_results,
             cfg.jina_reader_url,
@@ -92,6 +103,7 @@ async def run_search_pipeline(
         )
 
     # Step 3: Write answer
+    _log.debug("writing answer sources=%d", len(writer_results))
     answer = await write_answer(
         query=effective_query,
         search_results=writer_results,
@@ -103,9 +115,11 @@ async def run_search_pipeline(
 
     # Step 4: Get suggestions (should be done by now)
     suggestions = await suggest_task
+    _log.info("writer done answer_len=%d", len(answer))
 
     # Sources list matches what the writer cited (same order, same indices)
     sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
+    _log.info("pipeline complete sources=%d suggestions=%d", len(sources), len(suggestions))
 
     return PerplexicaResponse(
         answer=answer,
@@ -134,6 +148,7 @@ async def stream_search_pipeline(
     cfg = config or PerplexicaConfig()
     history = chat_history or []
     configure_search_keys(cfg.serper_api_key, cfg.jina_api_key, cfg.searxng_url)
+    _log.info("stream pipeline query=%r mode=%s", query, mode)
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
@@ -181,6 +196,7 @@ async def stream_search_pipeline(
 
     # Rerank by relevance (skip for speed)
     if mode != "speed" and search_results:
+        _log.debug("reranking %d results", len(search_results))
         search_results = await rerank_search_results(effective_query, search_results)
 
     # Cap sources — speed stays lean, balanced/quality get all results
@@ -196,6 +212,7 @@ async def stream_search_pipeline(
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
+        _log.debug("enriching top %d results", enrich_cap)
         yield PipelineEvent(stage="enrichment", status="started")
         writer_results = await enrich_results(
             writer_results,
@@ -233,8 +250,11 @@ async def stream_search_pipeline(
     suggestions = await suggest_task
     yield PipelineEvent(stage="suggestions", status="completed")
 
+    _log.info("writer done answer_len=%d", len(answer))
+
     # Sources list matches what the writer cited (same order, same indices)
     sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
+    _log.info("stream pipeline complete sources=%d suggestions=%d", len(sources), len(suggestions))
     yield PerplexicaResponse(
         answer=answer,
         sources=sources,

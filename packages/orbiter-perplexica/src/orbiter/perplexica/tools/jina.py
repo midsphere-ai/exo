@@ -11,6 +11,10 @@ import json
 import os
 import urllib.request
 
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
+
 
 def jina_search(
     query: str,
@@ -42,6 +46,7 @@ def jina_search(
     elif ("reddit" in engines or categories == "social media") and "site:reddit.com" not in query:
         query = f"site:reddit.com {query}"
 
+    _log.debug("jina_search query=%r num=%d", query, num_results)
     num_results = min(num_results, 5)  # Jina caps at 5
 
     payload = json.dumps({"q": query, "num": num_results}).encode()
@@ -58,7 +63,8 @@ def jina_search(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception:
+    except Exception as exc:
+        _log.warning("jina_search failed: %s", exc)
         return []
 
     items = data.get("data", [])[:num_results]
@@ -73,6 +79,7 @@ def jina_search(
                 "enriched": len(content) > 500,
             }
         )
+    _log.debug("jina_search results=%d", len(results))
     return results
 
 
@@ -90,6 +97,7 @@ def jina_reader_fetch(
         max_chars: Maximum characters to return.
         timeout: HTTP request timeout in seconds.
     """
+    _log.debug("jina_reader url=%r", url)
     req = urllib.request.Request(
         f"https://r.jina.ai/{url}",
         headers={
@@ -103,7 +111,8 @@ def jina_reader_fetch(
     try:
         with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
             text = resp.read().decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        _log.warning("jina_reader failed: %s", exc)
         return ""
 
     if len(text) > max_chars:

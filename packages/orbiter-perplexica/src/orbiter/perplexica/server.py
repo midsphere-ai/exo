@@ -10,9 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
 from .config import PerplexicaConfig
 from .conversation import ConversationManager
 from .pipeline import run_search_pipeline
+
+_log = get_logger(__name__)
 
 app = FastAPI(
     title="Perplexica - AI Search Engine",
@@ -32,6 +36,7 @@ _conversations: dict[str, ConversationManager] = {}
 
 def _get_conversation(session_id: str) -> ConversationManager:
     if session_id not in _conversations:
+        _log.debug("new session %s", session_id)
         _conversations[session_id] = ConversationManager()
     return _conversations[session_id]
 
@@ -43,6 +48,7 @@ async def search_endpoint(
     sources: str = Query("web", description="Comma-separated sources: web,academic,discussions"),
 ):
     """Search endpoint returning JSON with answer, sources, and suggestions."""
+    _log.info("search request q=%r quality=%s sources=%s", q, quality, sources)
     cfg = PerplexicaConfig()
     cfg.sources = [s.strip() for s in sources.split(",")]
 
@@ -64,6 +70,7 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat_endpoint(body: ChatRequest):
     """Multi-turn chat with conversation memory."""
+    _log.info("chat request session=%s q=%r", body.session_id, body.query)
     cfg = PerplexicaConfig()
     cfg.sources = [s.strip() for s in body.sources.split(",")]
     conversation = _get_conversation(body.session_id)
@@ -86,6 +93,7 @@ async def search_stream_endpoint(
     sources: str = Query("web", description="Comma-separated sources"),
 ):
     """Streaming search with SSE progress updates."""
+    _log.info("stream request q=%r quality=%s sources=%s", q, quality, sources)
     cfg = PerplexicaConfig()
     cfg.sources = [s.strip() for s in sources.split(",")]
 
@@ -163,4 +171,5 @@ async def clear_chat(session_id: str):
     """Clear conversation history for a session."""
     if session_id in _conversations:
         _conversations[session_id].clear()
+    _log.info("session cleared %s", session_id)
     return {"status": "cleared", "session_id": session_id}

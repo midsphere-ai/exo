@@ -23,6 +23,9 @@ import os
 import re
 
 from orbiter import tool
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+
+_log = get_logger(__name__)
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -201,18 +204,21 @@ def _get_embeddings(texts: list[str]) -> list[list[float]] | None:
         model = os.environ.get(
             "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-3-small"
         )
+        _log.debug("embedding provider=openai model=%s texts=%d", model, len(texts))
         return _get_openai_embeddings(texts, openai_key, model)
 
     if gemini_key:
         model = os.environ.get(
             "PERPLEXICA_EMBEDDING_MODEL", "gemini-embedding-2-preview"
         )
+        _log.debug("embedding provider=gemini model=%s texts=%d", model, len(texts))
         return _get_gemini_embeddings(texts, gemini_key, model)
 
     if gcp_project:
         model = os.environ.get(
             "PERPLEXICA_EMBEDDING_MODEL", "gemini-embedding-2-preview"
         )
+        _log.debug("embedding provider=vertex model=%s texts=%d", model, len(texts))
         return _get_vertex_embeddings(texts, model)
 
     return None
@@ -245,7 +251,8 @@ async def rerank_search_results(
                 scored.append((sim, r))
         else:
             raise ValueError("No embedding provider available")
-    except Exception:
+    except Exception as exc:
+        _log.warning("embedding failed, falling back to keyword scoring: %s", exc)
         query_words = query.lower().split()
         for r in results:
             text = f"{r.title} {r.content[:500]}"
@@ -253,6 +260,7 @@ async def rerank_search_results(
             scored.append((score, r))
 
     scored.sort(key=lambda x: x[0], reverse=True)
+    _log.debug("reranked %d results", len(scored))
     return [r for _, r in scored[:top_k]]
 
 

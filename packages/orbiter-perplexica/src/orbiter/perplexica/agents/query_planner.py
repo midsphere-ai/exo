@@ -6,10 +6,13 @@ import asyncio
 import datetime
 
 from orbiter import Agent, run
+from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 
 from ..config import PerplexicaConfig
 from ..tools.searxng import search_and_collect
 from ..types import ClassifierOutput, QueryPlan, SearchResult
+
+_log = get_logger(__name__)
 
 
 def _resolve_provider(model: str):
@@ -17,7 +20,8 @@ def _resolve_provider(model: str):
         from orbiter.models import get_provider
 
         return get_provider(model)
-    except Exception:
+    except Exception as exc:
+        _log.warning("provider resolution failed for %s: %s", model, exc)
         return None
 
 
@@ -103,6 +107,7 @@ async def _generate_query_plan(
     sub_questions: list[str] | None = None,
 ) -> QueryPlan:
     """Generate a query plan — initial queries or gap-filling follow-ups."""
+    _log.debug("query_plan round existing=%d", len(existing_results))
     today = datetime.date.today().strftime("%B %d, %Y")
     sq_block = _format_sub_questions_block(sub_questions or [])
 
@@ -148,6 +153,7 @@ async def _generate_query_plan(
 
     try:
         plan = QueryPlan.model_validate_json(result.output)
+        _log.debug("query_plan queries=%s sufficient=%s", plan.queries, plan.sufficient)
     except Exception:
         plan = QueryPlan(queries=[query], sufficient=False)
 
@@ -159,6 +165,7 @@ async def _generate_query_plan(
         and (len(plan.queries) < len(sub_questions) or any(len(q) > 100 for q in plan.queries))
     )
     if bad_queries and sub_questions:
+        _log.warning("query_plan bad queries, falling back to sub-question conversion")
         plan = QueryPlan(
             queries=_sub_questions_to_queries(sub_questions),
             sufficient=False,
@@ -202,6 +209,7 @@ async def adaptive_research(
     all_results: list[SearchResult] = list(seed_results) if seed_results else []
 
     for round_num in range(max_rounds):
+        _log.debug("adaptive round=%d/%d existing=%d", round_num + 1, max_rounds, len(all_results))
         plan = await _generate_query_plan(
             query,
             chat_history,
@@ -227,7 +235,9 @@ async def adaptive_research(
             for r in raw
         ]
         all_results = _merge_results(all_results, new_results)
+        _log.info("adaptive round=%d/%d new=%d total=%d", round_num + 1, max_rounds, len(new_results), len(all_results))
 
+    _log.info("adaptive done total=%d", len(all_results))
     return all_results
 
 
@@ -256,6 +266,7 @@ async def hybrid_research(
 
     async def _timed_agents() -> list[SearchResult]:
         timeout = {"balanced": 10, "quality": 20}.get(mode, 10)
+        _log.debug("hybrid timeout=%ds for parallel agents", timeout)
         try:
             return await asyncio.wait_for(
                 parallel_research(
@@ -282,4 +293,11 @@ async def hybrid_research(
     agent_task = _timed_agents()
 
     results = await asyncio.gather(structured_task, agent_task)
-    return _merge_results(results[0], results[1])
+    merged = _merge_results(results[0], results[1])
+    _log.info(
+        "hybrid merged=%d (structured=%d agents=%d)",
+        len(merged),
+        len(results[0]),
+        len(results[1]),
+    )
+    return merged
