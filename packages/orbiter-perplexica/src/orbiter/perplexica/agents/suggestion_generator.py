@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from orbiter import Agent, run
 from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
@@ -12,6 +13,23 @@ from ..prompts.instructions import get_suggestion_prompt
 from ..types import SuggestionOutput
 
 _log = get_logger(__name__)
+
+
+def _extract_suggestions_from_text(text: str) -> list[str]:
+    """Best-effort extraction of suggestions from unstructured LLM output."""
+    # Try to find a JSON array embedded in the text
+    arr_match = re.search(r"\[([^\[\]]+)\]", text)
+    if arr_match:
+        try:
+            items = json.loads(f"[{arr_match.group(1)}]")
+            if isinstance(items, list) and all(isinstance(s, str) for s in items):
+                return items[:5]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Fall back to numbered lines (e.g. "1. How does..." or "- What are...")
+    lines = re.findall(r"(?:^|\n)\s*(?:\d+[.):]\s*|[-*]\s+)(.{15,120})", text)
+    return [line.strip().rstrip("?").strip() + "?" for line in lines[:5]]
 
 
 def _resolve_provider(model: str):
@@ -56,11 +74,23 @@ async def generate_suggestions(
         output = SuggestionOutput.model_validate_json(result.output)
         return output.suggestions
     except Exception:
-        _log.warning("suggestion parse failed, trying raw JSON")
-        # Try to parse as raw JSON
-        try:
-            data = json.loads(result.output)
-            return data.get("suggestions", [])
-        except Exception:
-            _log.warning("suggestion parse failed completely")
-            return []
+        _log.debug("suggestion structured parse failed, trying raw JSON")
+
+    # Try to parse as raw JSON object
+    try:
+        data = json.loads(result.output)
+        if isinstance(data, dict) and "suggestions" in data:
+            return data["suggestions"][:5]
+        if isinstance(data, list):
+            return [str(s) for s in data[:5]]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Last resort: regex extraction from free-form text
+    extracted = _extract_suggestions_from_text(result.output)
+    if extracted:
+        _log.debug("suggestion extracted %d from text", len(extracted))
+        return extracted
+
+    _log.warning("suggestion parse failed completely")
+    return []

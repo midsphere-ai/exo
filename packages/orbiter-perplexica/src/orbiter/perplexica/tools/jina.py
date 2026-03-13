@@ -15,6 +15,11 @@ from orbiter.observability.logging import get_logger  # pyright: ignore[reportMi
 
 _log = get_logger(__name__)
 
+_HEADERS_BASE = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+}
+
 
 def jina_search(
     query: str,
@@ -54,6 +59,7 @@ def jina_search(
         "https://s.jina.ai/",
         data=payload,
         headers={
+            **_HEADERS_BASE,
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -101,6 +107,7 @@ def jina_reader_fetch(
     req = urllib.request.Request(
         f"https://r.jina.ai/{url}",
         headers={
+            **_HEADERS_BASE,
             "Authorization": f"Bearer {api_key}",
             "X-Respond-With": "markdown",
             "X-With-Generated-Alt": "true",

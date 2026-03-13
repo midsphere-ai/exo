@@ -157,15 +157,23 @@ async def _generate_query_plan(
     except Exception:
         plan = QueryPlan(queries=[query], sufficient=False)
 
-    # Validate: if the LLM returned too few queries or full-sentence queries
-    # (>100 chars), fall back to deterministic sub-question conversion.
-    bad_queries = not plan.queries or (
-        sub_questions
-        and len(sub_questions) > 1
-        and (len(plan.queries) < len(sub_questions) or any(len(q) > 100 for q in plan.queries))
-    )
-    if bad_queries and sub_questions:
-        _log.warning("query_plan bad queries, falling back to sub-question conversion")
+    # Validate and salvage: keep good LLM queries, replace bad ones with
+    # deterministic sub-question conversions. A query is "bad" if it exceeds
+    # 150 chars (likely a full sentence rather than keywords).
+    if plan.queries and sub_questions and len(sub_questions) > 1:
+        fallback_queries = _sub_questions_to_queries(sub_questions)
+        good = [q for q in plan.queries if len(q) <= 150]
+        if not good:
+            _log.warning("query_plan all queries bad, using sub-question conversion")
+            plan = QueryPlan(queries=fallback_queries, sufficient=False)
+        elif len(good) < len(sub_questions):
+            # Fill gaps with deterministic queries not already covered
+            needed = len(sub_questions) - len(good)
+            extras = [q for q in fallback_queries if q not in good][:needed]
+            _log.debug("query_plan salvaged %d/%d, added %d fallback", len(good), len(plan.queries), len(extras))
+            plan = QueryPlan(queries=good + extras, sufficient=plan.sufficient)
+    elif not plan.queries and sub_questions:
+        _log.warning("query_plan empty, falling back to sub-question conversion")
         plan = QueryPlan(
             queries=_sub_questions_to_queries(sub_questions),
             sufficient=False,

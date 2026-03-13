@@ -57,9 +57,16 @@ def _fetch_via_jina(
     return text
 
 
+_CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+
 def _fetch_page_fallback(url: str) -> str:
     """Fetch a web page via direct HTTP and extract text with regex stripping."""
     _log.debug("fetch fallback url=%r", url)
+    import ssl
     import urllib.request
 
     parsed = urlparse(url)
@@ -67,13 +74,27 @@ def _fetch_page_fallback(url: str) -> str:
         return f"Error: unsupported scheme '{parsed.scheme}'. Use http or https."
 
     safe_url = quote(url, safe=":/?#[]@!$&'()*+,;=-._~%")
-    req = urllib.request.Request(safe_url, headers={"User-Agent": "OrbiterBot/1.0"})
+    req = urllib.request.Request(safe_url, headers={"User-Agent": _CHROME_UA})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except Exception as exc:
-        _log.warning("fetch fallback failed for %s: %s", url, exc)
-        return f"Error fetching {url}: {exc}"
+        # Retry with unverified SSL on certificate errors (common on .gov.in sites)
+        is_ssl = "CERTIFICATE_VERIFY_FAILED" in str(exc) or "SSL" in type(exc).__name__
+        if not is_ssl:
+            _log.warning("fetch fallback failed for %s: %s", url, exc)
+            return f"Error fetching {url}: {exc}"
+        _log.debug("fetch SSL verify failed, retrying without verification: %s", url)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            req2 = urllib.request.Request(safe_url, headers={"User-Agent": _CHROME_UA})
+            with urllib.request.urlopen(req2, timeout=30, context=ctx) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+        except Exception as exc2:
+            _log.warning("fetch fallback failed for %s: %s", url, exc2)
+            return f"Error fetching {url}: {exc2}"
 
     text = re.sub(r"<script[^>]*>.*?</script>", "", raw, flags=re.S)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.S)
