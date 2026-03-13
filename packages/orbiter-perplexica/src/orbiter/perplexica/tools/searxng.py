@@ -65,6 +65,13 @@ def _search(
 
         return serper_search(query, categories, engines, num_results, timeout)
 
+    # Jina Cloud Search when API key is set
+    jina_key = os.environ.get("JINA_API_KEY")
+    if jina_key:
+        from .jina import jina_search
+
+        return jina_search(query, categories, engines, num_results, timeout)
+
     # Fall back to SearXNG
     if searxng_explicit:
         return _searxng_search(query, categories, engines, num_results, timeout)

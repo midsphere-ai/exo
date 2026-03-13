@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class ResearchMode(str, Enum):
     """Research quality modes matching Perplexica."""
+
     SPEED = "speed"
     BALANCED = "balanced"
     QUALITY = "quality"
@@ -15,6 +16,7 @@ class ResearchMode(str, Enum):
 
 class Classification(BaseModel):
     """Perplexica's classifier output labels."""
+
     skip_search: bool = Field(default=False, alias="skipSearch")
     personal_search: bool = Field(default=False, alias="personalSearch")
     academic_search: bool = Field(default=False, alias="academicSearch")
@@ -28,6 +30,7 @@ class Classification(BaseModel):
 
 class ClassifierOutput(BaseModel):
     """Full classifier response."""
+
     classification: Classification
     standalone_follow_up: str = Field(default="", alias="standaloneFollowUp")
     sub_questions: list[str] = Field(default_factory=list, alias="subQuestions")
@@ -37,13 +40,16 @@ class ClassifierOutput(BaseModel):
 
 class SearchResult(BaseModel):
     """A single search result from SearXNG."""
+
     title: str = ""
     url: str = ""
     content: str = ""
+    enriched: bool = False  # True when content is full page text (e.g., from Jina Search)
 
 
 class Source(BaseModel):
     """A cited source in the final response."""
+
     title: str
     url: str
     content: str = ""
@@ -51,17 +57,20 @@ class Source(BaseModel):
 
 class QueryPlan(BaseModel):
     """Structured output for adaptive query generation."""
+
     queries: list[str] = Field(default_factory=list)
     sufficient: bool = Field(default=False)
 
 
 class SuggestionOutput(BaseModel):
     """Structured suggestion output."""
+
     suggestions: list[str] = Field(default_factory=list)
 
 
 class PipelineEvent(BaseModel):
     """Pipeline stage transition event."""
+
     type: str = "pipeline"
     stage: str  # "classifier", "researcher", "writer", "suggestions"
     status: str  # "started", "completed"
@@ -70,6 +79,7 @@ class PipelineEvent(BaseModel):
 
 class PerplexicaResponse(BaseModel):
     """Final structured search response."""
+
     answer: str
     sources: list[Source] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)

@@ -15,6 +15,7 @@ from ..types import ClassifierOutput, QueryPlan, SearchResult
 def _resolve_provider(model: str):
     try:
         from orbiter.models import get_provider
+
         return get_provider(model)
     except Exception:
         return None
@@ -83,7 +84,9 @@ def _sub_questions_to_queries(sub_questions: list[str]) -> list[str]:
     for sq in sub_questions:
         kw = re.sub(
             r"^(what|how|who|when|where|why|does|is|are|do|did|has|have|was|were)\s+",
-            "", sq, flags=re.IGNORECASE,
+            "",
+            sq,
+            flags=re.IGNORECASE,
         )
         kw = kw.rstrip("?. ")
         if str(year) not in kw and str(year - 1) not in kw:
@@ -107,7 +110,9 @@ async def _generate_query_plan(
 
     if not existing_results:
         prompt = _INITIAL_PROMPT.format(
-            today=today, sub_questions_block=sq_block, num_queries=num_queries,
+            today=today,
+            sub_questions_block=sq_block,
+            num_queries=num_queries,
         )
     else:
         lines = []
@@ -115,7 +120,9 @@ async def _generate_query_plan(
             snippet = r.content[:150] if r.content else r.title
             lines.append(f"  {i}. {r.title}: {snippet}")
         prompt = _FOLLOWUP_PROMPT.format(
-            query=query, results_summary="\n".join(lines), today=today,
+            query=query,
+            results_summary="\n".join(lines),
+            today=today,
             sub_questions_block=sq_block,
         )
 
@@ -196,7 +203,11 @@ async def adaptive_research(
 
     for round_num in range(max_rounds):
         plan = await _generate_query_plan(
-            query, chat_history, all_results, config, sub_questions,
+            query,
+            chat_history,
+            all_results,
+            config,
+            sub_questions,
         )
 
         if plan.sufficient and round_num > 0:
@@ -211,6 +222,7 @@ async def adaptive_research(
                 title=r.get("title", ""),
                 url=r.get("url", ""),
                 content=r.get("content", ""),
+                enriched=r.get("enriched", False),
             )
             for r in raw
         ]
@@ -247,7 +259,12 @@ async def hybrid_research(
         try:
             return await asyncio.wait_for(
                 parallel_research(
-                    query, classification, chat_history, mode, cfg, sub_questions,
+                    query,
+                    classification,
+                    chat_history,
+                    mode,
+                    cfg,
+                    sub_questions,
                 ),
                 timeout=timeout,
             )
@@ -255,7 +272,12 @@ async def hybrid_research(
             return []
 
     structured_task = adaptive_research(
-        query, chat_history, mode, cfg, sub_questions, seed_results,
+        query,
+        chat_history,
+        mode,
+        cfg,
+        sub_questions,
+        seed_results,
     )
     agent_task = _timed_agents()
 

@@ -26,27 +26,22 @@ class PerplexicaConfig:
     max_writer_words: int | None = None  # override quality mode 2000-word target
     max_writer_sources: int = 30  # cap sources passed to writer for citation accuracy
     jina_reader_url: str = ""  # Jina Reader for full-page content extraction
+    jina_api_key: str = ""  # Jina Cloud API key (enables r.jina.ai / s.jina.ai)
 
     def __post_init__(self) -> None:
         if not self.searxng_url:
-            self.searxng_url = os.environ.get(
-                "SEARXNG_URL", "http://localhost:8888"
-            )
+            self.searxng_url = os.environ.get("SEARXNG_URL", "http://localhost:8888")
         if not self.model:
             self.model = os.environ.get("PERPLEXICA_MODEL", "openai:gpt-4o")
         if not self.fast_model:
-            self.fast_model = os.environ.get(
-                "PERPLEXICA_FAST_MODEL", "openai:gpt-4o-mini"
-            )
+            self.fast_model = os.environ.get("PERPLEXICA_FAST_MODEL", "openai:gpt-4o-mini")
         if not self.embedding_model:
             self.embedding_model = os.environ.get(
                 "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-3-small"
             )
         if not self.research_mode:
-            self.research_mode = os.environ.get(
-                "PERPLEXICA_RESEARCH_MODE", "balanced"
-            )
+            self.research_mode = os.environ.get("PERPLEXICA_RESEARCH_MODE", "balanced")
         if not self.jina_reader_url:
-            self.jina_reader_url = os.environ.get(
-                "JINA_READER_URL", "http://127.0.0.1:3000"
-            )
+            self.jina_reader_url = os.environ.get("JINA_READER_URL", "http://127.0.0.1:3000")
+        if not self.jina_api_key:
+            self.jina_api_key = os.environ.get("JINA_API_KEY", "")

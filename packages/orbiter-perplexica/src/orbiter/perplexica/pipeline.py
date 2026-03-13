@@ -77,15 +77,16 @@ async def run_search_pipeline(
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
     # Start suggestions early (independent of enrichment and writing)
-    suggest_task = asyncio.create_task(
-        generate_suggestions(history + [(query, "")], cfg)
-    )
+    suggest_task = asyncio.create_task(generate_suggestions(history + [(query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
         writer_results = await enrich_results(
-            writer_results, cfg.jina_reader_url, max_results=enrich_cap,
+            writer_results,
+            cfg.jina_reader_url,
+            max_results=enrich_cap,
+            jina_api_key=cfg.jina_api_key,
         )
 
     # Step 3: Write answer
@@ -102,10 +103,7 @@ async def run_search_pipeline(
     suggestions = await suggest_task
 
     # Sources list matches what the writer cited (same order, same indices)
-    sources = [
-        Source(title=r.title, url=r.url, content=r.content)
-        for r in writer_results
-    ]
+    sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
 
     return PerplexicaResponse(
         answer=answer,
@@ -144,7 +142,8 @@ async def stream_search_pipeline(
         )
         yield PipelineEvent(stage="classifier", status="completed")
         yield PipelineEvent(
-            stage="researcher", status="completed",
+            stage="researcher",
+            status="completed",
             message=f"{len(search_results)} results (direct)",
         )
     else:
@@ -155,7 +154,8 @@ async def stream_search_pipeline(
         )
         effective_query = classification.standalone_follow_up or query
         yield PipelineEvent(
-            stage="classifier", status="completed",
+            stage="classifier",
+            status="completed",
             message=f"skip_search={classification.classification.skip_search}",
         )
         if not classification.classification.skip_search:
@@ -170,7 +170,8 @@ async def stream_search_pipeline(
                 seed_results=seed_results,
             )
             yield PipelineEvent(
-                stage="researcher", status="completed",
+                stage="researcher",
+                status="completed",
                 message=f"{len(search_results)} results",
             )
     effective_query = classification.standalone_follow_up or query
@@ -187,19 +188,21 @@ async def stream_search_pipeline(
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
     # Start suggestions concurrently (independent of enrichment and writing)
-    suggest_task = asyncio.create_task(
-        generate_suggestions(history + [(query, "")], cfg)
-    )
+    suggest_task = asyncio.create_task(generate_suggestions(history + [(query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
         yield PipelineEvent(stage="enrichment", status="started")
         writer_results = await enrich_results(
-            writer_results, cfg.jina_reader_url, max_results=enrich_cap,
+            writer_results,
+            cfg.jina_reader_url,
+            max_results=enrich_cap,
+            jina_api_key=cfg.jina_api_key,
         )
         yield PipelineEvent(
-            stage="enrichment", status="completed",
+            stage="enrichment",
+            status="completed",
             message=f"{min(enrich_cap, len(writer_results))} pages scraped",
         )
 
@@ -215,6 +218,7 @@ async def stream_search_pipeline(
         config=writer_cfg,
     ):
         from orbiter.types import TextEvent
+
         if isinstance(event, TextEvent):
             answer_parts.append(event.text)
         yield event
@@ -227,10 +231,7 @@ async def stream_search_pipeline(
     yield PipelineEvent(stage="suggestions", status="completed")
 
     # Sources list matches what the writer cited (same order, same indices)
-    sources = [
-        Source(title=r.title, url=r.url, content=r.content)
-        for r in writer_results
-    ]
+    sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
     yield PerplexicaResponse(
         answer=answer,
         sources=sources,

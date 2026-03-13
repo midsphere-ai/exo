@@ -21,8 +21,23 @@ from orbiter import tool
 _MAX_CHARS = 10_000
 
 
-def _fetch_via_jina(url: str, jina_url: str, max_chars: int = _MAX_CHARS) -> str:
-    """Fetch page content as clean markdown via a Jina Reader instance."""
+def _fetch_via_jina(
+    url: str,
+    jina_url: str,
+    max_chars: int = _MAX_CHARS,
+    api_key: str = "",
+) -> str:
+    """Fetch page content as clean markdown via Jina Reader.
+
+    When ``api_key`` is set, uses the Jina Cloud Reader API (``r.jina.ai``)
+    for faster fetches with image captioning. Otherwise falls back to a
+    self-hosted Jina Reader instance at ``jina_url``.
+    """
+    if api_key:
+        from .jina import jina_reader_fetch
+
+        return jina_reader_fetch(url, api_key, max_chars)
+
     import urllib.request
 
     reader_url = f"{jina_url}/{url}"
@@ -76,7 +91,12 @@ def _fetch_page_fallback(url: str) -> str:
 
 
 def _fetch_page(url: str) -> str:
-    """Fetch a page, trying Jina Reader first then falling back to direct fetch."""
+    """Fetch a page, trying Jina Cloud / self-hosted Reader then falling back."""
+    jina_api_key = os.environ.get("JINA_API_KEY", "")
+    if jina_api_key:
+        result = _fetch_via_jina(url, "", api_key=jina_api_key)
+        if result:
+            return result
     jina_url = os.environ.get("JINA_READER_URL", "")
     if jina_url:
         result = _fetch_via_jina(url, jina_url)
@@ -160,34 +180,51 @@ async def enrich_results(
     results: list,
     jina_url: str,
     max_results: int = 5,
+    jina_api_key: str = "",
 ) -> list:
     """Scrape full page content for the top results via Jina Reader.
 
     Returns a new list with enriched content for the first ``max_results``
-    items and original snippets for the rest. Falls back gracefully when
+    items and original snippets for the rest. Skips results already marked
+    as ``enriched`` (e.g., from Jina Search). Falls back gracefully when
     Jina Reader is unavailable or a page fails to fetch.
     """
     from ..types import SearchResult
 
-    if not jina_url or not results:
+    if (not jina_url and not jina_api_key) or not results:
         return results
 
     to_enrich = results[:max_results]
 
     async def _timed_fetch(url: str) -> str:
         return await asyncio.wait_for(
-            asyncio.to_thread(_fetch_via_jina, url, jina_url), timeout=8.0,
+            asyncio.to_thread(_fetch_via_jina, url, jina_url, api_key=jina_api_key),
+            timeout=8.0,
         )
 
-    tasks = [_timed_fetch(r.url) for r in to_enrich]
-    contents = await asyncio.gather(*tasks, return_exceptions=True)
-
     enriched: list[SearchResult] = []
-    for r, content in zip(to_enrich, contents, strict=True):
-        if isinstance(content, Exception) or not content:
+    tasks_with_indices: list[tuple[int, asyncio.Task]] = []  # type: ignore[type-arg]
+    for i, r in enumerate(to_enrich):
+        if r.enriched:
             enriched.append(r)
         else:
-            enriched.append(SearchResult(title=r.title, url=r.url, content=content))
+            enriched.append(r)  # placeholder
+            tasks_with_indices.append((i, asyncio.ensure_future(_timed_fetch(r.url))))
+
+    if tasks_with_indices:
+        task_results = await asyncio.gather(
+            *[t for _, t in tasks_with_indices],
+            return_exceptions=True,
+        )
+        for (idx, _), content in zip(tasks_with_indices, task_results, strict=True):
+            r = to_enrich[idx]
+            if isinstance(content, str) and content:
+                enriched[idx] = SearchResult(
+                    title=r.title,
+                    url=r.url,
+                    content=content,
+                    enriched=True,
+                )
 
     enriched.extend(results[max_results:])
     return enriched

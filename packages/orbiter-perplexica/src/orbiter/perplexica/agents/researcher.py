@@ -35,6 +35,7 @@ from ..types import ClassifierOutput, SearchResult
 def _resolve_provider(model: str):
     try:
         from orbiter.models import get_provider
+
         return get_provider(model)
     except Exception:
         return None
@@ -43,7 +44,10 @@ def _resolve_provider(model: str):
 _MODE_ITERATIONS = {"speed": 2, "balanced": 6, "quality": 25}
 
 # Gemini thinking models that have built-in reasoning — reasoning_preamble is redundant.
-_THINKING_MODEL_PATTERNS = ("gemini-2.5", "gemini-3",)
+_THINKING_MODEL_PATTERNS = (
+    "gemini-2.5",
+    "gemini-3",
+)
 
 
 def _get_max_iterations(mode: str, override: int | None = None) -> int:
@@ -74,14 +78,20 @@ def _build_tools_and_action_desc(
         action_lines.append(f"- web_search: {get_web_search_prompt(mode)}")
 
     # Academic search
-    if ("academic" in sources and classification.classification.academic_search
-            and not classification.classification.skip_search):
+    if (
+        "academic" in sources
+        and classification.classification.academic_search
+        and not classification.classification.skip_search
+    ):
         tools.append(academic_search)
         action_lines.append(f"- academic_search: {ACADEMIC_SEARCH_PROMPT}")
 
     # Social/discussion search
-    if ("discussions" in sources and classification.classification.discussion_search
-            and not classification.classification.skip_search):
+    if (
+        "discussions" in sources
+        and classification.classification.discussion_search
+        and not classification.classification.skip_search
+    ):
         tools.append(social_search)
         action_lines.append(f"- social_search: {SOCIAL_SEARCH_PROMPT}")
 
@@ -115,6 +125,7 @@ async def research(
     since the orbiter framework doesn't expose tool call history in RunResult.
     """
     from ..config import PerplexicaConfig as Cfg
+
     cfg = config or Cfg()
 
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
@@ -173,11 +184,14 @@ async def research(
         url = r.get("url", "")
         if url and url not in seen_urls:
             seen_urls.add(url)
-            results.append(SearchResult(
-                title=r.get("title", ""),
-                url=url,
-                content=r.get("content", ""),
-            ))
+            results.append(
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=url,
+                    content=r.get("content", ""),
+                    enriched=r.get("enriched", False),
+                )
+            )
 
     return results
 
@@ -195,6 +209,7 @@ async def stream_research(
     then yields SearchResult objects once the agent finishes.
     """
     from ..config import PerplexicaConfig as Cfg
+
     cfg = config or Cfg()
 
     max_iterations = _get_max_iterations(mode, cfg.max_iterations)
@@ -250,6 +265,7 @@ async def stream_research(
                 title=r.get("title", ""),
                 url=url,
                 content=r.get("content", ""),
+                enriched=r.get("enriched", False),
             )
 
 
@@ -261,6 +277,7 @@ async def stream_research(
 def _split_query(query: str) -> list[str]:
     """Split a compound question into focused sub-queries for SearXNG."""
     import re
+
     parts = re.split(r",\s*and\s+|;\s+|\?\s+", query)
     queries = [p.strip().rstrip("?") for p in parts if len(p.strip()) > 10]
     return queries[:3] if queries else [query]
@@ -276,11 +293,14 @@ async def direct_search(query: str) -> list[SearchResult]:
         url = r.get("url", "")
         if url and url not in seen_urls:
             seen_urls.add(url)
-            results.append(SearchResult(
-                title=r.get("title", ""),
-                url=url,
-                content=r.get("content", ""),
-            ))
+            results.append(
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=url,
+                    content=r.get("content", ""),
+                    enriched=r.get("enriched", False),
+                )
+            )
     return results
 
 
@@ -340,6 +360,7 @@ async def parallel_research(
       quality (25 iters) -> 5 workers x 5 iters each
     """
     from ..config import PerplexicaConfig as Cfg
+
     cfg = config or Cfg()
 
     # Prefer classifier-provided sub-questions over regex splitting
@@ -376,7 +397,10 @@ async def parallel_research(
         # Sub-researchers always use "speed" tool descriptions — the balanced/quality
         # web_search prompts reference reasoning_preamble which sub-researchers lack.
         tools, action_desc = _build_tools_and_action_desc(
-            classification, cfg.sources, "speed", include_reasoning_preamble=False,
+            classification,
+            cfg.sources,
+            "speed",
+            include_reasoning_preamble=False,
         )
         instructions = get_sub_researcher_prompt(
             action_desc=action_desc,
@@ -403,9 +427,11 @@ async def parallel_research(
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             import logging
+
             logging.getLogger(__name__).warning(
                 "Sub-researcher '%s' failed: %s",
-                active_angles[i], result,
+                active_angles[i],
+                result,
             )
 
     # Collect and deduplicate from the shared collector
@@ -416,9 +442,12 @@ async def parallel_research(
         url = r.get("url", "")
         if url and url not in seen_urls:
             seen_urls.add(url)
-            search_results.append(SearchResult(
-                title=r.get("title", ""),
-                url=url,
-                content=r.get("content", ""),
-            ))
+            search_results.append(
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=url,
+                    content=r.get("content", ""),
+                    enriched=r.get("enriched", False),
+                )
+            )
     return search_results
