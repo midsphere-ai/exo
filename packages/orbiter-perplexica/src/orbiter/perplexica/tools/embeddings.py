@@ -6,9 +6,9 @@ providers.  Falls back to keyword overlap scoring when no API key is
 configured.
 
 Provider auto-detection order:
-    1. OpenAI  — if ``OPENAI_API_KEY`` is set
-    2. Gemini  — if ``GEMINI_API_KEY`` is set
-    3. Vertex AI — if ``GOOGLE_CLOUD_PROJECT`` is set (uses ADC)
+    1. Gemini  — if ``GEMINI_API_KEY`` is set
+    2. Vertex AI — if ``GOOGLE_CLOUD_PROJECT`` is set (uses ADC)
+    3. OpenAI  — if ``OPENAI_API_KEY`` is set
     4. Keyword overlap fallback
 
 Usage:
@@ -196,16 +196,9 @@ def _get_embeddings(texts: list[str]) -> list[list[float]] | None:
     Args:
         texts: List of text strings to embed.
     """
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
-
-    if openai_key:
-        model = os.environ.get(
-            "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-3-small"
-        )
-        _log.debug("embedding provider=openai model=%s texts=%d", model, len(texts))
-        return _get_openai_embeddings(texts, openai_key, model)
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
 
     if gemini_key:
         model = os.environ.get(
@@ -220,6 +213,13 @@ def _get_embeddings(texts: list[str]) -> list[list[float]] | None:
         )
         _log.debug("embedding provider=vertex model=%s texts=%d", model, len(texts))
         return _get_vertex_embeddings(texts, model)
+
+    if openai_key:
+        model = os.environ.get(
+            "PERPLEXICA_EMBEDDING_MODEL", "text-embedding-3-small"
+        )
+        _log.debug("embedding provider=openai model=%s texts=%d", model, len(texts))
+        return _get_openai_embeddings(texts, openai_key, model)
 
     return None
 
