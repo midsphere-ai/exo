@@ -173,7 +173,13 @@ async def enrich_results(
         return results
 
     to_enrich = results[:max_results]
-    tasks = [asyncio.to_thread(_fetch_via_jina, r.url, jina_url) for r in to_enrich]
+
+    async def _timed_fetch(url: str) -> str:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_fetch_via_jina, url, jina_url), timeout=8.0,
+        )
+
+    tasks = [_timed_fetch(r.url) for r in to_enrich]
     contents = await asyncio.gather(*tasks, return_exceptions=True)
 
     enriched: list[SearchResult] = []

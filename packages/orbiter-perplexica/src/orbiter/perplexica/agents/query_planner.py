@@ -180,14 +180,19 @@ async def adaptive_research(
     mode: str,
     config: PerplexicaConfig,
     sub_questions: list[str] | None = None,
+    seed_results: list[SearchResult] | None = None,
 ) -> list[SearchResult]:
     """Adaptive multi-round research using structured output query generation.
 
     Each round the LLM sees existing results and either generates follow-up
     queries to fill gaps or signals that coverage is sufficient.
+
+    Args:
+        seed_results: Pre-fetched results from speculative search to bootstrap
+            the first round (avoids redundant initial queries).
     """
-    max_rounds = {"balanced": 2, "quality": 3}.get(mode, 2)
-    all_results: list[SearchResult] = []
+    max_rounds = {"balanced": 1, "quality": 2}.get(mode, 1)
+    all_results: list[SearchResult] = list(seed_results) if seed_results else []
 
     for round_num in range(max_rounds):
         plan = await _generate_query_plan(
@@ -221,19 +226,24 @@ async def hybrid_research(
     mode: str = "balanced",
     config: PerplexicaConfig | None = None,
     sub_questions: list[str] | None = None,
+    seed_results: list[SearchResult] | None = None,
 ) -> list[SearchResult]:
     """Hybrid research: adaptive structured queries + parallel researchers.
 
     Structured output path is guaranteed to produce results and adapts
     across rounds. Tool-calling researchers run concurrently as best-effort
     bonus depth, time-boxed to avoid stalling the pipeline.
+
+    Args:
+        seed_results: Pre-fetched results from speculative search to bootstrap
+            the adaptive path (saves one full search round).
     """
     from .researcher import parallel_research
 
     cfg = config or PerplexicaConfig()
 
     async def _timed_agents() -> list[SearchResult]:
-        timeout = {"balanced": 30, "quality": 60}.get(mode, 30)
+        timeout = {"balanced": 10, "quality": 20}.get(mode, 10)
         try:
             return await asyncio.wait_for(
                 parallel_research(
@@ -244,7 +254,9 @@ async def hybrid_research(
         except Exception:
             return []
 
-    structured_task = adaptive_research(query, chat_history, mode, cfg, sub_questions)
+    structured_task = adaptive_research(
+        query, chat_history, mode, cfg, sub_questions, seed_results,
+    )
     agent_task = _timed_agents()
 
     results = await asyncio.gather(structured_task, agent_task)

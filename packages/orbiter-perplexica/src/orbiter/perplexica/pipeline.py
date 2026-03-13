@@ -41,13 +41,18 @@ async def run_search_pipeline(
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
     if mode == "speed":
-        # Fast path: classifier and direct SearXNG search in parallel
+        # Fast path: classifier and direct search in parallel
         classification, search_results = await asyncio.gather(
             classify(query, history, cfg),
             direct_search(query),
         )
     else:
-        classification = await classify(query, history, cfg)
+        # Speculative search: start a raw-query search concurrently with
+        # classification so the first adaptive round sees existing results
+        classification, seed_results = await asyncio.gather(
+            classify(query, history, cfg),
+            direct_search(query),
+        )
         if not classification.classification.skip_search:
             search_results = await hybrid_research(
                 query=classification.standalone_follow_up or query,
@@ -56,6 +61,7 @@ async def run_search_pipeline(
                 mode=mode,
                 config=cfg,
                 sub_questions=classification.sub_questions,
+                seed_results=seed_results,
             )
     effective_query = classification.standalone_follow_up or query
 
@@ -76,7 +82,7 @@ async def run_search_pipeline(
     )
 
     # Enrich top results with full page content (skip for speed)
-    enrich_cap = {"balanced": 5, "quality": 10}.get(mode, 0)
+    enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
         writer_results = await enrich_results(
             writer_results, cfg.jina_reader_url, max_results=enrich_cap,
@@ -143,7 +149,10 @@ async def stream_search_pipeline(
         )
     else:
         yield PipelineEvent(stage="classifier", status="started")
-        classification = await classify(query, history, cfg)
+        classification, seed_results = await asyncio.gather(
+            classify(query, history, cfg),
+            direct_search(query),
+        )
         effective_query = classification.standalone_follow_up or query
         yield PipelineEvent(
             stage="classifier", status="completed",
@@ -158,6 +167,7 @@ async def stream_search_pipeline(
                 mode=mode,
                 config=cfg,
                 sub_questions=classification.sub_questions,
+                seed_results=seed_results,
             )
             yield PipelineEvent(
                 stage="researcher", status="completed",
@@ -182,7 +192,7 @@ async def stream_search_pipeline(
     )
 
     # Enrich top results with full page content (skip for speed)
-    enrich_cap = {"balanced": 5, "quality": 10}.get(mode, 0)
+    enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
     if enrich_cap > 0 and writer_results:
         yield PipelineEvent(stage="enrichment", status="started")
         writer_results = await enrich_results(

@@ -1,9 +1,8 @@
-"""SearXNG search tools matching Perplexica's tool interfaces.
+"""Search tools matching Perplexica's tool interfaces.
 
-Wraps a local SearXNG instance to provide web, academic, and social
-search capabilities with multi-query parallel execution.  Set the
-``SEARXNG_URL`` environment variable to point at your instance (defaults
-to ``http://localhost:8888``).
+Uses Serper API (``SERPER_API_KEY``) by default for fast Google Search.
+Falls back to a local SearXNG instance when ``SEARXNG_URL`` is set
+without a Serper key.
 
 Tools write their raw results to a module-level collector so the
 researcher pipeline can retrieve them after the agent run completes.
@@ -51,11 +50,26 @@ def _search(
     num_results: int = 10,
     timeout: int = 15,
 ) -> list[dict]:
-    """Dispatch to Serper (if SERPER_API_KEY is set) or SearXNG."""
-    if os.environ.get("SERPER_API_KEY"):
+    """Dispatch to Serper by default, fall back to SearXNG.
+
+    Uses Serper when ``SERPER_API_KEY`` is set (the expected default).
+    Falls back to SearXNG when no Serper key is available or when
+    ``SEARXNG_URL`` is explicitly set without a Serper key.
+    """
+    serper_key = os.environ.get("SERPER_API_KEY")
+    searxng_explicit = os.environ.get("SEARXNG_URL")
+
+    # Prefer Serper (faster, no retry/backoff needed)
+    if serper_key:
         from .serper import serper_search
 
         return serper_search(query, categories, engines, num_results, timeout)
+
+    # Fall back to SearXNG
+    if searxng_explicit:
+        return _searxng_search(query, categories, engines, num_results, timeout)
+
+    # Neither configured — try SearXNG at default URL as last resort
     return _searxng_search(query, categories, engines, num_results, timeout)
 
 
