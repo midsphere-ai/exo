@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import platform
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -247,3 +248,230 @@ class TerminalTool(Tool):
             "stderr": stderr.decode(errors="replace") if stderr else "",
             "platform": self.platform,
         }
+
+
+# ---------------------------------------------------------------------------
+# ShellTool (allowlist-based shell command execution)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_ALLOWED_COMMANDS: list[str] = [
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "echo",
+    "wc",
+    "sort",
+    "head",
+    "tail",
+    "diff",
+]
+
+_MAX_OUTPUT_CHARS = 10_000
+
+_SHELL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "command": {
+            "type": "string",
+            "description": "Shell command to execute (must start with an allowed command).",
+        },
+    },
+    "required": ["command"],
+}
+
+
+class ShellTool(Tool):
+    """Allowlist-based shell tool for safe command execution.
+
+    Only commands whose base executable is in the allowlist are permitted.
+    Uses ``asyncio.create_subprocess_exec()`` (no shell) for safety.
+    Output is truncated to 10,000 characters.
+    """
+
+    name = "shell"
+    description = "Execute a shell command from the configured allowlist."
+    parameters = _SHELL_SCHEMA
+
+    def __init__(
+        self,
+        *,
+        allowed_commands: list[str] | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        self._allowed: list[str] = (
+            list(allowed_commands) if allowed_commands is not None else list(_DEFAULT_ALLOWED_COMMANDS)
+        )
+        self._timeout = timeout
+
+    def _validate_command(self, command: str) -> list[str]:
+        """Parse and validate *command* against the allowlist."""
+        stripped = command.strip()
+        if not stripped:
+            raise ToolError("Empty command")
+
+        try:
+            parts = shlex.split(stripped)
+        except ValueError as exc:
+            raise ToolError(f"Invalid command syntax: {exc}") from exc
+
+        if not parts:
+            raise ToolError("Empty command")
+
+        base = parts[0].rsplit("/", maxsplit=1)[-1]
+        if base not in self._allowed:
+            raise ToolError(
+                f"Command {base!r} is not in the allowed list: {self._allowed}"
+            )
+        return parts
+
+    @staticmethod
+    def _truncate(text: str) -> str:
+        """Truncate *text* to ``_MAX_OUTPUT_CHARS``."""
+        if len(text) <= _MAX_OUTPUT_CHARS:
+            return text
+        return text[:_MAX_OUTPUT_CHARS] + f"\n... (truncated at {_MAX_OUTPUT_CHARS} chars)"
+
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+        command: str = kwargs.get("command", "")
+        parts = self._validate_command(command)
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self._timeout
+            )
+        except TimeoutError as exc:
+            proc.kill()  # type: ignore[union-attr]
+            raise ToolError(f"Command timed out after {self._timeout}s") from exc
+        except FileNotFoundError as exc:
+            raise ToolError(f"Command not found: {parts[0]!r}") from exc
+        except Exception as exc:
+            raise ToolError(f"Command execution failed: {exc}") from exc
+
+        stdout_str = stdout.decode(errors="replace") if stdout else ""
+        stderr_str = stderr.decode(errors="replace") if stderr else ""
+
+        return {
+            "exit_code": proc.returncode,
+            "stdout": self._truncate(stdout_str),
+            "stderr": self._truncate(stderr_str),
+        }
+
+
+def shell_tool(allowed_commands: list[str] | None = None, *, timeout: float = 30.0) -> ShellTool:
+    """Factory that creates an allowlist-based shell tool."""
+    return ShellTool(allowed_commands=allowed_commands, timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# CodeTool (sandboxed code execution)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BLOCKED_NAMES: frozenset[str] = frozenset(
+    {"__import__", "open", "os", "sys", "subprocess", "shutil"}
+)
+
+_CODE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string",
+            "description": "Python code to execute.",
+        },
+    },
+    "required": ["code"],
+}
+
+
+def _build_runner_script(code: str, blocked_names: list[str]) -> str:
+    """Build a Python script that executes *code* in a restricted namespace."""
+    import json
+
+    escaped_code = json.dumps(code)
+    escaped_blocked = json.dumps(blocked_names)
+    return (
+        "import builtins as _b\n"
+        f"_code = {escaped_code}\n"
+        f"_blocked = set({escaped_blocked})\n"
+        "_ns = {'__builtins__': {k: v for k, v in vars(_b).items() if k not in _blocked}}\n"
+        "exec(_code, _ns)\n"  # noqa: S102
+    )
+
+
+class CodeTool(Tool):
+    """Sandboxed Python code execution tool.
+
+    When a ``Sandbox`` is provided, execution is delegated to the sandbox.
+    Otherwise, code runs locally in a restricted namespace with stdout
+    capture and a configurable timeout.
+    """
+
+    name = "code"
+    description = "Execute Python code in a sandboxed environment."
+    parameters = _CODE_SCHEMA
+
+    def __init__(
+        self,
+        *,
+        sandbox: Any | None = None,
+        blocked_names: frozenset[str] | None = None,
+        timeout: float = 10.0,
+    ) -> None:
+        self._sandbox = sandbox
+        self._blocked: frozenset[str] = (
+            blocked_names if blocked_names is not None else _DEFAULT_BLOCKED_NAMES
+        )
+        self._timeout = timeout
+
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+        code: str = kwargs.get("code", "")
+        if not code.strip():
+            raise ToolError("Empty code")
+
+        if self._sandbox is not None:
+            try:
+                result = await self._sandbox.run_tool("code", {"code": code})
+                return result  # type: ignore[no-any-return]
+            except Exception as exc:
+                raise ToolError(f"Sandbox execution failed: {exc}") from exc
+
+        blocked_list = list(self._blocked)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-c",
+                _build_runner_script(code, blocked_list),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self._timeout
+            )
+        except TimeoutError as exc:
+            proc.kill()  # type: ignore[union-attr]
+            raise ToolError(
+                f"Code execution timed out after {self._timeout}s"
+            ) from exc
+
+        stdout_str = stdout.decode(errors="replace") if stdout else ""
+        stderr_str = stderr.decode(errors="replace") if stderr else ""
+
+        if proc.returncode != 0:
+            return f"Error: {stderr_str.strip()}" if stderr_str.strip() else f"Error: exit code {proc.returncode}"
+
+        return stdout_str if stdout_str else "(no output)"
+
+
+def code_tool(
+    sandbox: Any | None = None,
+    *,
+    blocked_names: frozenset[str] | None = None,
+    timeout: float = 10.0,
+) -> CodeTool:
+    """Factory that creates a sandboxed code execution tool."""
+    return CodeTool(sandbox=sandbox, blocked_names=blocked_names, timeout=timeout)

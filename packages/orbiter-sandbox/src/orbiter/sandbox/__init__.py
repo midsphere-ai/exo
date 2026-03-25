@@ -11,11 +11,16 @@ from orbiter.sandbox.kubernetes import (  # pyright: ignore[reportMissingImports
     KubernetesSandbox,
 )
 from orbiter.sandbox.tools import (  # pyright: ignore[reportMissingImports]
+    CodeTool,
     FilesystemTool,
+    ShellTool,
     TerminalTool,
+    code_tool,
+    shell_tool,
 )
 
 __all__ = [
+    "CodeTool",
     "FilesystemTool",
     "KubernetesSandbox",
     "LocalSandbox",
@@ -23,5 +28,8 @@ __all__ = [
     "SandboxBuilder",
     "SandboxError",
     "SandboxStatus",
+    "ShellTool",
     "TerminalTool",
+    "code_tool",
+    "shell_tool",
 ]
