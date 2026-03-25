@@ -34,6 +34,22 @@ class MemoryStatus(StrEnum):
     DISCARD = "discard"
 
 
+class MemoryCategory(StrEnum):
+    """Taxonomy for classifying memory knowledge types.
+
+    Orthogonal to ``memory_type`` (which tracks conversation roles like
+    human/ai/tool/system). Categories classify *what kind of knowledge*
+    a memory item represents.
+    """
+
+    USER_PROFILE = "user_profile"
+    SEMANTIC = "semantic"
+    EPISODIC = "episodic"
+    VARIABLE = "variable"
+    SUMMARY = "summary"
+    CONVERSATION = "conversation"
+
+
 _VALID_TRANSITIONS: dict[MemoryStatus, set[MemoryStatus]] = {
     MemoryStatus.DRAFT: {MemoryStatus.ACCEPTED, MemoryStatus.DISCARD},
     MemoryStatus.ACCEPTED: {MemoryStatus.DISCARD},

@@ -230,3 +230,104 @@ class TrajectoryDataset:
         """Remove all items and reset step counters."""
         self._items.clear()
         self._step_counters.clear()
+
+
+class TrajectoryExtractor:
+    """Extracts complete execution DAGs from agent session traces.
+
+    Given a flat message history (OpenAI chat format), produces a list of
+    :class:`TrajectoryItem` objects representing individual execution steps.
+
+    Args:
+        dataset: The trajectory dataset to append extracted items to.
+    """
+
+    __slots__ = ("_dataset",)
+
+    def __init__(self, dataset: TrajectoryDataset) -> None:
+        self._dataset = dataset
+
+    @property
+    def dataset(self) -> TrajectoryDataset:
+        """The underlying trajectory dataset."""
+        return self._dataset
+
+    def extract(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        include_tool_calls: bool = True,
+        task_id: str = "",
+        agent_id: str = "",
+    ) -> list[TrajectoryItem]:
+        """Extract trajectory items from a message history."""
+        if not messages:
+            return []
+
+        segments = self._segment_messages(
+            messages, include_tool_calls=include_tool_calls
+        )
+
+        items: list[TrajectoryItem] = []
+        for step, segment in enumerate(segments):
+            item = self._dataset.strategy.build_item(
+                segment,
+                task_id=task_id,
+                agent_id=agent_id,
+                step=step,
+            )
+            self._dataset.append_trajectory(item)
+            items.append(item)
+
+        return items
+
+    @staticmethod
+    def _segment_messages(
+        messages: Sequence[dict[str, Any]],
+        *,
+        include_tool_calls: bool = True,
+    ) -> list[list[dict[str, Any]]]:
+        """Split a flat message list into logical execution segments."""
+        if not messages:
+            return []
+
+        turns: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        for msg in messages:
+            if msg.get("role") == "user" and current:
+                turns.append(current)
+                current = []
+            current.append(msg)
+        if current:
+            turns.append(current)
+
+        segments: list[list[dict[str, Any]]] = []
+
+        for turn in turns:
+            if include_tool_calls:
+                asst_indices = [
+                    i for i, m in enumerate(turn) if m.get("role") == "assistant"
+                ]
+                if len(asst_indices) <= 1:
+                    segments.append(list(turn))
+                else:
+                    for idx in asst_indices:
+                        segments.append(list(turn[: idx + 1]))
+            else:
+                filtered: list[dict[str, Any]] = []
+                for m in turn:
+                    role = m.get("role", "")
+                    if role == "tool":
+                        continue
+                    if role == "assistant" and m.get("tool_calls"):
+                        if not m.get("content"):
+                            continue
+                        filtered.append(
+                            {k: v for k, v in m.items() if k != "tool_calls"}
+                        )
+                    else:
+                        filtered.append(m)
+                if filtered:
+                    segments.append(filtered)
+
+        return segments
