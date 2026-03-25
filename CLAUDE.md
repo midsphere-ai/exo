@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Orbiter
 
-Orbiter is a modular multi-agent framework for building LLM-powered applications in Python. It's a UV workspace monorepo with 15 packages. Requires Python 3.11+.
+Orbiter is a modular multi-agent framework for building LLM-powered applications in Python. It's a UV workspace monorepo with 18 packages. Requires Python 3.11+.
 
 ## Common Commands
 
@@ -64,9 +64,9 @@ orbiter-core (foundation, only depends on pydantic)
     ↑
 orbiter-models (OpenAI, Anthropic, Gemini, Vertex AI providers)
     ↑
-orbiter-context, orbiter-memory, orbiter-mcp, orbiter-sandbox, orbiter-observability
+orbiter-context, orbiter-memory, orbiter-mcp, orbiter-sandbox, orbiter-observability, orbiter-guardrail
     ↑
-orbiter-cli, orbiter-server, orbiter-eval, orbiter-a2a, orbiter-train, orbiter-web
+orbiter-retrieval, orbiter-perplexica, orbiter-cli, orbiter-server, orbiter-eval, orbiter-a2a, orbiter-train, orbiter-web
     ↑
 orbiter (meta-package, re-exports everything)
 ```
@@ -75,6 +75,9 @@ orbiter (meta-package, re-exports everything)
 
 - **orbiter-core** (`packages/orbiter-core/src/orbiter/`): `Agent`, `Tool`, `@tool` decorator, `run`/`run.sync`/`run.stream`, `Swarm`, hooks, events, config, registry. The `_internal/` subpackage has message building, output parsing, call execution, state machine, and graph algorithms.
 - **orbiter-models** (`packages/orbiter-models/`): LLM provider implementations. Provider SDKs are isolated here — core has zero heavy deps.
+- **orbiter-guardrail** (`packages/orbiter-guardrail/`): Security guardrails — pattern-based and LLM-based prompt injection/jailbreak detection with pluggable backends.
+- **orbiter-retrieval** (`packages/orbiter-retrieval/`): RAG pipeline — embeddings (OpenAI, Vertex, HTTP), vector stores (pgvector, ChromaDB), hybrid search, reranking, knowledge graph, agentic retrieval.
+- **orbiter-perplexica** (`packages/orbiter-perplexica/`): AI search engine with query classification, parallel research agents, result reranking, citation generation, and 3 quality modes (speed/balanced/quality).
 - **orbiter-web** (`packages/orbiter-web/`): Full platform UI. Hybrid package — Astro 5.x frontend (`src/pages/`, `src/islands/`) + FastAPI backend (`src/orbiter_web/`). Has its own `package.json` AND `pyproject.toml`.
 
 ### orbiter-web Backend Structure

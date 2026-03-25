@@ -20,6 +20,9 @@ members = [
     "packages/orbiter-server",
     "packages/orbiter-train",
     "packages/orbiter-web",
+    "packages/orbiter-guardrail",
+    "packages/orbiter-retrieval",
+    "packages/orbiter-perplexica",
     "packages/orbiter",
 ]
 
@@ -39,6 +42,9 @@ dev = [
     "orbiter-server",
     "orbiter-train",
     "orbiter-web",
+    "orbiter-guardrail",
+    "orbiter-retrieval",
+    "orbiter-perplexica",
     "orbiter-ai",
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
@@ -71,6 +77,9 @@ orbiter-cli = { workspace = true }
 orbiter-server = { workspace = true }
 orbiter-train = { workspace = true }
 orbiter-web = { workspace = true }
+orbiter-guardrail = { workspace = true }
+orbiter-retrieval = { workspace = true }
+orbiter-perplexica = { workspace = true }
 orbiter-ai = { workspace = true }
 
 [tool.ruff]
