@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from orbiter import Agent  # pyright: ignore[reportMissingImports]
+from exo import Agent  # pyright: ignore[reportMissingImports]
 
 # ---------------------------------------------------------------------------
 # test_agent_calls_mcp_tool_get_capital

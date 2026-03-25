@@ -1,11 +1,11 @@
-# orbiter.models.openai
+# exo.models.openai
 
 OpenAI LLM provider implementation. Wraps the `openai` SDK to implement `ModelProvider.complete()` and `ModelProvider.stream()` with normalized response types.
 
 ## Module Path
 
 ```python
-from orbiter.models.openai import OpenAIProvider
+from exo.models.openai import OpenAIProvider
 ```
 
 ## Auto-Registration
@@ -97,9 +97,9 @@ Stream a chat completion from OpenAI. Automatically sets `stream=True` and `stre
 
 ### Message Conversion
 
-Orbiter messages are converted to OpenAI format internally:
+Exo messages are converted to OpenAI format internally:
 
-| Orbiter Type | OpenAI Role | Notes |
+| Exo Type | OpenAI Role | Notes |
 |---|---|---|
 | `SystemMessage` | `"system"` | Direct content mapping |
 | `UserMessage` | `"user"` | Direct content mapping |
@@ -108,7 +108,7 @@ Orbiter messages are converted to OpenAI format internally:
 
 ### Finish Reason Mapping
 
-| OpenAI Value | Orbiter FinishReason |
+| OpenAI Value | Exo FinishReason |
 |---|---|
 | `"stop"` | `"stop"` |
 | `"tool_calls"` | `"tool_calls"` |
@@ -124,8 +124,8 @@ For o1/o3 reasoning models, the `reasoning_content` field in `ModelResponse` is 
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import SystemMessage, UserMessage
+from exo.models import get_provider
+from exo.types import SystemMessage, UserMessage
 
 async def main():
     provider = get_provider("openai:gpt-4o", api_key="sk-...")

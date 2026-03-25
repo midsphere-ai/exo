@@ -1,13 +1,13 @@
-# orbiter._internal.message_builder
+# exo._internal.message_builder
 
 Build the message list for LLM provider calls. The message builder constructs a correctly ordered sequence of messages from system instructions, conversation history, and pending tool results. It ensures API compatibility: no dangling tool calls without results, and proper message cycling.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.message_builder`
+**Module:** `exo._internal.message_builder`
 
 ```python
-from orbiter._internal.message_builder import (
+from exo._internal.message_builder import (
     build_messages,
     validate_message_order,
     extract_last_assistant_tool_calls,
@@ -48,8 +48,8 @@ Ordered `list[Message]` ready for the LLM provider. The order is:
 ### Example
 
 ```python
-from orbiter._internal.message_builder import build_messages
-from orbiter.types import UserMessage
+from exo._internal.message_builder import build_messages
+from exo.types import UserMessage
 
 messages = build_messages(
     "You are a helpful assistant.",
@@ -81,8 +81,8 @@ A list of warning strings. Empty if no issues found.
 ### Example
 
 ```python
-from orbiter._internal.message_builder import validate_message_order
-from orbiter.types import AssistantMessage, ToolCall
+from exo._internal.message_builder import validate_message_order
+from exo.types import AssistantMessage, ToolCall
 
 messages = [
     AssistantMessage(
@@ -119,8 +119,8 @@ List of tool call IDs from the final assistant message, or empty list if the las
 ### Example
 
 ```python
-from orbiter._internal.message_builder import extract_last_assistant_tool_calls
-from orbiter.types import AssistantMessage, ToolCall, UserMessage
+from exo._internal.message_builder import extract_last_assistant_tool_calls
+from exo.types import AssistantMessage, ToolCall, UserMessage
 
 messages = [
     UserMessage(content="Search for X"),
@@ -165,7 +165,7 @@ Tuple of `(total_input, total_output, total)` tokens.
 ### Example
 
 ```python
-from orbiter._internal.message_builder import merge_usage
+from exo._internal.message_builder import merge_usage
 
 total_in, total_out, total = merge_usage(100, 50, 80, 30)
 # total_in=180, total_out=80, total=260

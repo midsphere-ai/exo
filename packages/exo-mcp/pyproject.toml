@@ -1,0 +1,19 @@
+[project]
+name = "exo-mcp"
+version = "0.1.0"
+description = "MCP (Model Context Protocol) client and tool integration"
+requires-python = ">=3.11"
+dependencies = [
+    "exo-core",
+    "mcp>=1.0",
+]
+
+[tool.uv.sources]
+exo-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exo"]

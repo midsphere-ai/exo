@@ -5,7 +5,7 @@ The `Workspace` provides versioned artifact storage with filesystem persistence,
 ## Basic Usage
 
 ```python
-from orbiter.context import Workspace, ArtifactType
+from exo.context import Workspace, ArtifactType
 
 workspace = Workspace(base_dir="/tmp/my_workspace")
 
@@ -131,7 +131,7 @@ Without `base_dir`, artifacts are stored only in memory.
 The workspace can integrate with a `KnowledgeStore` for searchable artifact content. When enabled, written artifacts are automatically indexed:
 
 ```python
-from orbiter.context._internal.knowledge import KnowledgeStore
+from exo.context._internal.knowledge import KnowledgeStore
 
 knowledge = KnowledgeStore()
 workspace = Workspace(base_dir="/tmp/project", knowledge_store=knowledge)
@@ -151,7 +151,7 @@ See the [Knowledge guide](knowledge.md) for more on the knowledge store.
 The built-in `WorkspaceNeuron` reads the workspace to list artifacts in the prompt:
 
 ```python
-from orbiter.context import PromptBuilder
+from exo.context import PromptBuilder
 
 # WorkspaceNeuron (priority 30) automatically lists artifacts
 builder = PromptBuilder(ctx)
@@ -194,7 +194,7 @@ workspace.on("write", index_on_write)
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Workspace` | `orbiter.context` | Versioned artifact storage with filesystem persistence |
+| `Workspace` | `exo.context` | Versioned artifact storage with filesystem persistence |
 | `Workspace.write(name, content, artifact_type)` | | Write or update an artifact (creates new version) |
 | `Workspace.read(name)` | | Read artifact content (latest version) |
 | `Workspace.get(name)` | | Get full `Artifact` with metadata |
@@ -203,4 +203,4 @@ workspace.on("write", index_on_write)
 | `Workspace.version_history(name)` | | List all `ArtifactVersion`s for an artifact |
 | `Workspace.revert_to_version(name, version)` | | Revert to a previous version |
 | `Workspace.on(event, callback)` | | Register observer callback for write/delete/revert |
-| `ArtifactType` | `orbiter.context` | Enum: CODE, CSV, IMAGE, JSON, MARKDOWN, TEXT |
+| `ArtifactType` | `exo.context` | Enum: CODE, CSV, IMAGE, JSON, MARKDOWN, TEXT |

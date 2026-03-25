@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter's `orbiter-context` package provides a solid foundation:
+Exo's `exo-context` package provides a solid foundation:
 
 - **ContextProcessor ABC** — event-driven processors with `process(ctx, payload)`.
 - **ProcessorPipeline** — sequential dispatch by event type via `register()`.
@@ -30,7 +30,7 @@ However, it lacks several context engineering capabilities found in agent-core
    hard token limits before LLM calls.
 
 This document proposes adding four new processors and one reload tool to
-`orbiter-context`, all plugging into the existing `ProcessorPipeline` with zero
+`exo-context`, all plugging into the existing `ProcessorPipeline` with zero
 changes to the pipeline itself.
 
 ---
@@ -316,7 +316,7 @@ processors are only invoked if explicitly registered.
 ## 10. Dependencies
 
 - **tiktoken** — new dependency for `TokenBudgetProcessor` only. Added as an
-  optional dependency in `orbiter-context[tiktoken]` to avoid forcing it on users
+  optional dependency in `exo-context[tiktoken]` to avoid forcing it on users
   who don't need token budgeting. The processor raises `ImportError` with a clear
   message if tiktoken is not installed.
 - No other new dependencies.

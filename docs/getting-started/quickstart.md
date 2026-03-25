@@ -1,10 +1,10 @@
 # Quickstart
 
-Build and run your first Orbiter agent in under 5 minutes.
+Build and run your first Exo agent in under 5 minutes.
 
 ## Prerequisites
 
-- Orbiter installed (`pip install orbiter` or `pip install orbiter-core orbiter-models`)
+- Exo installed (`pip install exo` or `pip install exo-core exo-models`)
 - `OPENAI_API_KEY` environment variable set
 
 ## Hello, Weather Agent
@@ -12,7 +12,7 @@ Build and run your first Orbiter agent in under 5 minutes.
 Create a file called `weather_agent.py`:
 
 ```python
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool
@@ -66,7 +66,7 @@ For real-time output, use `run.stream()`:
 
 ```python
 import asyncio
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool
@@ -111,7 +111,7 @@ The streaming loop handles the full tool cycle automatically: when the LLM reque
 To continue a conversation, pass the previous result's messages back:
 
 ```python
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool

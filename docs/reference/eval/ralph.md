@@ -1,12 +1,12 @@
-# orbiter.eval.ralph
+# exo.eval.ralph
 
 Ralph iterative refinement loop: Run, Analyze, Learn, Plan, Halt. A 5-phase execution engine that combines scoring, reflection, and re-prompting to iteratively improve agent outputs.
 
 ## Module Paths
 
 ```python
-from orbiter.eval.ralph.runner import RalphRunner, RalphResult, ExecuteFn, RePlanFn
-from orbiter.eval.ralph.config import (
+from exo.eval.ralph.runner import RalphRunner, RalphResult, ExecuteFn, RePlanFn
+from exo.eval.ralph.config import (
     StopType,
     ValidationConfig,
     ReflectionConfig,
@@ -14,7 +14,7 @@ from orbiter.eval.ralph.config import (
     RalphConfig,
     LoopState,
 )
-from orbiter.eval.ralph.detectors import (
+from exo.eval.ralph.detectors import (
     StopDecision,
     StopDetector,
     MaxIterationDetector,
@@ -583,13 +583,13 @@ The runner automatically creates a `CompositeDetector` with these detectors (in 
 
 ```python
 import asyncio
-from orbiter.eval import (
+from exo.eval import (
     GeneralReflector,
     OutputCorrectnessScorer,
     OutputLengthScorer,
 )
-from orbiter.eval.ralph.runner import RalphRunner
-from orbiter.eval.ralph.config import (
+from exo.eval.ralph.runner import RalphRunner
+from exo.eval.ralph.config import (
     RalphConfig,
     ValidationConfig,
     ReflectionConfig,

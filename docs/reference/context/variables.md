@@ -1,11 +1,11 @@
-# orbiter.context.variables
+# exo.context.variables
 
 Dynamic variable registry with nested path resolution for template substitution.
 
 ## Module Path
 
 ```python
-from orbiter.context.variables import DynamicVariableRegistry, VariableResolveError
+from exo.context.variables import DynamicVariableRegistry, VariableResolveError
 ```
 
 ---
@@ -123,8 +123,8 @@ Resolve `${path}` placeholders in a template string. Unresolvable variables are 
 ### Example
 
 ```python
-from orbiter.context.state import ContextState
-from orbiter.context.variables import DynamicVariableRegistry
+from exo.context.state import ContextState
+from exo.context.variables import DynamicVariableRegistry
 
 reg = DynamicVariableRegistry()
 

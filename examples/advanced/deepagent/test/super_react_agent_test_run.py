@@ -2,7 +2,7 @@
 # coding: utf-8
 """Super ReAct Agent integration test runner.
 
-End-to-end test that validates the ported SuperReActAgent using only Orbiter
+End-to-end test that validates the ported SuperReActAgent using only Exo
 APIs.  The test:
 
 1. Configures model credentials from environment variables.
@@ -11,8 +11,8 @@ APIs.  The test:
 3. Creates a main agent and two sub-agents (browsing, coding), each backed
    by a ``SuperAgentConfig`` from the ported ``super_config`` module.
 4. Registers MCP tools via ``SuperReActAgent.create_mcp_tools()`` which
-   internally uses ``orbiter.mcp.client.MCPServerConnection`` and wraps
-   discovered tools as ``orbiter.tool.FunctionTool`` instances.
+   internally uses ``exo.mcp.client.MCPServerConnection`` and wraps
+   discovered tools as ``exo.tool.FunctionTool`` instances.
 5. Runs GAIA benchmark queries through the multi-agent system and writes
    evaluation results to text and JSON files.
 
@@ -53,7 +53,7 @@ from agent.super_react_agent import SuperReActAgent
 from agent.super_config import SuperAgentFactory
 from agent.prompt_templates import get_main_agent_system_prompt, get_browsing_agent_system_prompt, get_coding_agent_system_prompt
 from agent.super_config import ModelInfo, SuperModelConfig
-from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
+from exo.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 from mcp import StdioServerParameters
 
 # Environment configuration
@@ -322,7 +322,7 @@ async def build_mcp_tool_groups(agent: SuperReActAgent) -> dict[str, list[Functi
     """Register all MCP servers and return their tools grouped by name.
 
     Uses ``SuperReActAgent.create_mcp_tools()`` (which delegates to
-    ``orbiter.mcp.client``) to connect to each MCP server defined in
+    ``exo.mcp.client``) to connect to each MCP server defined in
     ``MCP_TOOL_GROUPS`` and wrap the discovered tools as ``FunctionTool``
     instances.
 
@@ -346,7 +346,7 @@ async def build_mcp_tool_groups(agent: SuperReActAgent) -> dict[str, list[Functi
 
 
 def create_model_config() -> SuperModelConfig:
-    """Create model configuration using Orbiter's SuperModelConfig.
+    """Create model configuration using Exo's SuperModelConfig.
 
     Returns:
         SuperModelConfig wrapping a ModelInfo with provider credentials.
@@ -363,7 +363,7 @@ async def example_mcp_main_and_sub_agents(queries: list | None = None):
     """Run a multi-agent evaluation over the given GAIA queries.
 
     Creates three SuperReActAgent instances (main, browsing, coding) with
-    Orbiter-based configuration, registers MCP tool groups on each, then
+    Exo-based configuration, registers MCP tool groups on each, then
     iterates through the queries clearing context between runs.
 
     Tool assignments:

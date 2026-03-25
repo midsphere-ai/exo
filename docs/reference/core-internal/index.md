@@ -1,26 +1,26 @@
-# orbiter-core Internal Modules
+# exo-core Internal Modules
 
-> **Stability Warning:** These are internal APIs, subject to change without notice. They are documented here for contributors and advanced users who need to understand the framework's internals. Do not depend on these APIs in production code -- use the public API from `orbiter.*` instead.
+> **Stability Warning:** These are internal APIs, subject to change without notice. They are documented here for contributors and advanced users who need to understand the framework's internals. Do not depend on these APIs in production code -- use the public API from `exo.*` instead.
 
 ## Overview
 
-The `orbiter._internal` package contains the implementation machinery that powers the public `orbiter` API. These modules handle message construction, response parsing, execution state tracking, the core run loop, handler abstractions, agent group primitives, nesting support, graph algorithms, and background task management.
+The `exo._internal` package contains the implementation machinery that powers the public `exo` API. These modules handle message construction, response parsing, execution state tracking, the core run loop, handler abstractions, agent group primitives, nesting support, graph algorithms, and background task management.
 
 ## Import Pattern
 
 ```python
-from orbiter._internal.message_builder import build_messages
-from orbiter._internal.output_parser import parse_response
-from orbiter._internal.state import RunState, RunNode, RunNodeStatus
-from orbiter._internal.call_runner import call_runner
-from orbiter._internal.handlers import Handler, AgentHandler, ToolHandler, GroupHandler
-from orbiter._internal.agent_group import ParallelGroup, SerialGroup
-from orbiter._internal.nested import SwarmNode
-from orbiter._internal.graph import Graph, parse_flow_dsl, topological_sort
-from orbiter._internal.background import BackgroundTaskHandler, BackgroundTask, PendingQueue
+from exo._internal.message_builder import build_messages
+from exo._internal.output_parser import parse_response
+from exo._internal.state import RunState, RunNode, RunNodeStatus
+from exo._internal.call_runner import call_runner
+from exo._internal.handlers import Handler, AgentHandler, ToolHandler, GroupHandler
+from exo._internal.agent_group import ParallelGroup, SerialGroup
+from exo._internal.nested import SwarmNode
+from exo._internal.graph import Graph, parse_flow_dsl, topological_sort
+from exo._internal.background import BackgroundTaskHandler, BackgroundTask, PendingQueue
 ```
 
-Note: `ParallelGroup`, `SerialGroup`, and `SwarmNode` are re-exported from `orbiter.__init__` as public API.
+Note: `ParallelGroup`, `SerialGroup`, and `SwarmNode` are re-exported from `exo.__init__` as public API.
 
 ## Modules
 

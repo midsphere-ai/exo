@@ -9,7 +9,7 @@ This guide walks you through moving from local `run()` / `run.stream()` to distr
 **Local execution:**
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -20,8 +20,8 @@ print(result.output)
 **Distributed execution:**
 
 ```python
-from orbiter import Agent
-from orbiter.distributed import distributed
+from exo import Agent
+from exo.distributed import distributed
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -40,7 +40,7 @@ Key differences:
 **Local streaming:**
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -59,8 +59,8 @@ async for event in run.stream(agent, "Tell me a story", detailed=True):
 **Distributed streaming:**
 
 ```python
-from orbiter import Agent
-from orbiter.distributed import distributed
+from exo import Agent
+from exo.distributed import distributed
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -88,7 +88,7 @@ Key differences:
 **Local Swarm streaming:**
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", model="openai:gpt-4o")
 writer = Agent(name="writer", model="openai:gpt-4o")
@@ -101,8 +101,8 @@ async for event in run.stream(swarm, "Research and write about AI"):
 **Distributed Swarm streaming:**
 
 ```python
-from orbiter import Agent, Swarm
-from orbiter.distributed import distributed
+from exo import Agent, Swarm
+from exo.distributed import distributed
 
 researcher = Agent(name="researcher", model="openai:gpt-4o")
 writer = Agent(name="writer", model="openai:gpt-4o")
@@ -118,10 +118,10 @@ Swarms work the same way — `distributed()` accepts both `Agent` and `Swarm` in
 
 ## Step-by-Step Migration
 
-### 1. Install orbiter-distributed
+### 1. Install exo-distributed
 
 ```bash
-pip install orbiter-distributed
+pip install exo-distributed
 ```
 
 ### 2. Start Redis
@@ -133,7 +133,7 @@ docker run -d --name redis -p 6379:6379 redis:7
 ### 3. Set the Redis URL
 
 ```bash
-export ORBITER_REDIS_URL=redis://localhost:6379
+export EXO_REDIS_URL=redis://localhost:6379
 ```
 
 Or pass it explicitly:
@@ -147,13 +147,13 @@ handle = await distributed(agent, "Hello", redis_url="redis://localhost:6379")
 Workers execute tasks from the queue. At least one worker must be running:
 
 ```bash
-orbiter start worker
+exo start worker
 ```
 
 For higher throughput:
 
 ```bash
-orbiter start worker --concurrency 4
+exo start worker --concurrency 4
 ```
 
 ### 5. Replace `run()` with `distributed()`
@@ -217,7 +217,7 @@ print(f"Task {handle.task_id}: {status.status}")
 Events are persisted in Redis Streams (1-hour TTL by default), so you can replay them after the fact:
 
 ```python
-from orbiter.distributed import EventSubscriber
+from exo.distributed import EventSubscriber
 
 subscriber = EventSubscriber("redis://localhost:6379")
 await subscriber.connect()
@@ -322,7 +322,7 @@ await handle.cancel()
 | `detailed` | `detailed` | Same — enables rich events |
 | `event_types` | — | Filter events client-side after `handle.stream()` |
 | `max_steps` | — | Set in Agent config (serialized via `to_dict()`) |
-| — | `redis_url` | Redis connection (or `ORBITER_REDIS_URL` env var) |
+| — | `redis_url` | Redis connection (or `EXO_REDIS_URL` env var) |
 | — | `timeout` | Task timeout in seconds (default 300) |
 | — | `metadata` | Arbitrary metadata attached to the task |
 

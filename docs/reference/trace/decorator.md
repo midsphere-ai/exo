@@ -1,9 +1,9 @@
-# orbiter.trace.decorator
+# exo.trace.decorator
 
 `@traced` decorator and span context managers for function-level instrumentation.
 
 ```python
-from orbiter.trace.decorator import (
+from exo.trace.decorator import (
     extract_metadata,
     get_user_frame,
     is_user_code,
@@ -49,7 +49,7 @@ Decorator that wraps a function in an OpenTelemetry span. Supports sync function
 ### Example
 
 ```python
-from orbiter.trace import traced
+from exo.trace import traced
 
 @traced()
 async def process_request(query: str) -> str:
@@ -103,7 +103,7 @@ Synchronous span context manager.
 ### Example
 
 ```python
-from orbiter.trace import span_sync
+from exo.trace import span_sync
 
 with span_sync("my.operation", {"key": "value"}) as span:
     result = do_work()

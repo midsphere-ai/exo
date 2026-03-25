@@ -1,4 +1,4 @@
-# Docker Compose for Orbiter distributed execution.
+# Docker Compose for Exo distributed execution.
 #
 # Starts Redis, two workers, and (optionally) Temporal.
 #
@@ -11,7 +11,7 @@
 #
 # Environment variables (set in .env or export before running):
 #   OPENAI_API_KEY   — required for agent execution
-#   WORKER_IMAGE     — custom worker image (default: orbiter-worker)
+#   WORKER_IMAGE     — custom worker image (default: exo-worker)
 
 services:
   # -- Redis ----------------------------------------------------------------
@@ -33,27 +33,27 @@ services:
     build:
       context: ../..
       dockerfile: examples/distributed/Dockerfile
-    image: ${WORKER_IMAGE:-orbiter-worker}
+    image: ${WORKER_IMAGE:-exo-worker}
     depends_on:
       redis:
         condition: service_healthy
     environment:
-      ORBITER_REDIS_URL: redis://redis:6379
+      EXO_REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-    command: orbiter start worker --concurrency 2 --worker-id worker-1
+    command: exo start worker --concurrency 2 --worker-id worker-1
 
   worker-2:
     build:
       context: ../..
       dockerfile: examples/distributed/Dockerfile
-    image: ${WORKER_IMAGE:-orbiter-worker}
+    image: ${WORKER_IMAGE:-exo-worker}
     depends_on:
       redis:
         condition: service_healthy
     environment:
-      ORBITER_REDIS_URL: redis://redis:6379
+      EXO_REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-    command: orbiter start worker --concurrency 2 --worker-id worker-2
+    command: exo start worker --concurrency 2 --worker-id worker-2
 
   # -- Temporal (optional, activate with --profile temporal) ----------------
   temporal:

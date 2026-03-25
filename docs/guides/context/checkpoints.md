@@ -5,7 +5,7 @@ Checkpoints provide snapshot save and restore for context state. They capture th
 ## Basic Usage
 
 ```python
-from orbiter.context import Context, ContextConfig, Checkpoint, CheckpointStore
+from exo.context import Context, ContextConfig, Checkpoint, CheckpointStore
 
 ctx = Context(task_id="task-1", config=ContextConfig())
 ctx.state.set("progress", "step-3")
@@ -67,7 +67,7 @@ print(ctx.state.get("result"))  # None (was not in checkpoint)
 The `CheckpointStore` manages multiple checkpoints with version tracking:
 
 ```python
-from orbiter.context import CheckpointStore
+from exo.context import CheckpointStore
 
 store = CheckpointStore()
 
@@ -197,13 +197,13 @@ print(f"Added: {added}, Removed: {removed}, Changed: {changed}")
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Checkpoint` | `orbiter.context` | Frozen snapshot of context state and token usage |
+| `Checkpoint` | `exo.context` | Frozen snapshot of context state and token usage |
 | `Checkpoint.to_dict()` | | Serialize to dictionary |
 | `Checkpoint.from_dict(data)` | | Deserialize from dictionary (class method) |
-| `CheckpointStore` | `orbiter.context` | Manages versioned checkpoint history |
+| `CheckpointStore` | `exo.context` | Manages versioned checkpoint history |
 | `CheckpointStore.save(checkpoint)` | | Save a checkpoint |
 | `CheckpointStore.get(version)` | | Retrieve a specific version |
 | `CheckpointStore.latest` | | Property: the most recent checkpoint |
 | `CheckpointStore.list_versions()` | | List all saved version numbers |
-| `Context.snapshot(metadata)` | `orbiter.context` | Create a checkpoint from current state |
-| `Context.restore(checkpoint)` | `orbiter.context` | Restore state from a checkpoint |
+| `Context.snapshot(metadata)` | `exo.context` | Create a checkpoint from current state |
+| `Context.restore(checkpoint)` | `exo.context` | Restore state from a checkpoint |

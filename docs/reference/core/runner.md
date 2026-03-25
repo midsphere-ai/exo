@@ -1,13 +1,13 @@
-# orbiter.runner
+# exo.runner
 
 Public entry point for running agents. Provides `run()` (async), `run.sync()` (blocking), and `run.stream()` (async generator) as the primary API for executing an Agent.
 
-**Module:** `orbiter.runner`
+**Module:** `exo.runner`
 
 ```python
-from orbiter.runner import run
+from exo.runner import run
 # or
-from orbiter import run
+from exo import run
 ```
 
 ---
@@ -28,7 +28,7 @@ async def run(
 
 Execute an agent (or swarm) and return the result. This is the primary async API for running agents.
 
-If `provider` is `None`, a default provider is resolved from the agent's `provider_name` using the model registry (if `orbiter-models` is installed).
+If `provider` is `None`, a default provider is resolved from the agent's `provider_name` using the model registry (if `exo-models` is installed).
 
 For Swarm instances (detected by the presence of a `flow_order` attribute), delegates to the swarm's own `run()` method.
 
@@ -51,7 +51,7 @@ For Swarm instances (detected by the presence of a `flow_order` attribute), dele
 
 ```python
 import asyncio
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="bot", model="openai:gpt-4o")
 result = asyncio.run(run(agent, "Hello!"))
@@ -96,7 +96,7 @@ Execute an agent synchronously (blocking wrapper). Calls `run()` via `asyncio.ru
 ### Example
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="bot", model="openai:gpt-4o")
 result = run.sync(agent, "Hello!")
@@ -142,8 +142,8 @@ When tool calls are detected, tools are executed and the LLM is re-streamed with
 
 ```python
 import asyncio
-from orbiter import Agent, run
-from orbiter.types import TextEvent, ToolCallEvent
+from exo import Agent, run
+from exo.types import TextEvent, ToolCallEvent
 
 agent = Agent(name="bot", model="openai:gpt-4o")
 
@@ -163,8 +163,8 @@ asyncio.run(main())
 
 When `provider=None`, the runner attempts to auto-resolve a provider:
 
-1. Imports `orbiter.models.provider.get_provider`
+1. Imports `exo.models.provider.get_provider`
 2. Calls `get_provider(agent.provider_name)` to get a registered provider
 3. If auto-resolution fails (import error, no provider registered), returns `None` and lets `Agent.run()` raise its own error
 
-This means if you have `orbiter-models` installed and configured, you can omit the `provider` argument entirely.
+This means if you have `exo-models` installed and configured, you can omit the `provider` argument entirely.

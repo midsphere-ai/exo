@@ -1,4 +1,4 @@
-"""Use the memory system — Orbiter quickstart.
+"""Use the memory system — Exo quickstart.
 
 Demonstrates short-term conversation memory: storing messages,
 searching with keyword filters, and scope-based windowing.
@@ -9,7 +9,7 @@ Usage:
 
 import asyncio
 
-from orbiter.memory import (  # pyright: ignore[reportMissingImports]
+from exo.memory import (  # pyright: ignore[reportMissingImports]
     AIMemory,
     HumanMemory,
     MemoryMetadata,

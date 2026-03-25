@@ -1,4 +1,4 @@
-"""Define agents with tools — minimal Orbiter example.
+"""Define agents with tools — minimal Exo example.
 
 Shows how to create an Agent with a custom tool and run it
 using the synchronous ``run.sync()`` convenience wrapper.
@@ -8,7 +8,7 @@ Usage:
     uv run python examples/quickstart/define_agent.py
 """
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool

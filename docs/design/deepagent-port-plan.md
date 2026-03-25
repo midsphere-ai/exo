@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-The `examples/advanced/deepagent/` directory is a multi-agent ReAct system originally built on the **openjiuwen** framework. This plan inventories every openjiuwen dependency, maps each to its Orbiter equivalent, and defines the porting order for subsequent stories.
+The `examples/advanced/deepagent/` directory is a multi-agent ReAct system originally built on the **openjiuwen** framework. This plan inventories every openjiuwen dependency, maps each to its Exo equivalent, and defines the porting order for subsequent stories.
 
 ---
 
@@ -16,17 +16,17 @@ The `examples/advanced/deepagent/` directory is a multi-agent ReAct system origi
 
 ### 2.1 Files WITH openjiuwen Imports (Must Port)
 
-| File | openjiuwen Imports | Orbiter Equivalent |
+| File | openjiuwen Imports | Exo Equivalent |
 |------|-------------------|-------------------|
 | `agent/utils.py` | `logger, LogManager` from `core.common.logging`; `log_config` from `extensions.common.configs`; `DefaultLogger, SafeRotatingFileHandler, ThreadContextFilter` from `extensions.common.log` | Python `logging` module (standard library) |
 | `agent/context_manager.py` | `logger` from `core.common.logging` | Python `logging` module |
 | `agent/qa_handler.py` | `logger` from `core.common.logging` | Python `logging` module |
 | `agent/super_config.py` | `ReActAgentConfig, ConstrainConfig` from `agent.config.react_config`; `PluginSchema, WorkflowSchema` from `agent.common.schema`; `ModelConfig` from `core.component.common.configs.model_config` | Pydantic `BaseModel` config classes (see deepsearch `config.py` pattern) |
-| `agent/super_factory.py` | `Tool` from `core.utils.tool.base`; `Workflow` from `core.workflow.base`; `ModelConfig` from `core.component.common.configs.model_config`; `BaseModelInfo` from `core.utils.llm.base`; `PluginSchema, WorkflowSchema` from `agent.common.schema` | `orbiter.agent.Agent`, `orbiter.tools.Tool`, Pydantic config models |
-| `agent/super_react_agent.py` | `BaseAgent` from `core.agent.agent`; `Runtime, Workflow` from `core.runtime.runtime`; `Tool` from `core.utils.tool.base`; `logger` from `core.common.logging`; `AIMessage` from `core.utils.llm.messages`; `Param` from `core.utils.tool.param`; `LocalFunction` from `core.utils.tool.function.function`; `ToolServerConfig` from `core.utils.tool.mcp.base`; `Runner, resource_mgr` from `core.runner.runner` | `orbiter.agent.Agent` + `orbiter.runner` + `orbiter.swarm.Swarm` + `orbiter.tools.Tool` |
-| `agent/tool_call_handler.py` | `Runtime` from `core.runtime.runtime`; `logger` from `core.common.logging`; `LocalFunction` from `core.utils.tool.function.function`; `Param` from `core.utils.tool.param` | `orbiter.tools.Tool`, Python `logging` |
-| `llm/__init__.py` | `ModelConfig` from `core.component.common.configs.model_config` | Pydantic config model or `orbiter-models` |
-| `test/super_react_agent_test_run.py` | Multiple agent config, model setup, tool definition imports | Orbiter Agent, Swarm, Tool equivalents |
+| `agent/super_factory.py` | `Tool` from `core.utils.tool.base`; `Workflow` from `core.workflow.base`; `ModelConfig` from `core.component.common.configs.model_config`; `BaseModelInfo` from `core.utils.llm.base`; `PluginSchema, WorkflowSchema` from `agent.common.schema` | `exo.agent.Agent`, `exo.tools.Tool`, Pydantic config models |
+| `agent/super_react_agent.py` | `BaseAgent` from `core.agent.agent`; `Runtime, Workflow` from `core.runtime.runtime`; `Tool` from `core.utils.tool.base`; `logger` from `core.common.logging`; `AIMessage` from `core.utils.llm.messages`; `Param` from `core.utils.tool.param`; `LocalFunction` from `core.utils.tool.function.function`; `ToolServerConfig` from `core.utils.tool.mcp.base`; `Runner, resource_mgr` from `core.runner.runner` | `exo.agent.Agent` + `exo.runner` + `exo.swarm.Swarm` + `exo.tools.Tool` |
+| `agent/tool_call_handler.py` | `Runtime` from `core.runtime.runtime`; `logger` from `core.common.logging`; `LocalFunction` from `core.utils.tool.function.function`; `Param` from `core.utils.tool.param` | `exo.tools.Tool`, Python `logging` |
+| `llm/__init__.py` | `ModelConfig` from `core.component.common.configs.model_config` | Pydantic config model or `exo-models` |
+| `test/super_react_agent_test_run.py` | Multiple agent config, model setup, tool definition imports | Exo Agent, Swarm, Tool equivalents |
 
 ### 2.2 Files WITHOUT openjiuwen Imports (No Changes Needed)
 
@@ -80,7 +80,7 @@ test/super_react_agent_test_run.py ← depends on everything above
 
 | Phase | File(s) | Story | Rationale |
 |-------|---------|-------|-----------|
-| 0 | `pyproject.toml`, `__init__.py` | US-088 | Switch deps from openjiuwen to orbiter packages |
+| 0 | `pyproject.toml`, `__init__.py` | US-088 | Switch deps from openjiuwen to exo packages |
 | 1 | `agent/utils.py` | US-089 | Leaf — only imports openjiuwen logging |
 | 2 | `llm/__init__.py` | US-090 | Leaf — only imports ModelConfig |
 | 3 | `agent/super_config.py` | US-091 | Config classes — depends on nothing internal |
@@ -118,13 +118,13 @@ The following directories contain **zero openjiuwen imports** and work independe
 | `agent/context_manager.py` | **Light edit** — swap 1 logger import | Low |
 | `agent/qa_handler.py` | **Light edit** — swap 1 logger import | Low |
 | `agent/super_config.py` | **Rewrite** — replace openjiuwen config classes with Pydantic BaseModel | Medium |
-| `agent/tool_call_handler.py` | **Rewrite** — replace openjiuwen Runtime/Tool with orbiter equivalents | Medium |
-| `agent/super_factory.py` | **Rewrite** — replace factory pattern with Orbiter Agent/Swarm assembly | Medium |
-| `agent/super_react_agent.py` | **Heavy rewrite** — core agent, 9 openjiuwen imports, maps to Orbiter Agent + Swarm | High |
+| `agent/tool_call_handler.py` | **Rewrite** — replace openjiuwen Runtime/Tool with exo equivalents | Medium |
+| `agent/super_factory.py` | **Rewrite** — replace factory pattern with Exo Agent/Swarm assembly | Medium |
+| `agent/super_react_agent.py` | **Heavy rewrite** — core agent, 9 openjiuwen imports, maps to Exo Agent + Swarm | High |
 | `llm/__init__.py` | **Light edit** — replace ModelConfig import | Low |
-| `test/super_react_agent_test_run.py` | **Rewrite** — update all imports and config to use Orbiter | Medium |
+| `test/super_react_agent_test_run.py` | **Rewrite** — update all imports and config to use Exo | Medium |
 | `tool/browser/utils/utils/` | **Delete candidate** — duplicates parent `utils/` directory | Low |
-| `pyproject.toml` | **Light edit** — swap openjiuwen dep for orbiter packages | Low |
+| `pyproject.toml` | **Light edit** — swap openjiuwen dep for exo packages | Low |
 
 ---
 
@@ -132,10 +132,10 @@ The following directories contain **zero openjiuwen imports** and work independe
 
 | File | Risk | Notes |
 |------|------|-------|
-| `agent/super_react_agent.py` | **HIGH** | Core agent with 9 openjiuwen imports. ReAct loop, MCP integration, sub-agent management, and tool execution all tightly coupled to openjiuwen's BaseAgent/Runtime/Runner. Needs careful decomposition into Orbiter Agent + Swarm patterns. |
-| `agent/super_factory.py` | **MEDIUM** | Factory creates agents with openjiuwen's Tool/Workflow/ModelConfig. Must map to Orbiter's composition model. Logic is mostly wiring, not complex. |
+| `agent/super_react_agent.py` | **HIGH** | Core agent with 9 openjiuwen imports. ReAct loop, MCP integration, sub-agent management, and tool execution all tightly coupled to openjiuwen's BaseAgent/Runtime/Runner. Needs careful decomposition into Exo Agent + Swarm patterns. |
+| `agent/super_factory.py` | **MEDIUM** | Factory creates agents with openjiuwen's Tool/Workflow/ModelConfig. Must map to Exo's composition model. Logic is mostly wiring, not complex. |
 | `agent/super_config.py` | **MEDIUM** | Inherits from openjiuwen's `ReActAgentConfig`. Must be rewritten as standalone Pydantic models. Risk of missing config fields that downstream code depends on. |
-| `agent/tool_call_handler.py` | **MEDIUM** | Uses openjiuwen's Runtime for tool dispatch. Must map to Orbiter's tool execution. Has type conversion logic that should port cleanly. |
+| `agent/tool_call_handler.py` | **MEDIUM** | Uses openjiuwen's Runtime for tool dispatch. Must map to Exo's tool execution. Has type conversion logic that should port cleanly. |
 | `test/super_react_agent_test_run.py` | **MEDIUM** | End-to-end test depends on all ported components. Must be updated last. |
 | `agent/utils.py` | **LOW** | Only logging imports — straightforward stdlib swap. |
 | `agent/context_manager.py` | **LOW** | Only 1 logger import to swap. Core logic is framework-agnostic. |
@@ -174,20 +174,20 @@ The completed `examples/advanced/deepsearch/` port demonstrates the target patte
 
 **Date completed:** 2026-03-11
 
-All 9 files with openjiuwen imports have been successfully ported to use Orbiter equivalents:
+All 9 files with openjiuwen imports have been successfully ported to use Exo equivalents:
 
 1. **agent/utils.py** — Replaced openjiuwen logging with stdlib `logging`
 2. **agent/context_manager.py** — Swapped logger import to stdlib
 3. **agent/qa_handler.py** — Swapped logger import to stdlib
 4. **agent/super_config.py** — Rewritten as standalone Pydantic BaseModel classes
-5. **agent/tool_call_handler.py** — Replaced openjiuwen Runtime/Tool with Orbiter equivalents
-6. **agent/super_factory.py** — Rewired to use `orbiter.agent.Agent` and `orbiter.swarm.Swarm`
-7. **agent/super_react_agent.py** — Core agent rewritten using Orbiter Agent + MCP client + Swarm
+5. **agent/tool_call_handler.py** — Replaced openjiuwen Runtime/Tool with Exo equivalents
+6. **agent/super_factory.py** — Rewired to use `exo.agent.Agent` and `exo.swarm.Swarm`
+7. **agent/super_react_agent.py** — Core agent rewritten using Exo Agent + MCP client + Swarm
 8. **llm/__init__.py** — Replaced ModelConfig import
-9. **test/super_react_agent_test_run.py** — Updated all imports and config to Orbiter
+9. **test/super_react_agent_test_run.py** — Updated all imports and config to Exo
 
 **Validation:**
 - `grep -r 'openjiuwen' examples/advanced/deepagent/` returns zero matches
-- `pyproject.toml` depends only on `orbiter-core`, `orbiter-models`, `orbiter-mcp`
-- Stale `uv.lock` removed (will be regenerated when orbiter packages are published)
-- README updated to reference Orbiter instead of openjiuwen
+- `pyproject.toml` depends only on `exo-core`, `exo-models`, `exo-mcp`
+- Stale `uv.lock` removed (will be regenerated when exo packages are published)
+- README updated to reference Exo instead of openjiuwen

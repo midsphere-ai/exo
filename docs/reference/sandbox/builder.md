@@ -1,9 +1,9 @@
-# orbiter.sandbox.builder
+# exo.sandbox.builder
 
 Fluent builder for constructing `Sandbox` instances with lazy evaluation.
 
 ```python
-from orbiter.sandbox.builder import SandboxBuilder
+from exo.sandbox.builder import SandboxBuilder
 ```
 
 ---
@@ -107,7 +107,7 @@ Any attribute access that is not a builder method (`with_*`, `build`, `reset`) t
 ### Example
 
 ```python
-from orbiter.sandbox import SandboxBuilder
+from exo.sandbox import SandboxBuilder
 
 sb = (
     SandboxBuilder()
@@ -125,7 +125,7 @@ await sb.cleanup()
 ### Chaining with a custom sandbox class
 
 ```python
-from orbiter.sandbox import SandboxBuilder, KubernetesSandbox
+from exo.sandbox import SandboxBuilder, KubernetesSandbox
 
 sb = (
     SandboxBuilder(KubernetesSandbox)

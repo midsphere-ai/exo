@@ -1,9 +1,9 @@
-# orbiter.a2a.types
+# exo.a2a.types
 
 A2A protocol types -- agent cards, configs, and task events. All model classes use Pydantic `BaseModel` with `frozen=True`.
 
 ```python
-from orbiter.a2a.types import (
+from exo.a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentSkill,

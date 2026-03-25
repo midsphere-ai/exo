@@ -1,11 +1,11 @@
 # Tracing
 
-The `orbiter-trace` package provides OpenTelemetry-based observability for agent execution. It includes a `@traced` decorator for automatic span creation, semantic conventions for agent/tool/LLM metrics, prompt logging with token breakdowns, W3C baggage propagation, and a plugin system for span consumers.
+The `exo-trace` package provides OpenTelemetry-based observability for agent execution. It includes a `@traced` decorator for automatic span creation, semantic conventions for agent/tool/LLM metrics, prompt logging with token breakdowns, W3C baggage propagation, and a plugin system for span consumers.
 
 ## Basic Usage
 
 ```python
-from orbiter.trace import traced
+from exo.trace import traced
 
 @traced(name="research_task")
 async def research(topic: str) -> str:
@@ -22,7 +22,7 @@ result = await research("quantum computing")
 The `@traced` decorator wraps sync functions, async functions, and async generators with automatic span creation:
 
 ```python
-from orbiter.trace import traced
+from exo.trace import traced
 
 # Async function
 @traced(name="fetch_data", attributes={"source": "api"})
@@ -58,7 +58,7 @@ When `extract_args=True`, the decorator uses `extract_metadata()` to pull functi
 For manual span management without decorating a function:
 
 ```python
-from orbiter.trace.decorator import span_sync, span_async
+from exo.trace.decorator import span_sync, span_async
 
 # Sync context manager
 with span_sync("my_sync_operation", attributes={"step": 1}):
@@ -72,7 +72,7 @@ async with span_async("my_async_operation"):
 ## Configuration
 
 ```python
-from orbiter.trace import TraceConfig, TraceBackend
+from exo.trace import TraceConfig, TraceBackend
 
 config = TraceConfig(
     service_name="my-agent-app",
@@ -111,24 +111,24 @@ The package defines OpenTelemetry semantic conventions for agent framework spans
 
 | Attribute | Description |
 |-----------|-------------|
-| `orbiter.agent.name` | Agent name |
-| `orbiter.agent.step` | Current step number |
-| `orbiter.agent.status` | Completion status |
+| `exo.agent.name` | Agent name |
+| `exo.agent.step` | Current step number |
+| `exo.agent.status` | Completion status |
 
 ### Tool Attributes
 
 | Attribute | Description |
 |-----------|-------------|
-| `orbiter.tool.name` | Tool name |
-| `orbiter.tool.status` | Execution status |
-| `orbiter.tool.error` | Error message (if any) |
+| `exo.tool.name` | Tool name |
+| `exo.tool.status` | Execution status |
+| `exo.tool.error` | Error message (if any) |
 
 ## Instrumentation Helpers
 
 Record structured spans for agent runs and tool executions:
 
 ```python
-from orbiter.trace.instrumentation import record_agent_run, record_tool_step, Timer
+from exo.trace.instrumentation import record_agent_run, record_tool_step, Timer
 
 # Time an operation
 timer = Timer()
@@ -157,20 +157,20 @@ record_tool_step(
 ### Building Attributes
 
 ```python
-from orbiter.trace.instrumentation import build_agent_attributes, build_tool_attributes
+from exo.trace.instrumentation import build_agent_attributes, build_tool_attributes
 
 agent_attrs = build_agent_attributes(
     name="researcher",
     step=1,
     model="gpt-4o",
 )
-# {"orbiter.agent.name": "researcher", "orbiter.agent.step": 1, ...}
+# {"exo.agent.name": "researcher", "exo.agent.step": 1, ...}
 
 tool_attrs = build_tool_attributes(
     name="search",
     status="success",
 )
-# {"orbiter.tool.name": "search", "orbiter.tool.status": "success"}
+# {"exo.tool.name": "search", "exo.tool.status": "success"}
 ```
 
 ## Prompt Logger
@@ -178,7 +178,7 @@ tool_attrs = build_tool_attributes(
 Log prompts with token breakdowns for debugging and analysis:
 
 ```python
-from orbiter.trace import PromptLogger, compute_token_breakdown
+from exo.trace import PromptLogger, compute_token_breakdown
 
 # Compute per-role token breakdown
 breakdown = compute_token_breakdown(messages)
@@ -216,7 +216,7 @@ class TokenBreakdown:
 Propagate context across service boundaries using W3C Baggage:
 
 ```python
-from orbiter.trace.propagation import BaggagePropagator, DictCarrier
+from exo.trace.propagation import BaggagePropagator, DictCarrier
 
 propagator = BaggagePropagator()
 
@@ -231,7 +231,7 @@ propagator.extract(incoming_headers)
 ### Baggage Context Variables
 
 ```python
-from orbiter.trace.propagation import set_baggage, get_baggage, clear_baggage
+from exo.trace.propagation import set_baggage, get_baggage, clear_baggage
 
 # Set baggage values
 set_baggage("user_id", "u-123")
@@ -249,7 +249,7 @@ clear_baggage()
 Register custom consumers that process spans after creation:
 
 ```python
-from orbiter.trace.propagation import SpanConsumer, register_consumer
+from exo.trace.propagation import SpanConsumer, register_consumer
 
 class LogConsumer(SpanConsumer):
     """Log all spans to a file."""
@@ -295,7 +295,7 @@ async def execute_tools(response: str) -> str:
 Use the instrumentation module to record custom metrics:
 
 ```python
-from orbiter.trace.instrumentation import Timer
+from exo.trace.instrumentation import Timer
 
 async def timed_operation():
     timer = Timer()
@@ -319,7 +319,7 @@ async def timed_operation():
 When using Agent-to-Agent communication, propagate trace context:
 
 ```python
-from orbiter.trace.propagation import BaggagePropagator, DictCarrier
+from exo.trace.propagation import BaggagePropagator, DictCarrier
 
 # Sender: inject context into request
 carrier = DictCarrier()
@@ -336,17 +336,17 @@ propagator.extract(request.headers)
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `traced` | `orbiter.trace` | Decorator for automatic span creation |
-| `TraceConfig` | `orbiter.trace` | Configuration: backend, endpoint, sample rate |
-| `TraceBackend` | `orbiter.trace` | Enum: `OTLP`, `MEMORY`, `CONSOLE` |
-| `PromptLogger` | `orbiter.trace` | Log prompts with token breakdowns |
-| `TokenBreakdown` | `orbiter.trace.prompt_logger` | Per-role token counts |
-| `compute_token_breakdown` | `orbiter.trace.prompt_logger` | Compute breakdown from messages |
-| `record_agent_run` | `orbiter.trace.instrumentation` | Record agent execution span |
-| `record_tool_step` | `orbiter.trace.instrumentation` | Record tool execution span |
-| `Timer` | `orbiter.trace.instrumentation` | Simple start/stop timer |
-| `BaggagePropagator` | `orbiter.trace.propagation` | W3C Baggage context propagation |
-| `SpanConsumer` | `orbiter.trace.propagation` | ABC for span processing plugins |
-| `register_consumer` | `orbiter.trace.propagation` | Register a span consumer |
-| `span_sync` | `orbiter.trace.decorator` | Sync context manager for manual spans |
-| `span_async` | `orbiter.trace.decorator` | Async context manager for manual spans |
+| `traced` | `exo.trace` | Decorator for automatic span creation |
+| `TraceConfig` | `exo.trace` | Configuration: backend, endpoint, sample rate |
+| `TraceBackend` | `exo.trace` | Enum: `OTLP`, `MEMORY`, `CONSOLE` |
+| `PromptLogger` | `exo.trace` | Log prompts with token breakdowns |
+| `TokenBreakdown` | `exo.trace.prompt_logger` | Per-role token counts |
+| `compute_token_breakdown` | `exo.trace.prompt_logger` | Compute breakdown from messages |
+| `record_agent_run` | `exo.trace.instrumentation` | Record agent execution span |
+| `record_tool_step` | `exo.trace.instrumentation` | Record tool execution span |
+| `Timer` | `exo.trace.instrumentation` | Simple start/stop timer |
+| `BaggagePropagator` | `exo.trace.propagation` | W3C Baggage context propagation |
+| `SpanConsumer` | `exo.trace.propagation` | ABC for span processing plugins |
+| `register_consumer` | `exo.trace.propagation` | Register a span consumer |
+| `span_sync` | `exo.trace.decorator` | Sync context manager for manual spans |
+| `span_async` | `exo.trace.decorator` | Async context manager for manual spans |

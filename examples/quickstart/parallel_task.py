@@ -9,7 +9,7 @@ Usage:
     uv run python examples/quickstart/parallel_task.py
 """
 
-from orbiter import Agent, ParallelGroup, Swarm, run
+from exo import Agent, ParallelGroup, Swarm, run
 
 # Two researchers working in parallel
 history = Agent(

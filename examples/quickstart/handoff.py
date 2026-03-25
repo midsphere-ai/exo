@@ -9,7 +9,7 @@ Usage:
     uv run python examples/quickstart/handoff.py
 """
 
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 # Specialist agents
 billing = Agent(

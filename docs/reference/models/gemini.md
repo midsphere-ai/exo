@@ -1,11 +1,11 @@
-# orbiter.models.gemini
+# exo.models.gemini
 
 Google Gemini LLM provider implementation. Wraps the `google-genai` SDK to implement `ModelProvider.complete()` and `ModelProvider.stream()` with normalized response types.
 
 ## Module Path
 
 ```python
-from orbiter.models.gemini import GeminiProvider
+from exo.models.gemini import GeminiProvider
 ```
 
 ## Auto-Registration
@@ -94,9 +94,9 @@ Stream a completion from Google Gemini. Uses `generate_content_stream()` interna
 
 ### Message Conversion
 
-Orbiter messages are converted to Google API format internally:
+Exo messages are converted to Google API format internally:
 
-| Orbiter Type | Google Format | Notes |
+| Exo Type | Google Format | Notes |
 |---|---|---|
 | `SystemMessage` | Extracted to `system_instruction` config | Multiple system messages are joined with newlines |
 | `UserMessage` | `{"role": "user", "parts": [{"text": ...}]}` | Direct content mapping |
@@ -119,7 +119,7 @@ Multiple tools are grouped into a single `function_declarations` list.
 
 ### Finish Reason Mapping
 
-| Google Value | Orbiter FinishReason |
+| Google Value | Exo FinishReason |
 |---|---|
 | `"STOP"` | `"stop"` |
 | `"MAX_TOKENS"` | `"length"` |
@@ -138,8 +138,8 @@ Google's API does not always return tool call IDs. When `function_call.id` is no
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import SystemMessage, UserMessage
+from exo.models import get_provider
+from exo.types import SystemMessage, UserMessage
 
 async def main():
     provider = get_provider(
@@ -166,8 +166,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import UserMessage
+from exo.models import get_provider
+from exo.types import UserMessage
 
 async def main():
     provider = get_provider("gemini:gemini-2.0-flash", api_key="AIza...")

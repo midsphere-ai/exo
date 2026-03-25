@@ -1,9 +1,9 @@
-# orbiter.trace.propagation
+# exo.trace.propagation
 
 W3C Baggage propagation and span consumer plugin system.
 
 ```python
-from orbiter.trace.propagation import (
+from exo.trace.propagation import (
     BaggagePropagator,
     Carrier,
     DictCarrier,
@@ -116,7 +116,7 @@ Remove all baggage entries from the current context.
 ### Example
 
 ```python
-from orbiter.trace import set_baggage, get_baggage, get_baggage_value, clear_baggage
+from exo.trace import set_baggage, get_baggage, get_baggage_value, clear_baggage
 
 set_baggage("user_id", "user-123")
 set_baggage("session_id", "sess-456")
@@ -179,7 +179,7 @@ Inject baggage into a carrier. Uses the provided *baggage* dict, or falls back t
 ### Example
 
 ```python
-from orbiter.trace import BaggagePropagator, DictCarrier, set_baggage
+from exo.trace import BaggagePropagator, DictCarrier, set_baggage
 
 propagator = BaggagePropagator()
 
@@ -288,7 +288,7 @@ Remove all registered span consumers (useful for testing).
 ### Example
 
 ```python
-from orbiter.trace import (
+from exo.trace import (
     SpanConsumer,
     register_span_consumer,
     dispatch_spans,

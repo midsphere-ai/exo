@@ -2,14 +2,14 @@
 
 **Status:** Proposed
 **Epic:** 1 — Security Guardrail Framework
-**Package:** New `orbiter-guardrail` (depends on `orbiter-core`)
+**Package:** New `exo-guardrail` (depends on `exo-core`)
 **Date:** 2026-03-10
 
 ---
 
 ## 1. Motivation
 
-Orbiter agents execute LLM calls and tool invocations without any built-in
+Exo agents execute LLM calls and tool invocations without any built-in
 security screening. While the web UI has safety evaluation prompts
 (`services/safety.py`), there is no framework-level mechanism to:
 
@@ -22,7 +22,7 @@ security screening. While the web UI has safety evaluation prompts
 Agent-core's guardrail module (`openjiuwen/core/security/guardrail/`) provides
 a pluggable architecture with `RiskAssessment` levels, backend-agnostic
 `GuardrailBackend` protocol, event-driven hook integration, and built-in
-injection detection. This document designs Orbiter's equivalent, integrating
+injection detection. This document designs Exo's equivalent, integrating
 with the existing `HookManager` and the new `RailManager` from Epic 6.
 
 ---
@@ -55,9 +55,9 @@ Key design choices in agent-core:
 
 ## 3. Key Decision: Guardrails as a Separate Package Using HookManager
 
-### Option A — Guardrails inside orbiter-core (rejected)
+### Option A — Guardrails inside exo-core (rejected)
 
-Adding guardrail types to `orbiter-core` would couple security concerns with
+Adding guardrail types to `exo-core` would couple security concerns with
 the core agent loop. Not all users need guardrails, and the dependency on
 pattern libraries or LLM backends should be optional.
 
@@ -71,16 +71,16 @@ making every guardrail a `Rail` subclass would:
   while guardrails assess risk and block based on policy.
 - Make it harder to attach/detach guardrails dynamically at runtime.
 
-### Option C — Separate `orbiter-guardrail` package with HookManager integration (chosen)
+### Option C — Separate `exo-guardrail` package with HookManager integration (chosen)
 
-A new `orbiter-guardrail` package that:
+A new `exo-guardrail` package that:
 
 1. Defines its own type hierarchy (`RiskLevel`, `RiskAssessment`,
    `GuardrailBackend`, `GuardrailResult`, `BaseGuardrail`).
 2. Integrates with agents via `HookManager` — guardrails register as hooks
    at specific `HookPoint` values.
 3. Can coexist with rails — both register as hooks on the same `HookManager`.
-4. Is independently installable (`pip install orbiter-guardrail`).
+4. Is independently installable (`pip install exo-guardrail`).
 
 **Why Option C:**
 
@@ -132,7 +132,7 @@ they should not be modified downstream.
 ### 4.3 GuardrailError
 
 ```python
-class GuardrailError(OrbiterError):
+class GuardrailError(ExoError):
     """Raised when a guardrail blocks an operation.
 
     Attributes:
@@ -327,7 +327,7 @@ hook_manager.run(PRE_LLM_CALL, ...)
 
 3. **Exception propagation is consistent.** If a guardrail raises
    `GuardrailError`, it propagates through `HookManager.run()` exactly like
-   `RailAbortError` — the agent run stops. Both inherit from `OrbiterError`.
+   `RailAbortError` — the agent run stops. Both inherit from `ExoError`.
 
 4. **No performance impact when absent.** If no guardrails are attached,
    zero additional hooks are registered.
@@ -472,10 +472,10 @@ Agent.run(input)
 ## 9. Package Layout
 
 ```
-packages/orbiter-guardrail/
-├── pyproject.toml          # hatchling, depends on orbiter-core
+packages/exo-guardrail/
+├── pyproject.toml          # hatchling, depends on exo-core
 ├── src/
-│   └── orbiter/
+│   └── exo/
 │       ├── __init__.py     # extend_path for namespace package
 │       └── guardrail/
 │           ├── __init__.py # Public exports
@@ -513,7 +513,7 @@ packages/orbiter-guardrail/
 4. **All existing tests pass.** Since no existing code is modified,
    all ~2,900 tests remain unaffected.
 
-5. **Optional dependency.** `orbiter-guardrail` is a separate pip-installable
+5. **Optional dependency.** `exo-guardrail` is a separate pip-installable
    package. Projects that don't need guardrails don't need to install it.
 
 ---

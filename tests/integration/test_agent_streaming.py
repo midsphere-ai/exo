@@ -21,10 +21,10 @@ async def test_stream_event_ordering_single_step(vertex_model: str) -> None:
     Uses event_types={"text", "usage"} so that StepEvent/StatusEvent are
     filtered out, making UsageEvent the final event in the sequence.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.runner import run  # pyright: ignore[reportMissingImports]
-    from orbiter.types import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.runner import run  # pyright: ignore[reportMissingImports]
+    from exo.types import (  # pyright: ignore[reportMissingImports]
         ErrorEvent,
         TextEvent,
         UsageEvent,
@@ -67,11 +67,11 @@ async def test_stream_event_ordering_with_tool_call(vertex_model: str) -> None:
     Uses event_types={"text", "tool_call", "tool_result", "usage"} to filter
     out StepEvent/StatusEvent, leaving UsageEvent as the final event.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.runner import run  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
-    from orbiter.types import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.runner import run  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.types import (  # pyright: ignore[reportMissingImports]
         TextEvent,
         ToolCallEvent,
         ToolResultEvent,
@@ -152,11 +152,11 @@ async def test_stream_step_events_wrap_each_step(vertex_model: str) -> None:
       Step 3: LLM produces final text response
     This yields at least 3 steps → >= 6 StepEvents, well above the >= 2 target.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.runner import run  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
-    from orbiter.types import StepEvent  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.runner import run  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.types import StepEvent  # pyright: ignore[reportMissingImports]
 
     @tool
     def get_country_code(country: str) -> str:

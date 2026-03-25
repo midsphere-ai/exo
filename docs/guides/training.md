@@ -1,11 +1,11 @@
 # Training
 
-The `orbiter-train` package provides a training framework with trajectory collection, data synthesis, evolutionary optimization, and VeRL (Verified Reinforcement Learning) integration. It supports the full training pipeline from collecting agent execution traces to fine-tuning with RLHF.
+The `exo-train` package provides a training framework with trajectory collection, data synthesis, evolutionary optimization, and VeRL (Verified Reinforcement Learning) integration. It supports the full training pipeline from collecting agent execution traces to fine-tuning with RLHF.
 
 ## Basic Usage
 
 ```python
-from orbiter.train import TrajectoryDataset, TrajectoryItem, Trainer
+from exo.train import TrajectoryDataset, TrajectoryItem, Trainer
 
 # Collect trajectory data
 dataset = TrajectoryDataset()
@@ -26,7 +26,7 @@ dataset.export_json("training_data.json")
 The fundamental data unit follows the **SAR (State-Action-Reward)** pattern:
 
 ```python
-from orbiter.train import TrajectoryItem
+from exo.train import TrajectoryItem
 
 item = TrajectoryItem(
     state="The user asked about Python decorators",
@@ -41,7 +41,7 @@ item = TrajectoryItem(
 Collects and manages trajectory items:
 
 ```python
-from orbiter.train import TrajectoryDataset
+from exo.train import TrajectoryDataset
 
 dataset = TrajectoryDataset()
 
@@ -63,7 +63,7 @@ dataset.export_csv("trajectories.csv")
 Customize how trajectories are collected and processed:
 
 ```python
-from orbiter.train import TrajectoryStrategy
+from exo.train import TrajectoryStrategy
 
 class FilteredStrategy(TrajectoryStrategy):
     """Only keep high-reward trajectories."""
@@ -91,7 +91,7 @@ The synthesis module generates and augments training data:
 ### Pipeline-Based Synthesis
 
 ```python
-from orbiter.train import SynthesisPipeline, SynthesisConfig, DataSynthesiser
+from exo.train import SynthesisPipeline, SynthesisConfig, DataSynthesiser
 
 config = SynthesisConfig(
     target_size=1000,
@@ -110,7 +110,7 @@ print(f"Filtered: {result.filtered_count}")
 ### Template-Based Synthesis
 
 ```python
-from orbiter.train import TemplateSynthesiser
+from exo.train import TemplateSynthesiser
 
 synthesiser = TemplateSynthesiser(
     templates=[
@@ -133,7 +133,7 @@ items = await synthesiser.generate(count=50)
 Built-in augmentation utilities:
 
 ```python
-from orbiter.train import (
+from exo.train import (
     augment_add_noise,
     augment_swap_io,
     filter_by_score,
@@ -162,7 +162,7 @@ train, val, test = split_dataset(data, ratios=[0.8, 0.1, 0.1])
 The `Trainer` ABC defines a three-phase lifecycle: validation, training, and evaluation:
 
 ```python
-from orbiter.train import Trainer, TrainConfig, TrainerState, TrainMetrics
+from exo.train import Trainer, TrainConfig, TrainerState, TrainMetrics
 
 class MyTrainer(Trainer):
     async def check_agent(self) -> bool:
@@ -195,7 +195,7 @@ class MyTrainer(Trainer):
 ### TrainConfig
 
 ```python
-from orbiter.train import TrainConfig
+from exo.train import TrainConfig
 
 config = TrainConfig(
     epochs=10,
@@ -226,7 +226,7 @@ Tracks training progress:
 The evolution module implements multi-epoch iterative improvement:
 
 ```python
-from orbiter.train import EvolutionPipeline, EvolutionConfig, EvolutionStrategy
+from exo.train import EvolutionPipeline, EvolutionConfig, EvolutionStrategy
 
 config = EvolutionConfig(
     epochs=5,
@@ -272,7 +272,7 @@ print(f"Epochs completed: {result.epochs_completed}")
 The VeRL module provides RLHF training with PPO and GRPO algorithms:
 
 ```python
-from orbiter.train import VeRLTrainer, VeRLConfig, RewardSpec, VeRLAlgorithm
+from exo.train import VeRLTrainer, VeRLConfig, RewardSpec, VeRLAlgorithm
 
 config = VeRLConfig(
     algorithm=VeRLAlgorithm.PPO,
@@ -322,27 +322,27 @@ rewards = [
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `TrajectoryItem` | `orbiter.train` | SAR data point: `state`, `action`, `reward` |
-| `TrajectoryDataset` | `orbiter.train` | Collect and export trajectory data |
-| `TrajectoryStrategy` | `orbiter.train` | ABC for trajectory filtering/processing |
-| `DefaultStrategy` | `orbiter.train` | Accept-all default strategy |
-| `TrainConfig` | `orbiter.train` | Training hyperparameters |
-| `Trainer` | `orbiter.train` | ABC for training lifecycle |
-| `TrainerState` | `orbiter.train` | Training state machine |
-| `TrainMetrics` | `orbiter.train` | Training metric results |
-| `SynthesisConfig` | `orbiter.train` | Data synthesis configuration |
-| `SynthesisPipeline` | `orbiter.train` | Multi-step synthesis pipeline |
-| `DataSynthesiser` | `orbiter.train` | ABC for data generators |
-| `TemplateSynthesiser` | `orbiter.train` | Template-based data generation |
-| `EvolutionConfig` | `orbiter.train` | Evolution hyperparameters |
-| `EvolutionPipeline` | `orbiter.train` | Multi-epoch evolutionary optimization |
-| `EvolutionStrategy` | `orbiter.train` | ABC for evaluate/select/mutate |
-| `VeRLConfig` | `orbiter.train` | VeRL training configuration |
-| `VeRLTrainer` | `orbiter.train` | RLHF trainer (PPO/GRPO) |
-| `VeRLAlgorithm` | `orbiter.train` | Enum: `PPO`, `GRPO` |
-| `RewardSpec` | `orbiter.train` | Named, weighted reward function |
-| `augment_add_noise` | `orbiter.train` | Add noise augmentation |
-| `augment_swap_io` | `orbiter.train` | Swap input/output augmentation |
-| `filter_by_score` | `orbiter.train` | Filter by minimum score |
-| `deduplicate` | `orbiter.train` | Remove near-duplicates |
-| `split_dataset` | `orbiter.train` | Split into train/val/test |
+| `TrajectoryItem` | `exo.train` | SAR data point: `state`, `action`, `reward` |
+| `TrajectoryDataset` | `exo.train` | Collect and export trajectory data |
+| `TrajectoryStrategy` | `exo.train` | ABC for trajectory filtering/processing |
+| `DefaultStrategy` | `exo.train` | Accept-all default strategy |
+| `TrainConfig` | `exo.train` | Training hyperparameters |
+| `Trainer` | `exo.train` | ABC for training lifecycle |
+| `TrainerState` | `exo.train` | Training state machine |
+| `TrainMetrics` | `exo.train` | Training metric results |
+| `SynthesisConfig` | `exo.train` | Data synthesis configuration |
+| `SynthesisPipeline` | `exo.train` | Multi-step synthesis pipeline |
+| `DataSynthesiser` | `exo.train` | ABC for data generators |
+| `TemplateSynthesiser` | `exo.train` | Template-based data generation |
+| `EvolutionConfig` | `exo.train` | Evolution hyperparameters |
+| `EvolutionPipeline` | `exo.train` | Multi-epoch evolutionary optimization |
+| `EvolutionStrategy` | `exo.train` | ABC for evaluate/select/mutate |
+| `VeRLConfig` | `exo.train` | VeRL training configuration |
+| `VeRLTrainer` | `exo.train` | RLHF trainer (PPO/GRPO) |
+| `VeRLAlgorithm` | `exo.train` | Enum: `PPO`, `GRPO` |
+| `RewardSpec` | `exo.train` | Named, weighted reward function |
+| `augment_add_noise` | `exo.train` | Add noise augmentation |
+| `augment_swap_io` | `exo.train` | Swap input/output augmentation |
+| `filter_by_score` | `exo.train` | Filter by minimum score |
+| `deduplicate` | `exo.train` | Remove near-duplicates |
+| `split_dataset` | `exo.train` | Split into train/val/test |

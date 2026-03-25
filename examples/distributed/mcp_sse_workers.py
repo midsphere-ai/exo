@@ -1,4 +1,4 @@
-"""SSE MCP servers on distributed workers — Orbiter demo.
+"""SSE MCP servers on distributed workers — Exo demo.
 
 Demonstrates how an agent with SSE-based MCP tools is serialized,
 submitted to a distributed worker queue, and automatically reconnects
@@ -21,12 +21,12 @@ Prerequisites:
     #   Or any SSE-compatible MCP server listening on a URL.
 
     # Terminal 3 — start a worker
-    export ORBITER_REDIS_URL=redis://localhost:6379
+    export EXO_REDIS_URL=redis://localhost:6379
     export OPENAI_API_KEY=sk-...
-    orbiter start worker
+    exo start worker
 
     # Terminal 4 — run this script
-    export ORBITER_REDIS_URL=redis://localhost:6379
+    export EXO_REDIS_URL=redis://localhost:6379
     export OPENAI_API_KEY=sk-...
     uv run python examples/distributed/mcp_sse_workers.py
 
@@ -45,11 +45,11 @@ import asyncio
 import json
 import os
 
-from orbiter import Agent, tool
-from orbiter.distributed import distributed  # pyright: ignore[reportMissingImports]
-from orbiter.mcp.client import MCPClient, MCPServerConfig  # pyright: ignore[reportMissingImports]
-from orbiter.mcp.tools import load_tools_from_client  # pyright: ignore[reportMissingImports]
-from orbiter.types import (
+from exo import Agent, tool
+from exo.distributed import distributed  # pyright: ignore[reportMissingImports]
+from exo.mcp.client import MCPClient, MCPServerConfig  # pyright: ignore[reportMissingImports]
+from exo.mcp.tools import load_tools_from_client  # pyright: ignore[reportMissingImports]
+from exo.types import (
     ErrorEvent,
     StatusEvent,
     StepEvent,
@@ -140,7 +140,7 @@ async def build_agent() -> Agent:
 
 def _verify_serialization(mcp_tools: list) -> None:
     """Sanity-check that MCP tools survive serialization round-trip."""
-    from orbiter.agent import _deserialize_tool, _serialize_tool
+    from exo.agent import _deserialize_tool, _serialize_tool
 
     for t in mcp_tools:
         serialized = _serialize_tool(t)

@@ -1,9 +1,9 @@
-# orbiter_cli.batch
+# exo_cli.batch
 
-Batch execution for Orbiter CLI. Loads inputs from JSON, CSV, or JSONL files and runs an agent against each input concurrently with configurable parallelism.
+Batch execution for Exo CLI. Loads inputs from JSON, CSV, or JSONL files and runs an agent against each input concurrently with configurable parallelism.
 
 ```python
-from orbiter_cli.batch import (
+from exo_cli.batch import (
     BatchError,
     BatchItem,
     BatchResult,
@@ -136,7 +136,7 @@ Load batch items from a file. Auto-detects format from file extension if `fmt` i
 ### Example
 
 ```python
-from orbiter_cli import load_batch_items
+from exo_cli import load_batch_items
 
 # Load from JSONL (auto-detected)
 items = load_batch_items("inputs.jsonl")
@@ -180,7 +180,7 @@ Execute an agent against multiple inputs concurrently. Uses `asyncio.Semaphore` 
 ### Example
 
 ```python
-from orbiter_cli import load_batch_items, batch_execute
+from exo_cli import load_batch_items, batch_execute
 
 items = load_batch_items("questions.jsonl")
 result = await batch_execute(my_agent, items, concurrency=8, timeout=30.0)
@@ -222,7 +222,7 @@ Serialize batch results to CSV string with columns: `id`, `success`, `output`, `
 ### Example
 
 ```python
-from orbiter_cli import batch_execute, results_to_jsonl, results_to_csv
+from exo_cli import batch_execute, results_to_jsonl, results_to_csv
 
 result = await batch_execute(agent, items)
 

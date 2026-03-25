@@ -1,9 +1,9 @@
-# Agent Rails — agent-core to Orbiter Mapping
+# Agent Rails — agent-core to Exo Mapping
 
 **Epic:** 6 — Typed Agent Rails
 **Date:** 2026-03-10
 
-This document maps agent-core's (openJiuwen) rail system to Orbiter's typed
+This document maps agent-core's (openJiuwen) rail system to Exo's typed
 rails, helping contributors familiar with either framework navigate both.
 
 ---
@@ -76,19 +76,19 @@ downstream ones.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's rail system is in `packages/orbiter-core/src/orbiter/` across two
+Exo's rail system is in `packages/exo-core/src/exo/` across two
 modules: `rail.py` and `rail_types.py`. It extends (not replaces) the existing
 `HookManager` system.
 
 ### Concept Mapping
 
-| Agent-Core Concept | Orbiter Counterpart | Notes |
+| Agent-Core Concept | Exo Counterpart | Notes |
 |-------------------|---------------------|-------|
-| `AgentCallbackEvent` (10 events) | `HookPoint` enum (7 events) | Orbiter consolidates exception events into `ERROR`; no `ON_HANDOFF` yet |
+| `AgentCallbackEvent` (10 events) | `HookPoint` enum (7 events) | Exo consolidates exception events into `ERROR`; no `ON_HANDOFF` yet |
 | `AgentRail` ABC | `Rail` ABC | Same pattern: `name`, `priority`, abstract `handle()` |
-| `@rail` decorator | *(no decorator)* | Orbiter uses class-based rails only; subclass `Rail` directly |
+| `@rail` decorator | *(no decorator)* | Exo uses class-based rails only; subclass `Rail` directly |
 | `RailResult` enum | `RailAction` StrEnum | Same 4 values: `CONTINUE`, `SKIP`, `RETRY`, `ABORT` |
 | `context` dict (untyped) | `RailContext` Pydantic model | Typed `inputs` field with event-specific model |
 | Event-specific data (flat dict keys) | Typed input models | `InvokeInputs`, `ModelCallInputs`, `ToolCallInputs` |
@@ -96,11 +96,11 @@ modules: `rail.py` and `rail_types.py`. It extends (not replaces) the existing
 | Rail manager (internal) | `RailManager` class | Explicit class with `add()`, `remove()`, `run()`, `hook_for()` |
 | Priority ordering | Priority ordering | Identical: ascending sort, lower = first, default 50 |
 | Retry parameters | `RetryRequest` dataclass | Frozen dataclass with `delay`, `max_retries`, `reason` |
-| Rail abort exception | `RailAbortError` | Inherits from `OrbiterError`; includes `rail_name` and `reason` |
+| Rail abort exception | `RailAbortError` | Inherits from `ExoError`; includes `rail_name` and `reason` |
 
 ### Lifecycle Event Mapping
 
-| Agent-Core Event | Orbiter HookPoint | Input Model |
+| Agent-Core Event | Exo HookPoint | Input Model |
 |-----------------|-------------------|-------------|
 | `ON_AGENT_START` | `HookPoint.START` | `InvokeInputs` |
 | `ON_AGENT_END` | `HookPoint.FINISHED` | `InvokeInputs` |
@@ -115,7 +115,7 @@ modules: `rail.py` and `rail_types.py`. It extends (not replaces) the existing
 
 ### Integration with HookManager
 
-Unlike agent-core where rails are a standalone system, Orbiter rails **extend
+Unlike agent-core where rails are a standalone system, Exo rails **extend
 the existing hook system**:
 
 1. `RailManager` registers itself as a hook on `HookManager` via `hook_for()`.
@@ -142,12 +142,12 @@ async def block_rm(event, context):
 agent = Agent(name="assistant", rails=[block_rm])
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.hooks import HookPoint
-from orbiter.rail import Rail, RailAction
-from orbiter.rail_types import RailContext, ToolCallInputs
+from exo.hooks import HookPoint
+from exo.rail import Rail, RailAction
+from exo.rail_types import RailContext, ToolCallInputs
 
 
 class BlockDangerousTool(Rail):
@@ -185,11 +185,11 @@ async def rate_logger(event, context):
     return RailResult.CONTINUE
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.rail import Rail, RailAction
-from orbiter.rail_types import RailContext
+from exo.rail import Rail, RailAction
+from exo.rail_types import RailContext
 
 
 class RateCounterRail(Rail):
@@ -224,11 +224,11 @@ class RateLoggerRail(Rail):
 agent = Agent(name="my_agent", rails=[block_rm, rate_counter, rate_logger])
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.agent import Agent
-from orbiter.rail import Rail
+from exo.agent import Agent
+from exo.rail import Rail
 
 # Rails are passed as a list — RailManager is created automatically
 agent = Agent(
@@ -242,8 +242,8 @@ agent = Agent(
 )
 
 # Equivalent manual setup (if you need fine-grained control):
-from orbiter.hooks import HookPoint
-from orbiter.rail import RailManager
+from exo.hooks import HookPoint
+from exo.rail import RailManager
 
 manager = RailManager()
 manager.add(BlockDangerousTool("rm_rf"))
@@ -257,21 +257,21 @@ for point in HookPoint:
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import |
+| Agent-Core Path | Exo Import |
 |----------------|---------------|
-| `rail.base.AgentCallbackEvent` | `orbiter.hooks.HookPoint` |
-| `rail.base.AgentRail` | `orbiter.rail.Rail` |
-| `rail.base.RailResult` | `orbiter.rail.RailAction` |
-| `rail.base.RailResult.CONTINUE` | `orbiter.rail.RailAction.CONTINUE` |
-| `rail.base.RailResult.SKIP` | `orbiter.rail.RailAction.SKIP` |
-| `rail.base.RailResult.RETRY` | `orbiter.rail.RailAction.RETRY` |
-| `rail.base.RailResult.ABORT` | `orbiter.rail.RailAction.ABORT` |
+| `rail.base.AgentCallbackEvent` | `exo.hooks.HookPoint` |
+| `rail.base.AgentRail` | `exo.rail.Rail` |
+| `rail.base.RailResult` | `exo.rail.RailAction` |
+| `rail.base.RailResult.CONTINUE` | `exo.rail.RailAction.CONTINUE` |
+| `rail.base.RailResult.SKIP` | `exo.rail.RailAction.SKIP` |
+| `rail.base.RailResult.RETRY` | `exo.rail.RailAction.RETRY` |
+| `rail.base.RailResult.ABORT` | `exo.rail.RailAction.ABORT` |
 | `rail.base.@rail` decorator | *(removed — subclass `Rail` directly)* |
-| `rail.base.RetryConfig` | `orbiter.rail.RetryRequest` |
-| `rail.base.RailAbortException` | `orbiter.rail.RailAbortError` |
-| `rail.manager.RailManager` | `orbiter.rail.RailManager` |
-| Event context dict | `orbiter.rail_types.RailContext` |
+| `rail.base.RetryConfig` | `exo.rail.RetryRequest` |
+| `rail.base.RailAbortException` | `exo.rail.RailAbortError` |
+| `rail.manager.RailManager` | `exo.rail.RailManager` |
+| Event context dict | `exo.rail_types.RailContext` |
 | `context["extra"]` | `RailContext.extra` |
-| *(untyped event data)* | `orbiter.rail_types.InvokeInputs` |
-| *(untyped event data)* | `orbiter.rail_types.ModelCallInputs` |
-| *(untyped event data)* | `orbiter.rail_types.ToolCallInputs` |
+| *(untyped event data)* | `exo.rail_types.InvokeInputs` |
+| *(untyped event data)* | `exo.rail_types.ModelCallInputs` |
+| *(untyped event data)* | `exo.rail_types.ToolCallInputs` |

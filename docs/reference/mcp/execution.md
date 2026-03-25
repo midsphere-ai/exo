@@ -1,9 +1,9 @@
-# orbiter.mcp.execution
+# exo.mcp.execution
 
 MCP execution utilities -- retry logic, config loading, and environment variable substitution.
 
 ```python
-from orbiter.mcp.execution import (
+from exo.mcp.execution import (
     MCPExecutionError,
     call_tool_with_retry,
     load_mcp_client,

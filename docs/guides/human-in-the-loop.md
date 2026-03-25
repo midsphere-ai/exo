@@ -7,9 +7,9 @@ Human-in-the-loop (HITL) allows agents to pause execution and request input from
 Add a `HumanInputTool` to your agent's tool list:
 
 ```python
-from orbiter.agent import Agent
-from orbiter.human import HumanInputTool
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.human import HumanInputTool
+from exo.runner import run
 
 agent = Agent(
     name="careful_agent",
@@ -88,8 +88,8 @@ When choices are provided and the human enters an invalid value, `ConsoleHandler
 Set a timeout to prevent indefinite blocking:
 
 ```python
-from orbiter.human import HumanInputTool
-from orbiter.tool import ToolError
+from exo.human import HumanInputTool
+from exo.tool import ToolError
 
 tool = HumanInputTool(timeout=30.0)  # 30-second timeout
 
@@ -102,7 +102,7 @@ tool = HumanInputTool(timeout=30.0)  # 30-second timeout
 The `HumanInputHandler` abstract base class defines the interface for receiving human input. Implement it to integrate with any input mechanism.
 
 ```python
-from orbiter.human import HumanInputHandler
+from exo.human import HumanInputHandler
 
 class HumanInputHandler(ABC):
     @abstractmethod
@@ -127,7 +127,7 @@ class HumanInputHandler(ABC):
 The built-in `ConsoleHandler` reads from stdin and writes prompts to stderr:
 
 ```python
-from orbiter.human import ConsoleHandler
+from exo.human import ConsoleHandler
 
 handler = ConsoleHandler()
 response = await handler.get_input(
@@ -148,7 +148,7 @@ The `ConsoleHandler` runs blocking stdin reads in a thread via `asyncio.to_threa
 ### Web UI Handler
 
 ```python
-from orbiter.human import HumanInputHandler
+from exo.human import HumanInputHandler
 
 class WebUIHandler(HumanInputHandler):
     def __init__(self, websocket):
@@ -254,6 +254,6 @@ agent = Agent(
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `HumanInputTool` | `orbiter.human` | Tool that pauses for human input |
-| `HumanInputHandler` | `orbiter.human` | ABC for custom input mechanisms |
-| `ConsoleHandler` | `orbiter.human` | Built-in stdin/stderr handler |
+| `HumanInputTool` | `exo.human` | Tool that pauses for human input |
+| `HumanInputHandler` | `exo.human` | ABC for custom input mechanisms |
+| `ConsoleHandler` | `exo.human` | Built-in stdin/stderr handler |

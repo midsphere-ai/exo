@@ -3,7 +3,7 @@
 Tool Call Handler
 
 Handles tool call execution, type conversion, and formatting.
-Also manages sub-agent tool creation and execution using Orbiter's Tool system.
+Also manages sub-agent tool creation and execution using Exo's Tool system.
 """
 
 import asyncio
@@ -11,7 +11,7 @@ import json
 import logging
 from typing import Any
 
-from orbiter.tool import Tool
+from exo.tool import Tool
 
 logger = logging.getLogger(__name__)
 

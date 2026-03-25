@@ -6,17 +6,17 @@ Date: 2026-03-09
 
 ## Goal
 
-Define the current gap between Orbiter's local execution contract and the current Temporal durable-execution path, then turn that gap into a small-slice closure order. Temporal is allowed to add durability. It is not allowed to silently degrade streaming, tool visibility, progress events, memory/context behavior, planning behavior, or cancellation semantics.
+Define the current gap between Exo's local execution contract and the current Temporal durable-execution path, then turn that gap into a small-slice closure order. Temporal is allowed to add durability. It is not allowed to silently degrade streaming, tool visibility, progress events, memory/context behavior, planning behavior, or cancellation semantics.
 
 ## Current Inventory And Exact Touchpoints
 
 | Surface | Current touchpoints | What exists today |
 | --- | --- | --- |
-| Core local execution contract | `packages/orbiter-core/src/orbiter/runner.py`, `packages/orbiter-core/src/orbiter/agent.py`, `packages/orbiter-core/src/orbiter/types.py` | `run.stream()` is the richest observable contract today: text deltas, tool calls/results, usage, status, MCP progress, context events, and injected-message events. |
-| Distributed local worker path | `packages/orbiter-distributed/src/orbiter/distributed/worker.py`, `client.py`, `memory.py`, `events.py` | The local worker rebuilds agents, hydrates task messages and optional memory, then republishes `run.stream()` events through Redis. |
-| Temporal path | `packages/orbiter-distributed/src/orbiter/distributed/temporal.py` | The Temporal workflow/activity executes the agent internally but returns only final text to the worker. |
-| Planning/context primitives | `packages/orbiter-context/src/orbiter/context/tools.py` and `packages/orbiter-core/src/orbiter/agent.py` | Planning is currently limited to context-bound todo tools. There is no dedicated planner pre-pass yet. |
-| Evidence tests | `packages/orbiter-core/tests/test_runner.py`, `packages/orbiter-mcp/tests/test_progress.py`, `packages/orbiter-distributed/tests/test_worker.py`, `packages/orbiter-distributed/tests/test_temporal.py`, `packages/orbiter-distributed/tests/test_events.py`, `packages/orbiter-distributed/tests/test_cancel.py` | The tests document the real event ordering and the current Temporal assumptions better than the guides alone. |
+| Core local execution contract | `packages/exo-core/src/exo/runner.py`, `packages/exo-core/src/exo/agent.py`, `packages/exo-core/src/exo/types.py` | `run.stream()` is the richest observable contract today: text deltas, tool calls/results, usage, status, MCP progress, context events, and injected-message events. |
+| Distributed local worker path | `packages/exo-distributed/src/exo/distributed/worker.py`, `client.py`, `memory.py`, `events.py` | The local worker rebuilds agents, hydrates task messages and optional memory, then republishes `run.stream()` events through Redis. |
+| Temporal path | `packages/exo-distributed/src/exo/distributed/temporal.py` | The Temporal workflow/activity executes the agent internally but returns only final text to the worker. |
+| Planning/context primitives | `packages/exo-context/src/exo/context/tools.py` and `packages/exo-core/src/exo/agent.py` | Planning is currently limited to context-bound todo tools. There is no dedicated planner pre-pass yet. |
+| Evidence tests | `packages/exo-core/tests/test_runner.py`, `packages/exo-mcp/tests/test_progress.py`, `packages/exo-distributed/tests/test_worker.py`, `packages/exo-distributed/tests/test_temporal.py`, `packages/exo-distributed/tests/test_events.py`, `packages/exo-distributed/tests/test_cancel.py` | The tests document the real event ordering and the current Temporal assumptions better than the guides alone. |
 
 ## What The Local Baseline Does Today
 
@@ -24,7 +24,7 @@ Define the current gap between Orbiter's local execution contract and the curren
 
 - `run.stream(..., detailed=True)` emits a structured event sequence from `runner._stream()`: `StatusEvent(starting)`, `StepEvent(started)`, text/tool events, `UsageEvent`, `StepEvent(completed)`, and terminal status.
 - Tool rounds emit `ToolCallEvent` after the LLM round finishes, then `ToolResultEvent` after tool execution.
-- `packages/orbiter-core/tests/test_runner.py` fixes the detailed ordering contract for both text-only and tool-using turns.
+- `packages/exo-core/tests/test_runner.py` fixes the detailed ordering contract for both text-only and tool-using turns.
 
 ### 2. Tool Execution
 
@@ -36,17 +36,17 @@ Define the current gap between Orbiter's local execution contract and the curren
 
 - MCP tools queue progress notifications during execution.
 - `runner._stream()` drains those queues after tool execution and yields `MCPProgressEvent` before `ToolResultEvent`.
-- `packages/orbiter-mcp/tests/test_progress.py` and `tests/integration/test_mcp_progress_stream.py` lock that ordering in.
+- `packages/exo-mcp/tests/test_progress.py` and `tests/integration/test_mcp_progress_stream.py` lock that ordering in.
 
 ### 4. Memory, Context, And Planning State
 
 - Core local execution loads persisted history through `_memory_persistence`, stores the new user turn, applies `_apply_context_windowing()`, and injects long-term knowledge before the model call.
 - The distributed local worker adds another layer of runtime setup: it deserializes `task.messages`, hydrates `task.metadata["memory"]`, loads prior memory items, and then calls `run.stream()`.
-- Planning today is not a separate planner phase. The only current planning surface is the auto-loaded todo tools from `orbiter-context`, which operate on the live context state.
+- Planning today is not a separate planner phase. The only current planning surface is the auto-loaded todo tools from `exo-context`, which operate on the live context state.
 
 ### 5. Cancellation
 
-- The local worker listens on `orbiter:cancel:{task_id}` and flips a `CancellationToken`.
+- The local worker listens on `exo:cancel:{task_id}` and flips a `CancellationToken`.
 - `Worker._run_agent()` checks that token between yielded events, publishes a terminal `StatusEvent(status="cancelled")`, and stops forwarding more events.
 - Cancellation is cooperative, not preemptive: a long tool call can still run until it yields control.
 
@@ -172,7 +172,7 @@ This is the expected trace for both local execution and a parity-correct Tempora
 Current state:
 
 - Direct local `run.stream()` already follows this trace.
-- The distributed transport cannot yet replay `mcp_progress`, `context`, or `message_injected` because `packages/orbiter-distributed/src/orbiter/distributed/events.py` does not deserialize those event types.
+- The distributed transport cannot yet replay `mcp_progress`, `context`, or `message_injected` because `packages/exo-distributed/src/exo/distributed/events.py` does not deserialize those event types.
 - The current Temporal path publishes none of the thirteen events externally and returns only final output text.
 
 ## Parity Gap Matrix
@@ -265,7 +265,7 @@ Why last:
 
 ## Implementation Guidance
 
-- Do not add a separate Temporal-only event model. Reuse `orbiter.types.StreamEvent`.
+- Do not add a separate Temporal-only event model. Reuse `exo.types.StreamEvent`.
 - Do not duplicate worker setup logic in both `worker.py` and `temporal.py`; factor it once and test both backends against it.
 - Treat "no event published" as a bug, not as an acceptable optimization.
 - Keep parity tests at the task-handle boundary, not just inside the Temporal activity, so the distributed transport is covered too.

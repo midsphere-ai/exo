@@ -1,10 +1,10 @@
-# Memory System — agent-core to Orbiter Mapping
+# Memory System — agent-core to Exo Mapping
 
 **Epic:** 5 — Enhanced Memory System
 **Date:** 2026-03-10
 
-This document maps agent-core's (openJiuwen) 5-type memory system to Orbiter's
-enhanced `orbiter-memory` package, covering encryption, deduplication, taxonomy,
+This document maps agent-core's (openJiuwen) 5-type memory system to Exo's
+enhanced `exo-memory` package, covering encryption, deduplication, taxonomy,
 migration, and unified search.
 
 ---
@@ -55,16 +55,16 @@ returns results sorted by recency.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's memory system lives in the `orbiter-memory` package
-(`packages/orbiter-memory/`) and implements the same five-type taxonomy,
+Exo's memory system lives in the `exo-memory` package
+(`packages/exo-memory/`) and implements the same five-type taxonomy,
 encryption, deduplication, and migration capabilities — restructured around
 a `MemoryStore` protocol for pluggable backends.
 
 ### Architecture Difference
 
-Where agent-core uses a monolithic memory manager, Orbiter separates concerns
+Where agent-core uses a monolithic memory manager, Exo separates concerns
 into composable components behind a protocol interface:
 
 ```python
@@ -73,8 +73,8 @@ memory_manager = MemoryManager(config, encryption_key=key)
 await memory_manager.store(content, memory_type=MemoryType.SEMANTIC_MEMORY)
 await memory_manager.search("query")
 
-# Orbiter: composable protocol-based
-from orbiter.memory import (
+# Exo: composable protocol-based
+from exo.memory import (
     ShortTermMemory, EncryptedMemoryStore, MemUpdateChecker,
     SearchManager, MemoryCategory, HumanMemory
 )
@@ -87,7 +87,7 @@ search = SearchManager(stores=[encrypted])
 
 ### Component Mapping
 
-| Agent-Core Component | Orbiter Equivalent | Notes |
+| Agent-Core Component | Exo Equivalent | Notes |
 |---------------------|-------------------|-------|
 | `MemoryType` enum | `MemoryCategory` enum | Same 5 types + `CONVERSATION`; uses `StrEnum` |
 | `MemoryItem` (single class) | `MemoryItem` typed hierarchy | `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory` subclasses |
@@ -101,9 +101,9 @@ search = SearchManager(stores=[encrypted])
 | *(no equivalent)* | `MemoryEventEmitter` | Wraps stores to emit `memory:added`, `memory:searched`, `memory:cleared` |
 | *(no equivalent)* | Evolution strategies | `ACEStrategy`, `ReasoningBankStrategy`, `ReMeStrategy` — composable via `>>` and `\|` |
 
-### Key Orbiter Additions Beyond Agent-Core
+### Key Exo Additions Beyond Agent-Core
 
-**Typed Memory Hierarchy** — Instead of a single item class, Orbiter provides
+**Typed Memory Hierarchy** — Instead of a single item class, Exo provides
 specialized subclasses with role-specific fields:
 
 | Subclass | `memory_type` | Extra Fields |
@@ -142,12 +142,12 @@ await memory_manager.store(
     memory_type=MemoryType.USER_PROFILE,
 )
 
-# Orbiter
-from orbiter.memory import (
+# Exo
+from exo.memory import (
     EncryptedMemoryStore, ShortTermMemory, HumanMemory,
     MemoryCategory, MemoryMetadata,
 )
-from orbiter.memory.encrypted import derive_key
+from exo.memory.encrypted import derive_key
 
 key, salt = derive_key("my-password")
 store = ShortTermMemory()
@@ -176,8 +176,8 @@ if result.decision == "add":
 elif result.decision == "merge":
     await memory_manager.update(result.merged_content)
 
-# Orbiter
-from orbiter.memory import MemUpdateChecker, UpdateDecision
+# Exo
+from exo.memory import MemUpdateChecker, UpdateDecision
 
 checker = MemUpdateChecker(checker=my_llm_call, top_k=5)
 result = await checker.check(new_item, existing_items)
@@ -199,8 +199,8 @@ elif result.decision == UpdateDecision.MERGE:
 # Agent-core
 # Migrations run automatically on initialization
 
-# Orbiter
-from orbiter.memory.migrations import Migration, MigrationRegistry, run_migrations
+# Exo
+from exo.memory.migrations import Migration, MigrationRegistry, run_migrations
 
 registry = MigrationRegistry()
 registry.register(Migration(
@@ -219,8 +219,8 @@ applied = await run_migrations(sqlite_store, registry)
 # Agent-core
 results = await memory_manager.search("dark mode preference")
 
-# Orbiter
-from orbiter.memory import SearchManager, MemoryCategory
+# Exo
+from exo.memory import SearchManager, MemoryCategory
 
 manager = SearchManager(stores=[short_term, long_term, vector_store])
 results = await manager.search(
@@ -235,31 +235,31 @@ results = await manager.search(
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.memory.MemoryType` | `orbiter.memory.MemoryCategory` | 5-type taxonomy enum (`USER_PROFILE`, `SEMANTIC`, `EPISODIC`, `VARIABLE`, `SUMMARY`) |
-| `openjiuwen.core.memory.MemoryItem` | `orbiter.memory.MemoryItem` | Base class with typed subclasses (`SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`) |
-| *(AES-256 in MemoryManager)* | `orbiter.memory.EncryptedMemoryStore` | AES-256-GCM wrapper for any `MemoryStore`; encrypts `content` field only |
-| *(PBKDF2 key derivation)* | `orbiter.memory.encrypted.derive_key` | PBKDF2-HMAC-SHA256, 480k iterations, returns `(key, salt)` |
-| `openjiuwen.core.memory.MemUpdateChecker` | `orbiter.memory.MemUpdateChecker` | LLM-based dedup returning `MergeResult` with `UpdateDecision` |
-| *(migration in MemoryManager)* | `orbiter.memory.migrations.run_migrations` | Applies pending `Migration` objects from a `MigrationRegistry` |
-| *(migration tracking)* | `orbiter.memory.migrations.MigrationRegistry` | Ordered registry with `register()` and `list_pending()` |
-| `openjiuwen.core.memory.SearchManager` | `orbiter.memory.SearchManager` | Parallel multi-store search with dedup and recency sort |
-| *(no equivalent)* | `orbiter.memory.MemoryStore` | `@runtime_checkable` async protocol: `add`, `get`, `search`, `clear` |
-| *(no equivalent)* | `orbiter.memory.MemoryStatus` | Lifecycle enum: `DRAFT`, `ACCEPTED`, `DISCARD` |
-| *(no equivalent)* | `orbiter.memory.MemoryMetadata` | Frozen Pydantic model for scoping (`user_id`, `session_id`, `task_id`, `agent_id`) |
-| *(no equivalent)* | `orbiter.memory.ShortTermMemory` | In-memory conversation store with scope-based windowing |
-| *(no equivalent)* | `orbiter.memory.long_term.MemoryOrchestrator` | Batches and coordinates async LLM extraction for long-term storage |
-| *(no equivalent)* | `orbiter.memory.events.MemoryEventEmitter` | Wraps stores to emit `memory:added`, `memory:searched`, `memory:cleared` |
-| *(no equivalent)* | `orbiter.memory.summary.SummaryConfig` | Threshold-based summarization triggers with `SummaryTemplate` presets |
-| *(no equivalent)* | `orbiter.memory.evolution.MemoryEvolutionStrategy` | ABC for memory transforms; composable via `>>` (sequential) and `\|` (parallel) |
-| *(no equivalent)* | `orbiter.memory.evolution.ACEStrategy` | Score-based memory quality tracking with pruning |
-| *(no equivalent)* | `orbiter.memory.evolution.ReasoningBankStrategy` | Structured entry storage with embedding-based recall |
-| *(no equivalent)* | `orbiter.memory.evolution.ReMeStrategy` | Reflection-based memory evolution |
-| *(no equivalent)* | `orbiter.memory.backends.sqlite.SQLiteMemoryStore` | SQLite backend with JSON metadata indexes |
-| *(no equivalent)* | `orbiter.memory.backends.postgres.PostgresMemoryStore` | Async Postgres backend via asyncpg |
-| *(no equivalent)* | `orbiter.memory.backends.vector.VectorMemoryStore` | Embedding-based similarity search backend |
+| `openjiuwen.core.memory.MemoryType` | `exo.memory.MemoryCategory` | 5-type taxonomy enum (`USER_PROFILE`, `SEMANTIC`, `EPISODIC`, `VARIABLE`, `SUMMARY`) |
+| `openjiuwen.core.memory.MemoryItem` | `exo.memory.MemoryItem` | Base class with typed subclasses (`SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`) |
+| *(AES-256 in MemoryManager)* | `exo.memory.EncryptedMemoryStore` | AES-256-GCM wrapper for any `MemoryStore`; encrypts `content` field only |
+| *(PBKDF2 key derivation)* | `exo.memory.encrypted.derive_key` | PBKDF2-HMAC-SHA256, 480k iterations, returns `(key, salt)` |
+| `openjiuwen.core.memory.MemUpdateChecker` | `exo.memory.MemUpdateChecker` | LLM-based dedup returning `MergeResult` with `UpdateDecision` |
+| *(migration in MemoryManager)* | `exo.memory.migrations.run_migrations` | Applies pending `Migration` objects from a `MigrationRegistry` |
+| *(migration tracking)* | `exo.memory.migrations.MigrationRegistry` | Ordered registry with `register()` and `list_pending()` |
+| `openjiuwen.core.memory.SearchManager` | `exo.memory.SearchManager` | Parallel multi-store search with dedup and recency sort |
+| *(no equivalent)* | `exo.memory.MemoryStore` | `@runtime_checkable` async protocol: `add`, `get`, `search`, `clear` |
+| *(no equivalent)* | `exo.memory.MemoryStatus` | Lifecycle enum: `DRAFT`, `ACCEPTED`, `DISCARD` |
+| *(no equivalent)* | `exo.memory.MemoryMetadata` | Frozen Pydantic model for scoping (`user_id`, `session_id`, `task_id`, `agent_id`) |
+| *(no equivalent)* | `exo.memory.ShortTermMemory` | In-memory conversation store with scope-based windowing |
+| *(no equivalent)* | `exo.memory.long_term.MemoryOrchestrator` | Batches and coordinates async LLM extraction for long-term storage |
+| *(no equivalent)* | `exo.memory.events.MemoryEventEmitter` | Wraps stores to emit `memory:added`, `memory:searched`, `memory:cleared` |
+| *(no equivalent)* | `exo.memory.summary.SummaryConfig` | Threshold-based summarization triggers with `SummaryTemplate` presets |
+| *(no equivalent)* | `exo.memory.evolution.MemoryEvolutionStrategy` | ABC for memory transforms; composable via `>>` (sequential) and `\|` (parallel) |
+| *(no equivalent)* | `exo.memory.evolution.ACEStrategy` | Score-based memory quality tracking with pruning |
+| *(no equivalent)* | `exo.memory.evolution.ReasoningBankStrategy` | Structured entry storage with embedding-based recall |
+| *(no equivalent)* | `exo.memory.evolution.ReMeStrategy` | Reflection-based memory evolution |
+| *(no equivalent)* | `exo.memory.backends.sqlite.SQLiteMemoryStore` | SQLite backend with JSON metadata indexes |
+| *(no equivalent)* | `exo.memory.backends.postgres.PostgresMemoryStore` | Async Postgres backend via asyncpg |
+| *(no equivalent)* | `exo.memory.backends.vector.VectorMemoryStore` | Embedding-based similarity search backend |
 
-All public symbols are re-exported from `orbiter.memory` (the package
-`__init__.py`), so `from orbiter.memory import EncryptedMemoryStore` works
+All public symbols are re-exported from `exo.memory` (the package
+`__init__.py`), so `from exo.memory import EncryptedMemoryStore` works
 as a convenience import.

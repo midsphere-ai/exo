@@ -9,7 +9,7 @@ Usage:
     uv run python examples/quickstart/hybrid_swarm.py
 """
 
-from orbiter import Agent, ParallelGroup, SerialGroup, Swarm, SwarmNode, run
+from exo import Agent, ParallelGroup, SerialGroup, Swarm, SwarmNode, run
 
 # --- Parallel research stage ------------------------------------------------
 # Two researchers run concurrently; their outputs are joined.

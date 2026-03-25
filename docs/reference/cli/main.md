@@ -1,16 +1,16 @@
-# orbiter_cli.main
+# exo_cli.main
 
-CLI entry point for the `orbiter` command. Supports agent/swarm execution from YAML config files with environment variable override, model selection, verbosity control, and streaming output.
+CLI entry point for the `exo` command. Supports agent/swarm execution from YAML config files with environment variable override, model selection, verbosity control, and streaming output.
 
 ```python
-from orbiter_cli.main import CLIError, app, find_config, load_config, resolve_config
+from exo_cli.main import CLIError, app, find_config, load_config, resolve_config
 ```
 
 Config file search order (first found wins):
 
 1. `--config` / `-c` flag (explicit path)
-2. `.orbiter.yaml` in current directory
-3. `orbiter.config.yaml` in current directory
+2. `.exo.yaml` in current directory
+3. `exo.config.yaml` in current directory
 
 ---
 
@@ -32,7 +32,7 @@ def find_config(directory: str | Path | None = None) -> Path | None
 
 Search *directory* (default: cwd) for a config file.
 
-Returns the first matching path or `None` if no config exists. Searches for `.orbiter.yaml` and `orbiter.config.yaml` in the given directory.
+Returns the first matching path or `None` if no config exists. Searches for `.exo.yaml` and `exo.config.yaml` in the given directory.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -43,7 +43,7 @@ Returns the first matching path or `None` if no config exists. Searches for `.or
 ### Example
 
 ```python
-from orbiter_cli import find_config
+from exo_cli import find_config
 
 # Auto-detect in cwd
 config_path = find_config()
@@ -62,7 +62,7 @@ if config_path:
 def load_config(path: str | Path) -> dict[str, Any]
 ```
 
-Load and validate a YAML config file. Delegates to `orbiter.loader.load_yaml` for variable substitution, then validates the top-level structure.
+Load and validate a YAML config file. Delegates to `exo.loader.load_yaml` for variable substitution, then validates the top-level structure.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -75,7 +75,7 @@ Load and validate a YAML config file. Delegates to `orbiter.loader.load_yaml` fo
 ### Example
 
 ```python
-from orbiter_cli import load_config
+from exo_cli import load_config
 
 config = load_config("agents.yaml")
 print(config.keys())
@@ -100,7 +100,7 @@ Resolve config from explicit path or auto-discovery. If `config_path` is provide
 ### Example
 
 ```python
-from orbiter_cli import resolve_config
+from exo_cli import resolve_config
 
 # Explicit path
 config = resolve_config("my_agents.yaml")
@@ -116,7 +116,7 @@ if config is None:
 ## app
 
 ```python
-app = typer.Typer(name="orbiter", help="Orbiter — multi-agent framework CLI.", no_args_is_help=True)
+app = typer.Typer(name="exo", help="Exo — multi-agent framework CLI.", no_args_is_help=True)
 ```
 
 The Typer CLI application instance. Register additional commands or groups on this object.
@@ -126,7 +126,7 @@ The Typer CLI application instance. Register additional commands or groups on th
 #### run
 
 ```
-orbiter run [OPTIONS] INPUT_TEXT
+exo run [OPTIONS] INPUT_TEXT
 ```
 
 Run an agent or swarm with the given input.
@@ -151,11 +151,11 @@ Run an agent or swarm with the given input.
 
 ```bash
 # Run with explicit config
-orbiter run --config agents.yaml "What is 2+2?"
+exo run --config agents.yaml "What is 2+2?"
 
 # Run with model override
-orbiter run -m openai:gpt-4o "Hello"
+exo run -m openai:gpt-4o "Hello"
 
 # Verbose streaming
-orbiter --verbose run --stream "Explain Python decorators"
+exo --verbose run --stream "Explain Python decorators"
 ```

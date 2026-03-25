@@ -1,29 +1,29 @@
 # Worker Setup and Scaling Guide
 
-This guide covers configuring, deploying, and scaling distributed workers for `orbiter-distributed`.
+This guide covers configuring, deploying, and scaling distributed workers for `exo-distributed`.
 
 ## Prerequisites
 
 - **Redis 7+** — Required for Redis Streams with consumer groups
-- **Python 3.11+** — Required by orbiter packages
-- **orbiter-distributed** — `pip install orbiter-distributed`
-- **orbiter-cli** (optional) — `pip install orbiter-cli` for the `orbiter` command
+- **Python 3.11+** — Required by exo packages
+- **exo-distributed** — `pip install exo-distributed`
+- **exo-cli** (optional) — `pip install exo-cli` for the `exo` command
 
 ## Starting a Worker
 
 ### Via CLI
 
 ```bash
-orbiter start worker --redis-url redis://localhost:6379
+exo start worker --redis-url redis://localhost:6379
 ```
 
 **Options:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--redis-url` | `ORBITER_REDIS_URL` env var | Redis connection URL |
+| `--redis-url` | `EXO_REDIS_URL` env var | Redis connection URL |
 | `--concurrency` | `1` | Number of concurrent task executions per worker process |
-| `--queue` | `orbiter:tasks` | Redis Streams queue name |
+| `--queue` | `exo:tasks` | Redis Streams queue name |
 | `--worker-id` | Auto-generated | Unique worker identifier (`{hostname}-{pid}-{random}`) |
 
 The startup banner displays the worker ID, masked Redis URL, queue name, and concurrency level.
@@ -32,12 +32,12 @@ The startup banner displays the worker ID, masked Redis URL, queue name, and con
 
 ```python
 import asyncio
-from orbiter.distributed.worker import Worker
+from exo.distributed.worker import Worker
 
 worker = Worker(
     "redis://localhost:6379",
     concurrency=4,
-    queue_name="orbiter:tasks",
+    queue_name="exo:tasks",
     heartbeat_ttl=30,
 )
 
@@ -51,7 +51,7 @@ asyncio.run(worker.start())
 | `redis_url` | `str` | (required) | Redis connection URL |
 | `worker_id` | `str \| None` | Auto-generated | Unique worker identifier |
 | `concurrency` | `int` | `1` | Concurrent task execution slots |
-| `queue_name` | `str` | `"orbiter:tasks"` | Redis Streams queue name |
+| `queue_name` | `str` | `"exo:tasks"` | Redis Streams queue name |
 | `heartbeat_ttl` | `int` | `30` | Heartbeat key TTL in seconds |
 | `executor` | `Literal["local", "temporal"]` | `"local"` | Execution backend |
 | `provider_factory` | `Callable[[str], Any] \| None` | `None` | Custom provider factory (receives model string, returns provider) |
@@ -74,8 +74,8 @@ The factory receives the model string (e.g., `"openai:gpt-4o"`) and must return 
 Override `on_task_done()` in a `Worker` subclass to run cleanup logic after every task:
 
 ```python
-from orbiter.distributed.worker import Worker
-from orbiter.distributed.models import TaskPayload, TaskStatus
+from exo.distributed.worker import Worker
+from exo.distributed.models import TaskPayload, TaskStatus
 
 class MyWorker(Worker):
     async def on_task_done(self, task, status, result, error):
@@ -126,13 +126,13 @@ handle = await distributed(
 4. Loads prior conversation history from the store and prepends it to the message list
 5. Tears down the store in the `finally` block (even on failure)
 
-This requires the `orbiter-memory` package: `pip install orbiter-distributed[memory]`.
+This requires the `exo-memory` package: `pip install exo-distributed[memory]`.
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ORBITER_REDIS_URL` | None | Default Redis URL when `--redis-url` is not provided |
+| `EXO_REDIS_URL` | None | Default Redis URL when `--redis-url` is not provided |
 | `TEMPORAL_HOST` | `localhost:7233` | Temporal server address (only for `executor="temporal"`) |
 | `TEMPORAL_NAMESPACE` | `default` | Temporal namespace (only for `executor="temporal"`) |
 
@@ -148,10 +148,10 @@ The `--concurrency` flag controls how many tasks a single worker process execute
 
 ```bash
 # Low concurrency for CPU-heavy agents
-orbiter start worker --concurrency 1
+exo start worker --concurrency 1
 
 # Higher concurrency for I/O-bound LLM agents
-orbiter start worker --concurrency 8
+exo start worker --concurrency 8
 ```
 
 **Horizontal vs. vertical scaling:**
@@ -168,10 +168,10 @@ Multiple worker processes can connect to the same Redis queue. Redis Streams con
 
 ```bash
 # Terminal 1
-orbiter start worker --redis-url redis://redis:6379 --concurrency 4
+exo start worker --redis-url redis://redis:6379 --concurrency 4
 
 # Terminal 2
-orbiter start worker --redis-url redis://redis:6379 --concurrency 4
+exo start worker --redis-url redis://redis:6379 --concurrency 4
 ```
 
 Each process auto-generates a unique worker ID (`{hostname}-{pid}-{random}`).
@@ -179,16 +179,16 @@ Each process auto-generates a unique worker ID (`{hostname}-{pid}-{random}`).
 ### Process manager (systemd)
 
 ```ini
-# /etc/systemd/system/orbiter-worker@.service
+# /etc/systemd/system/exo-worker@.service
 [Unit]
-Description=Orbiter Distributed Worker %i
+Description=Exo Distributed Worker %i
 After=network.target redis.service
 
 [Service]
 Type=simple
-User=orbiter
-Environment=ORBITER_REDIS_URL=redis://localhost:6379
-ExecStart=/usr/local/bin/orbiter start worker --concurrency 4
+User=exo
+Environment=EXO_REDIS_URL=redis://localhost:6379
+ExecStart=/usr/local/bin/exo start worker --concurrency 4
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
@@ -201,8 +201,8 @@ WantedBy=multi-user.target
 Start multiple instances:
 
 ```bash
-sudo systemctl enable --now orbiter-worker@1
-sudo systemctl enable --now orbiter-worker@2
+sudo systemctl enable --now exo-worker@1
+sudo systemctl enable --now exo-worker@2
 ```
 
 ## Graceful Shutdown
@@ -220,7 +220,7 @@ Press `Ctrl+C` or send `SIGTERM` to stop a worker cleanly. Avoid `SIGKILL` — i
 
 Workers publish health data to Redis every `heartbeat_ttl / 3` seconds (default: every 10 seconds).
 
-**Health data published to `orbiter:workers:{worker_id}` Redis hash:**
+**Health data published to `exo:workers:{worker_id}` Redis hash:**
 
 | Field | Description |
 |-------|-------------|
@@ -241,7 +241,7 @@ The heartbeat key has a TTL equal to `heartbeat_ttl` (default 30s). If a worker 
 
 ```bash
 # List all active workers
-orbiter worker list
+exo worker list
 
 # Output:
 # ┌────────────────────────┬────────┬──────────┬───────┬────────┬──────────────┬─────────────┬─────────────────────────┐
@@ -255,7 +255,7 @@ orbiter worker list
 **Via Python:**
 
 ```python
-from orbiter.distributed.health import get_worker_fleet_status, WorkerHealthCheck
+from exo.distributed.health import get_worker_fleet_status, WorkerHealthCheck
 
 # Fleet-wide status
 workers = await get_worker_fleet_status("redis://localhost:6379")
@@ -286,10 +286,10 @@ The `TaskBroker` supports automatic retries with `max_retries=3` by default.
 
 ```bash
 # Check retry count for a specific task
-orbiter task status <task_id>
+exo task status <task_id>
 
 # List all retrying tasks
-orbiter task list --status retrying
+exo task list --status retrying
 ```
 
 ## Execution Backends
@@ -299,7 +299,7 @@ orbiter task list --status retrying
 The worker reconstructs the agent from its serialized config and runs `run.stream()` directly. Suitable for most use cases.
 
 ```bash
-orbiter start worker --redis-url redis://localhost:6379
+exo start worker --redis-url redis://localhost:6379
 ```
 
 ### Temporal Execution (durable)
@@ -309,12 +309,12 @@ For tasks that must survive worker crashes, use the Temporal execution backend. 
 **Requirements:**
 
 - Temporal server running
-- `temporalio` installed: `pip install orbiter-distributed[temporal]`
+- `temporalio` installed: `pip install exo-distributed[temporal]`
 
 ```bash
 TEMPORAL_HOST=localhost:7233 \
 TEMPORAL_NAMESPACE=default \
-orbiter start worker --redis-url redis://localhost:6379
+exo start worker --redis-url redis://localhost:6379
 ```
 
 Or via Python:
@@ -367,11 +367,11 @@ tcp-keepalive 300
 
 | Redis Key | Estimated Size | Retention |
 |-----------|---------------|-----------|
-| Task queue (`orbiter:tasks`) | ~1KB per pending task | Until consumed |
-| Task hashes (`orbiter:task:{id}`) | ~500B per task | TTL: 24 hours |
-| Event streams (`orbiter:stream:{id}`) | ~200B per event | TTL: 1 hour |
-| Worker heartbeats (`orbiter:workers:{id}`) | ~200B per worker | TTL: 30 seconds |
-| Task index (`orbiter:task:index`) | ~40B per task ID | Persistent |
+| Task queue (`exo:tasks`) | ~1KB per pending task | Until consumed |
+| Task hashes (`exo:task:{id}`) | ~500B per task | TTL: 24 hours |
+| Event streams (`exo:stream:{id}`) | ~200B per event | TTL: 1 hour |
+| Worker heartbeats (`exo:workers:{id}`) | ~200B per worker | TTL: 30 seconds |
+| Task index (`exo:task:index`) | ~40B per task ID | Persistent |
 
 ### Redis Sentinel / Cluster
 
@@ -379,10 +379,10 @@ For high availability, use Redis Sentinel or Cluster. Pass the appropriate URL:
 
 ```bash
 # Sentinel
-orbiter start worker --redis-url redis+sentinel://sentinel1:26379,sentinel2:26379/mymaster
+exo start worker --redis-url redis+sentinel://sentinel1:26379,sentinel2:26379/mymaster
 
 # Standard HA
-orbiter start worker --redis-url redis://redis-primary:6379
+exo start worker --redis-url redis://redis-primary:6379
 ```
 
 ## Docker Deployment
@@ -394,15 +394,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install orbiter packages
-RUN pip install orbiter-distributed orbiter-cli
+# Install exo packages
+RUN pip install exo-distributed exo-cli
 
 # Copy application code (for tool resolution via importable paths)
 COPY . .
 RUN pip install -e .
 
 # Default command: start a worker
-CMD ["orbiter", "start", "worker", "--concurrency", "4"]
+CMD ["exo", "start", "worker", "--concurrency", "4"]
 ```
 
 ### docker-compose.yml
@@ -427,7 +427,7 @@ services:
   worker:
     build: .
     environment:
-      - ORBITER_REDIS_URL=redis://redis:6379
+      - EXO_REDIS_URL=redis://redis:6379
     depends_on:
       redis:
         condition: service_healthy
@@ -450,11 +450,11 @@ services:
   temporal-worker:
     build: .
     environment:
-      - ORBITER_REDIS_URL=redis://redis:6379
+      - EXO_REDIS_URL=redis://redis:6379
       - TEMPORAL_HOST=temporal:7233
       - TEMPORAL_NAMESPACE=default
     command: >
-      orbiter start worker
+      exo start worker
       --concurrency 4
     depends_on:
       redis:
@@ -489,7 +489,7 @@ docker compose up -d --scale worker=4
 Register pre-defined alert rules for distributed system health:
 
 ```python
-from orbiter.distributed.alerts import register_distributed_alerts
+from exo.distributed.alerts import register_distributed_alerts
 
 register_distributed_alerts()
 ```
@@ -506,33 +506,33 @@ register_distributed_alerts()
 
 ### Metrics
 
-Workers automatically record metrics using the `orbiter-observability` infrastructure (OpenTelemetry when available, in-memory fallback otherwise):
+Workers automatically record metrics using the `exo-observability` infrastructure (OpenTelemetry when available, in-memory fallback otherwise):
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `orbiter.distributed.tasks.submitted` | Counter | Tasks submitted to the queue |
-| `orbiter.distributed.tasks.completed` | Counter | Successfully completed tasks |
-| `orbiter.distributed.tasks.failed` | Counter | Failed tasks |
-| `orbiter.distributed.tasks.cancelled` | Counter | Cancelled tasks |
-| `orbiter.distributed.queue.depth` | Gauge | Current queue depth |
-| `orbiter.distributed.task.duration` | Histogram | Task execution duration (seconds) |
-| `orbiter.distributed.task.wait_time` | Histogram | Time from submission to execution start |
+| `exo.distributed.tasks.submitted` | Counter | Tasks submitted to the queue |
+| `exo.distributed.tasks.completed` | Counter | Successfully completed tasks |
+| `exo.distributed.tasks.failed` | Counter | Failed tasks |
+| `exo.distributed.tasks.cancelled` | Counter | Cancelled tasks |
+| `exo.distributed.queue.depth` | Gauge | Current queue depth |
+| `exo.distributed.task.duration` | Histogram | Task execution duration (seconds) |
+| `exo.distributed.task.wait_time` | Histogram | Time from submission to execution start |
 
 ### Task management CLI
 
 ```bash
 # List all tasks
-orbiter task list
+exo task list
 
 # Filter by status
-orbiter task list --status running
-orbiter task list --status failed
+exo task list --status running
+exo task list --status failed
 
 # Get detailed status for a specific task
-orbiter task status <task_id>
+exo task status <task_id>
 
 # Cancel a running task
-orbiter task cancel <task_id>
+exo task cancel <task_id>
 ```
 
 ## Scaling Recommendations
@@ -555,13 +555,13 @@ orbiter task cancel <task_id>
 
 ### Worker not claiming tasks
 
-- Verify Redis is reachable: `redis-cli -u $ORBITER_REDIS_URL ping`
+- Verify Redis is reachable: `redis-cli -u $EXO_REDIS_URL ping`
 - Check the queue name matches between client and worker (`--queue` flag)
-- Verify the consumer group exists: `redis-cli XINFO GROUPS orbiter:tasks`
+- Verify the consumer group exists: `redis-cli XINFO GROUPS exo:tasks`
 
 ### Tasks stuck in RUNNING
 
-- Check if the worker crashed: `orbiter worker list` — dead workers show in red
+- Check if the worker crashed: `exo worker list` — dead workers show in red
 - Tasks from dead workers remain in the pending entries list (PEL). They can be reclaimed via `XCLAIM` or will expire based on task hash TTL (24h)
 
 ### High memory usage

@@ -1,24 +1,24 @@
-# Migrating from AWorld to Orbiter
+# Migrating from AWorld to Exo
 
-This guide maps AWorld concepts and imports to their Orbiter equivalents.
+This guide maps AWorld concepts and imports to their Exo equivalents.
 
 ## Package Mapping
 
-| AWorld | Orbiter | Notes |
+| AWorld | Exo | Notes |
 |--------|---------|-------|
-| `aworld` (monolith) | `orbiter` (meta-package) | Split into 13 focused packages |
-| `aworld.agents` | `orbiter.agent` | Single `Agent` class replaces `LLMAgent`, `TaskLLMAgent`, etc. |
-| `aworld.core.tool` | `orbiter.tool` | `@tool` decorator, `FunctionTool`, `Tool` ABC |
-| `aworld.runner` | `orbiter.runner` | `run()`, `run.sync()`, `run.stream()` |
-| `aworld.models` | `orbiter.models` | `get_provider("openai:gpt-4o")` factory |
-| `aworld.core.context.amni` | `orbiter.context` | Clean rewrite — neurons, processors, workspace |
-| `aworld.memory` | `orbiter.memory` | Short/long-term, SQLite/Postgres backends |
-| `aworld.mcp_client` | `orbiter.mcp` | MCP client + `@mcp_server` decorator |
-| `aworld.sandbox` | `orbiter.sandbox` | Local + Kubernetes sandboxes |
-| `aworld.trace` | `orbiter.trace` | OpenTelemetry-based tracing |
-| `aworld.evaluations` | `orbiter.eval` | Scorers, reflection, evaluator |
-| `aworld.ralph_loop` | `orbiter.ralph` | Ralph loop — state, detectors, runner |
-| `aworld.experimental.a2a` | `orbiter.a2a` | Agent-to-Agent protocol |
+| `aworld` (monolith) | `exo` (meta-package) | Split into 13 focused packages |
+| `aworld.agents` | `exo.agent` | Single `Agent` class replaces `LLMAgent`, `TaskLLMAgent`, etc. |
+| `aworld.core.tool` | `exo.tool` | `@tool` decorator, `FunctionTool`, `Tool` ABC |
+| `aworld.runner` | `exo.runner` | `run()`, `run.sync()`, `run.stream()` |
+| `aworld.models` | `exo.models` | `get_provider("openai:gpt-4o")` factory |
+| `aworld.core.context.amni` | `exo.context` | Clean rewrite — neurons, processors, workspace |
+| `aworld.memory` | `exo.memory` | Short/long-term, SQLite/Postgres backends |
+| `aworld.mcp_client` | `exo.mcp` | MCP client + `@mcp_server` decorator |
+| `aworld.sandbox` | `exo.sandbox` | Local + Kubernetes sandboxes |
+| `aworld.trace` | `exo.trace` | OpenTelemetry-based tracing |
+| `aworld.evaluations` | `exo.eval` | Scorers, reflection, evaluator |
+| `aworld.ralph_loop` | `exo.ralph` | Ralph loop — state, detectors, runner |
+| `aworld.experimental.a2a` | `exo.a2a` | Agent-to-Agent protocol |
 
 ## Agent Definition
 
@@ -31,9 +31,9 @@ config = AgentConfig(name="my-agent", llm_provider="openai", llm_model_id="gpt-4
 agent = LLMAgent(agent_config=config, task_config=task_config)
 ```
 
-**Orbiter:**
+**Exo:**
 ```python
-from orbiter import Agent
+from exo import Agent
 
 agent = Agent(name="my-agent", model="openai:gpt-4o", instructions="...", tools=[...])
 ```
@@ -47,9 +47,9 @@ runner = create_runner(agent_config=config, task_config=task_config)
 result = await runner.run(task)
 ```
 
-**Orbiter:**
+**Exo:**
 ```python
-from orbiter import run
+from exo import run
 
 result = await run(agent, "What is 2+2?")      # async
 result = run.sync(agent, "What is 2+2?")        # sync
@@ -65,9 +65,9 @@ from aworld.tools.function_tools import FunctionTool
 tool = FunctionTool(name="search", func=search_fn, description="...")
 ```
 
-**Orbiter:**
+**Exo:**
 ```python
-from orbiter import tool
+from exo import tool
 
 @tool
 async def search(query: str) -> str:
@@ -83,9 +83,9 @@ from aworld.agents import SwarmComposerAgent
 swarm = SwarmComposerAgent(agents=[a, b], swarm_config=config)
 ```
 
-**Orbiter:**
+**Exo:**
 ```python
-from orbiter import Swarm
+from exo import Swarm
 swarm = Swarm(agents=[a, b], mode="workflow")  # or "handoff", "team"
 ```
 
@@ -97,20 +97,20 @@ from aworld.core.context.amni.contexts import AmniContext
 from aworld.core.context.amni.config import AmniConfig
 ```
 
-**Orbiter:**
+**Exo:**
 ```python
-from orbiter.context import Context, ContextConfig
+from exo.context import Context, ContextConfig
 ctx = Context(config=ContextConfig(automation_level="copilot"))
 ```
 
 ## Key Differences
 
-1. **Single Agent class** — AWorld had `LLMAgent`, `TaskLLMAgent`, `LoopLLMAgent`, `ParallelLLMAgent`, `SerialLLMAgent`. Orbiter has one `Agent` with composable behavior via Swarm modes and agent groups.
+1. **Single Agent class** — AWorld had `LLMAgent`, `TaskLLMAgent`, `LoopLLMAgent`, `ParallelLLMAgent`, `SerialLLMAgent`. Exo has one `Agent` with composable behavior via Swarm modes and agent groups.
 
 2. **Model strings** — use `"provider:model"` format (e.g., `"openai:gpt-4o"`, `"anthropic:claude-sonnet-4-20250514"`) instead of separate provider/model config fields.
 
 3. **Async-first** — all agent execution is async. Use `run.sync()` for synchronous contexts.
 
-4. **Modular packages** — install only what you need. `orbiter-core` has zero heavy dependencies.
+4. **Modular packages** — install only what you need. `exo-core` has zero heavy dependencies.
 
 5. **Type safety** — full pyright strict-mode compliance across all packages.

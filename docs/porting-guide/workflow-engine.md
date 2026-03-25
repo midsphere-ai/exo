@@ -1,9 +1,9 @@
-# Workflow Engine — agent-core to Orbiter Mapping
+# Workflow Engine — agent-core to Exo Mapping
 
 **Epic:** 2 — Advanced Workflow Engine
 **Date:** 2026-03-10
 
-This document maps agent-core's (openJiuwen) Pregel graph engine to Orbiter's
+This document maps agent-core's (openJiuwen) Pregel graph engine to Exo's
 extended Swarm system, helping contributors familiar with either framework
 navigate both.
 
@@ -60,16 +60,16 @@ Mermaid diagram for debugging and documentation.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter replaces the Pregel graph engine with a simpler sequential execution
+Exo replaces the Pregel graph engine with a simpler sequential execution
 model built on the existing `Swarm` orchestrator.  Special node types (loop,
 branch) handle their own internal complexity while appearing as regular agents
 in the flow.
 
 ### Mapping Summary
 
-| Agent-Core | Orbiter | Notes |
+| Agent-Core | Exo | Notes |
 |------------|---------|-------|
 | `PregelNode` | Regular `Agent` in `Swarm` flow | No separate node wrapper needed |
 | Channels (typed message buses) | Output→input chaining in `_run_workflow()` | Simpler — previous agent's output becomes next agent's input |
@@ -84,9 +84,9 @@ in the flow.
 | `SerialGroup` (pipeline) | `SerialGroup` (`_internal/agent_group.py`) | Sequential output→input chaining within a group |
 | Graph topology | Flow DSL (`"a >> b >> c"`, `"(a \| b) >> c"`) | Parsed into `Graph` adjacency list, topologically sorted via Kahn's algorithm |
 
-### How Workflow Execution Works in Orbiter
+### How Workflow Execution Works in Exo
 
-Orbiter's `Swarm` uses duck-typing markers to detect special node types during
+Exo's `Swarm` uses duck-typing markers to detect special node types during
 workflow execution:
 
 | Marker | Node Type | Detection |
@@ -152,11 +152,11 @@ engine.add_channel("slow_path", "merger", Channel("slow_out"))
 result = await engine.run("Analyze this document")
 ```
 
-### Orbiter (Swarm)
+### Exo (Swarm)
 
 ```python
-from orbiter import Agent, Swarm
-from orbiter._internal.branch_node import BranchNode
+from exo import Agent, Swarm
+from exo._internal.branch_node import BranchNode
 
 # Define agents
 classifier = Agent(name="classifier", instructions="Classify input confidence")
@@ -183,7 +183,7 @@ result = await swarm.run("Analyze this document")
 
 **Key differences:**
 
-1. **No channels** — Orbiter chains output→input directly; no need to define
+1. **No channels** — Exo chains output→input directly; no need to define
    and wire typed message buses between nodes.
 2. **Flow DSL** — Topology is a string (`"a >> b >> c"`), not manual
    `add_node` / `add_channel` calls.
@@ -191,7 +191,7 @@ result = await swarm.run("Analyze this document")
    referenced by name in the flow string.  The Swarm detects it via
    `is_branch = True` and delegates routing.
 4. **Condition evaluation** — Both use AST-based safe expression evaluation
-   against workflow state.  Orbiter additionally normalizes JS-style operators
+   against workflow state.  Exo additionally normalizes JS-style operators
    (`&&`, `||`, `===`).
 
 ### Loop Example Comparison
@@ -209,10 +209,10 @@ loop = LoopComponent(
 engine.add_node(loop)
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter._internal.loop_node import LoopNode
+from exo._internal.loop_node import LoopNode
 
 loop = LoopNode(
     name="refiner",
@@ -231,7 +231,7 @@ swarm = Swarm(
 
 ## 4. Key Differences — Pregel Channels vs. Swarm Transfer Functions
 
-| Aspect | Agent-Core (Pregel) | Orbiter (Swarm) |
+| Aspect | Agent-Core (Pregel) | Exo (Swarm) |
 |--------|-------------------|-----------------|
 | **Data routing** | Typed channels with reducers (last-write, append) | Direct output→input chaining; `WorkflowState` for shared data |
 | **Fan-out** | Multiple output channels from one node | `ParallelGroup` with concurrent `asyncio.TaskGroup` |
@@ -246,7 +246,7 @@ swarm = Swarm(
 | **Visualization** | Built-in Mermaid | `Swarm.to_mermaid()` with shape conventions (diamond=branch, hexagon=loop) |
 | **Parallel execution** | Implicit via channel fan-out | Explicit via `ParallelGroup` or DSL `(a \| b)` syntax |
 
-**Why simpler is sufficient:** Orbiter's sequential model with special-node
+**Why simpler is sufficient:** Exo's sequential model with special-node
 dispatch covers the same use cases as Pregel's channel-based scheduling.
 `ParallelGroup` handles fan-out, topological sort handles DAGs, and
 `WorkflowState` enables inter-node data passing without the overhead of typed
@@ -256,23 +256,23 @@ channels and reducers.
 
 ## 5. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.workflow.PregelEngine` | `orbiter.swarm.Swarm` | Multi-agent orchestrator with workflow/handoff/team modes |
-| `openjiuwen.core.workflow.PregelNode` | `orbiter.agent.Agent` | Regular agent — no wrapper node class needed |
+| `openjiuwen.core.workflow.PregelEngine` | `exo.swarm.Swarm` | Multi-agent orchestrator with workflow/handoff/team modes |
+| `openjiuwen.core.workflow.PregelNode` | `exo.agent.Agent` | Regular agent — no wrapper node class needed |
 | `openjiuwen.core.workflow.Channel` | *(no equivalent)* | Replaced by output→input chaining + `WorkflowState` |
-| `openjiuwen.core.workflow.LoopComponent` | `orbiter._internal.loop_node.LoopNode` | Three modes: count, items, condition |
-| `openjiuwen.core.workflow.BranchComponent` | `orbiter._internal.branch_node.BranchNode` | Expression or callable condition, true/false routing |
-| `openjiuwen.core.workflow.SubWorkflowComponent` | `orbiter._internal.nested.SwarmNode` | Nested swarm with context isolation |
-| `openjiuwen.core.workflow.WorkflowState` | `orbiter._internal.workflow_state.WorkflowState` | Shared mutable dict (no transactions) |
-| `openjiuwen.core.workflow.expression.evaluate` | `orbiter._internal.expression.evaluate` | Safe AST-based evaluator |
-| `openjiuwen.core.workflow.expression.ExpressionError` | `orbiter._internal.expression.ExpressionError` | Evaluation failure exception |
-| `openjiuwen.core.workflow.GraphStore` | `orbiter._internal.workflow_checkpoint.WorkflowCheckpointStore` | In-memory checkpoint store |
-| *(checkpoint snapshot)* | `orbiter._internal.workflow_checkpoint.WorkflowCheckpoint` | Immutable dataclass: node_name, state, completed_nodes, timestamp |
-| *(graph topology)* | `orbiter._internal.graph.Graph` | Directed adjacency list |
-| *(topological sort)* | `orbiter._internal.graph.topological_sort` | Kahn's algorithm with cycle detection |
-| *(flow DSL)* | `orbiter._internal.graph.parse_flow_dsl` | `"a >> b >> c"` / `"(a \| b) >> c"` syntax |
-| *(parallel execution)* | `orbiter._internal.agent_group.ParallelGroup` | Concurrent via `asyncio.TaskGroup` |
-| *(serial pipeline)* | `orbiter._internal.agent_group.SerialGroup` | Sequential output→input chaining |
-| *(mermaid rendering)* | `orbiter._internal.visualization.to_mermaid` | Diamond=branch, hexagon=loop, subroutine=swarm |
-| *(resume)* | `orbiter.swarm.Swarm.resume()` | Resume workflow from checkpoint |
+| `openjiuwen.core.workflow.LoopComponent` | `exo._internal.loop_node.LoopNode` | Three modes: count, items, condition |
+| `openjiuwen.core.workflow.BranchComponent` | `exo._internal.branch_node.BranchNode` | Expression or callable condition, true/false routing |
+| `openjiuwen.core.workflow.SubWorkflowComponent` | `exo._internal.nested.SwarmNode` | Nested swarm with context isolation |
+| `openjiuwen.core.workflow.WorkflowState` | `exo._internal.workflow_state.WorkflowState` | Shared mutable dict (no transactions) |
+| `openjiuwen.core.workflow.expression.evaluate` | `exo._internal.expression.evaluate` | Safe AST-based evaluator |
+| `openjiuwen.core.workflow.expression.ExpressionError` | `exo._internal.expression.ExpressionError` | Evaluation failure exception |
+| `openjiuwen.core.workflow.GraphStore` | `exo._internal.workflow_checkpoint.WorkflowCheckpointStore` | In-memory checkpoint store |
+| *(checkpoint snapshot)* | `exo._internal.workflow_checkpoint.WorkflowCheckpoint` | Immutable dataclass: node_name, state, completed_nodes, timestamp |
+| *(graph topology)* | `exo._internal.graph.Graph` | Directed adjacency list |
+| *(topological sort)* | `exo._internal.graph.topological_sort` | Kahn's algorithm with cycle detection |
+| *(flow DSL)* | `exo._internal.graph.parse_flow_dsl` | `"a >> b >> c"` / `"(a \| b) >> c"` syntax |
+| *(parallel execution)* | `exo._internal.agent_group.ParallelGroup` | Concurrent via `asyncio.TaskGroup` |
+| *(serial pipeline)* | `exo._internal.agent_group.SerialGroup` | Sequential output→input chaining |
+| *(mermaid rendering)* | `exo._internal.visualization.to_mermaid` | Diamond=branch, hexagon=loop, subroutine=swarm |
+| *(resume)* | `exo.swarm.Swarm.resume()` | Resume workflow from checkpoint |

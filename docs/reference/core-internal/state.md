@@ -1,13 +1,13 @@
-# orbiter._internal.state
+# exo._internal.state
 
 Internal run state tracking for agent execution. Provides `RunState` and `RunNode` for tracking the full lifecycle of an agent run, including per-step timing, status transitions, token usage, and error recording.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.state`
+**Module:** `exo._internal.state`
 
 ```python
-from orbiter._internal.state import RunNodeStatus, RunNode, RunState
+from exo._internal.state import RunNodeStatus, RunNode, RunState
 ```
 
 ---
@@ -112,8 +112,8 @@ Elapsed time in seconds, or `None` if not yet finished.
 ### Example
 
 ```python
-from orbiter._internal.state import RunNode, RunNodeStatus
-from orbiter.types import Usage
+from exo._internal.state import RunNode, RunNodeStatus
+from exo.types import Usage
 
 node = RunNode(agent_name="bot")
 node.start()
@@ -260,8 +260,8 @@ Whether the run has reached a terminal state (`SUCCESS`, `FAILED`, or `TIMEOUT`)
 ### Example
 
 ```python
-from orbiter._internal.state import RunState
-from orbiter.types import Usage, UserMessage
+from exo._internal.state import RunState
+from exo.types import Usage, UserMessage
 
 state = RunState(agent_name="bot")
 state.start()

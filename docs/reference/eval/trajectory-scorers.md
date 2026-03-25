@@ -1,11 +1,11 @@
-# orbiter.eval.trajectory_scorers
+# exo.eval.trajectory_scorers
 
 Trajectory validation, time cost, accuracy, and label distribution scorers. Includes a scorer registry with `@scorer_register()` decorator for automatic discovery and factory-based creation.
 
 ## Module Path
 
 ```python
-from orbiter.eval.trajectory_scorers import (
+from exo.eval.trajectory_scorers import (
     scorer_register,
     get_scorer,
     list_scorers,
@@ -39,7 +39,7 @@ def scorer_register(name: str) -> Callable
 **Usage:**
 
 ```python
-from orbiter.eval import Scorer, ScorerResult, scorer_register
+from exo.eval import Scorer, ScorerResult, scorer_register
 
 @scorer_register("my_metric")
 class MyScorer(Scorer):
@@ -129,7 +129,7 @@ async def score(self, case_id: str, input: Any, output: Any) -> ScorerResult
 
 ```python
 import asyncio
-from orbiter.eval import TrajectoryValidator
+from exo.eval import TrajectoryValidator
 
 async def main():
     scorer = TrajectoryValidator(required_keys=("action", "observation"))
@@ -184,7 +184,7 @@ Reads `output["_time_cost_ms"]` if output is a dict. Falls back to `0.0` elapsed
 
 ```python
 import asyncio
-from orbiter.eval import TimeCostScorer
+from exo.eval import TimeCostScorer
 
 async def main():
     scorer = TimeCostScorer(max_ms=10_000.0)
@@ -243,7 +243,7 @@ Formats the prompt with three sections: `[Question]`, `[Correct Answer]`, and `[
 
 ```python
 import asyncio
-from orbiter.eval import AnswerAccuracyLLMScorer
+from exo.eval import AnswerAccuracyLLMScorer
 
 async def judge(prompt: str) -> str:
     return '{"score": 0.9, "explanation": "Correct with minor omissions."}'
@@ -315,7 +315,7 @@ Compute label distribution across all scored cases.
 
 ```python
 import asyncio
-from orbiter.eval import LabelDistributionScorer
+from exo.eval import LabelDistributionScorer
 
 async def main():
     scorer = LabelDistributionScorer(label_key="category")

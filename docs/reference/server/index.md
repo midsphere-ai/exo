@@ -1,9 +1,9 @@
-# orbiter_server
+# exo_server
 
-Web UI and API server for running Orbiter agents via HTTP, WebSocket, and SSE.
+Web UI and API server for running Exo agents via HTTP, WebSocket, and SSE.
 
 ```python
-from orbiter_server import (
+from exo_server import (
     # app — FastAPI application
     ChatRequest,
     ChatResponse,
@@ -23,7 +23,7 @@ from orbiter_server import (
 )
 ```
 
-**Install:** `pip install orbiter-server`
+**Install:** `pip install exo-server`
 
 ---
 
@@ -31,10 +31,10 @@ from orbiter_server import (
 
 | Module | Description |
 |---|---|
-| [`orbiter_server.app`](app.md) | FastAPI app factory, `/chat` endpoint, agent registry |
-| [`orbiter_server.agents`](agents.md) | Agent management and workspace routes |
-| [`orbiter_server.sessions`](sessions.md) | Session CRUD and message history |
-| [`orbiter_server.streaming`](streaming.md) | WebSocket and SSE streaming endpoints |
+| [`exo_server.app`](app.md) | FastAPI app factory, `/chat` endpoint, agent registry |
+| [`exo_server.agents`](agents.md) | Agent management and workspace routes |
+| [`exo_server.sessions`](sessions.md) | Session CRUD and message history |
+| [`exo_server.streaming`](streaming.md) | WebSocket and SSE streaming endpoints |
 
 ---
 
@@ -61,8 +61,8 @@ from orbiter_server import (
 ## Quick start
 
 ```python
-from orbiter_server import create_app, register_agent
-from orbiter.agent import Agent
+from exo_server import create_app, register_agent
+from exo.agent import Agent
 
 # Create agent
 agent = Agent(name="helper", model="openai:gpt-4o", instructions="You are helpful.")

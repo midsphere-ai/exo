@@ -1,11 +1,11 @@
-# orbiter.context.workspace
+# exo.context.workspace
 
 Persistent artifact storage with versioning and observer notifications.
 
 ## Module Path
 
 ```python
-from orbiter.context.workspace import Workspace, ArtifactType, Artifact, ArtifactVersion, WorkspaceError
+from exo.context.workspace import Workspace, ArtifactType, Artifact, ArtifactVersion, WorkspaceError
 ```
 
 ---
@@ -231,7 +231,7 @@ Register an observer callback for an event. Returns `self` for chaining.
 
 ```python
 import asyncio
-from orbiter.context.workspace import Workspace, ArtifactType
+from exo.context.workspace import Workspace, ArtifactType
 
 async def main():
     ws = Workspace("my-workspace", storage_path="/tmp/workspace")

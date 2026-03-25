@@ -1,9 +1,9 @@
-# orbiter_cli.executor
+# exo_cli.executor
 
-Local agent executor for Orbiter CLI. Wraps `orbiter.runner.run` and `orbiter.runner.run.stream` with Rich output formatting, error handling, timeout support, and provider resolution.
+Local agent executor for Exo CLI. Wraps `exo.runner.run` and `exo.runner.run.stream` with Rich output formatting, error handling, timeout support, and provider resolution.
 
 ```python
-from orbiter_cli.executor import ExecutionResult, ExecutorError, LocalExecutor
+from exo_cli.executor import ExecutionResult, ExecutorError, LocalExecutor
 ```
 
 ---
@@ -87,7 +87,7 @@ class LocalExecutor(
 )
 ```
 
-Executes agents locally via `orbiter.runner.run`.
+Executes agents locally via `exo.runner.run`.
 
 ### Constructor parameters
 
@@ -121,7 +121,7 @@ async def execute(
 ) -> ExecutionResult
 ```
 
-Run the agent and return an `ExecutionResult`. Calls `orbiter.runner.run()` with the configured agent, provider, and retry settings.
+Run the agent and return an `ExecutionResult`. Calls `exo.runner.run()` with the configured agent, provider, and retry settings.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -143,7 +143,7 @@ async def stream(
 ) -> AsyncIterator[str]
 ```
 
-Stream agent output, yielding text chunks. Uses `orbiter.runner.run.stream` if available.
+Stream agent output, yielding text chunks. Uses `exo.runner.run.stream` if available.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -173,7 +173,7 @@ Display an error to the console in red.
 ### Example
 
 ```python
-from orbiter_cli import LocalExecutor
+from exo_cli import LocalExecutor
 
 executor = LocalExecutor(agent=my_agent, timeout=30.0, verbose=True)
 

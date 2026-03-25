@@ -5,8 +5,8 @@ Hooks intercept the agent lifecycle at specific points, allowing you to add logg
 ## Basic Usage
 
 ```python
-from orbiter.agent import Agent
-from orbiter.hooks import HookPoint
+from exo.agent import Agent
+from exo.hooks import HookPoint
 
 async def log_llm_call(**data):
     agent = data.get("agent")
@@ -57,7 +57,7 @@ class HookPoint(enum.Enum):
 A hook is any async callable that accepts keyword arguments:
 
 ```python
-from orbiter.hooks import Hook
+from exo.hooks import Hook
 # Hook = Callable[..., Coroutine[Any, Any, None]]
 
 async def my_hook(**data):
@@ -72,7 +72,7 @@ The `HookManager` class manages hook registration and execution. Each `Agent` ha
 ### Creating a HookManager
 
 ```python
-from orbiter.hooks import HookManager, HookPoint
+from exo.hooks import HookManager, HookPoint
 
 manager = HookManager()
 ```
@@ -129,7 +129,7 @@ manager.clear()
 ### Convenience Function
 
 ```python
-from orbiter.hooks import run_hooks
+from exo.hooks import run_hooks
 
 await run_hooks(manager, HookPoint.PRE_LLM_CALL, agent=agent, messages=msg_list)
 ```
@@ -235,7 +235,7 @@ See the [Events guide](events.md) for details on the event bus.
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `HookPoint` | `orbiter.hooks` | Enum of lifecycle interception points |
-| `Hook` | `orbiter.hooks` | Type alias for async hook functions |
-| `HookManager` | `orbiter.hooks` | Manages hook registration and execution |
-| `run_hooks()` | `orbiter.hooks` | Convenience function to run hooks |
+| `HookPoint` | `exo.hooks` | Enum of lifecycle interception points |
+| `Hook` | `exo.hooks` | Type alias for async hook functions |
+| `HookManager` | `exo.hooks` | Manages hook registration and execution |
+| `run_hooks()` | `exo.hooks` | Convenience function to run hooks |

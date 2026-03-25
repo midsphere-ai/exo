@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What is Orbiter
+## What is Exo
 
-Orbiter is a modular multi-agent framework for building LLM-powered applications in Python. It's a UV workspace monorepo with 18 packages. Requires Python 3.11+.
+Exo is a modular multi-agent framework for building LLM-powered applications in Python. It's a UV workspace monorepo with 18 packages. Requires Python 3.11+.
 
 ## Common Commands
 
@@ -16,13 +16,13 @@ uv sync
 uv run pytest
 
 # Run tests for a single package
-uv run pytest packages/orbiter-core/tests/
+uv run pytest packages/exo-core/tests/
 
 # Run a single test file
-uv run pytest packages/orbiter-core/tests/test_agent.py
+uv run pytest packages/exo-core/tests/test_agent.py
 
 # Run a single test
-uv run pytest packages/orbiter-core/tests/test_agent.py::test_function_name
+uv run pytest packages/exo-core/tests/test_agent.py::test_function_name
 
 # Lint (with auto-fix)
 uv run ruff check packages/ --fix
@@ -31,16 +31,16 @@ uv run ruff check packages/ --fix
 uv run ruff format --check packages/
 
 # Type-check a package
-uv run pyright packages/orbiter-core/
+uv run pyright packages/exo-core/
 
 # Verify installation
-uv run python -c "from orbiter import Agent, run, tool; print('OK')"
+uv run python -c "from exo import Agent, run, tool; print('OK')"
 ```
 
-### orbiter-web (dual Node+Python package)
+### exo-web (dual Node+Python package)
 
 ```bash
-cd packages/orbiter-web
+cd packages/exo-web
 
 # Install frontend deps
 npm install
@@ -52,38 +52,38 @@ npm run dev
 npx astro check
 
 # Run backend only
-uv run uvicorn orbiter_web.app:app --reload
+uv run uvicorn exo_web.app:app --reload
 ```
 
 ## Architecture
 
-UV workspace monorepo. Packages live in `packages/`. The dependency graph flows upward from `orbiter-core`:
+UV workspace monorepo. Packages live in `packages/`. The dependency graph flows upward from `exo-core`:
 
 ```
-orbiter-core (foundation, only depends on pydantic)
+exo-core (foundation, only depends on pydantic)
     ↑
-orbiter-models (OpenAI, Anthropic, Gemini, Vertex AI providers)
+exo-models (OpenAI, Anthropic, Gemini, Vertex AI providers)
     ↑
-orbiter-context, orbiter-memory, orbiter-mcp, orbiter-sandbox, orbiter-observability, orbiter-guardrail
+exo-context, exo-memory, exo-mcp, exo-sandbox, exo-observability, exo-guardrail
     ↑
-orbiter-retrieval, orbiter-perplexica, orbiter-cli, orbiter-server, orbiter-eval, orbiter-a2a, orbiter-train, orbiter-web
+exo-retrieval, exo-search, exo-cli, exo-server, exo-eval, exo-a2a, exo-train, exo-web
     ↑
-orbiter (meta-package, re-exports everything)
+exo (meta-package, re-exports everything)
 ```
 
 ### Key Packages
 
-- **orbiter-core** (`packages/orbiter-core/src/orbiter/`): `Agent`, `Tool`, `@tool` decorator, `run`/`run.sync`/`run.stream`, `Swarm`, hooks, events, config, registry. The `_internal/` subpackage has message building, output parsing, call execution, state machine, and graph algorithms.
-- **orbiter-models** (`packages/orbiter-models/`): LLM provider implementations. Provider SDKs are isolated here — core has zero heavy deps.
-- **orbiter-guardrail** (`packages/orbiter-guardrail/`): Security guardrails — pattern-based and LLM-based prompt injection/jailbreak detection with pluggable backends.
-- **orbiter-retrieval** (`packages/orbiter-retrieval/`): RAG pipeline — embeddings (OpenAI, Vertex, HTTP), vector stores (pgvector, ChromaDB), hybrid search, reranking, knowledge graph, agentic retrieval.
-- **orbiter-perplexica** (`packages/orbiter-perplexica/`): AI search engine with query classification, parallel research agents, result reranking, citation generation, and 3 quality modes (speed/balanced/quality).
-- **orbiter-web** (`packages/orbiter-web/`): Full platform UI. Hybrid package — Astro 5.x frontend (`src/pages/`, `src/islands/`) + FastAPI backend (`src/orbiter_web/`). Has its own `package.json` AND `pyproject.toml`.
+- **exo-core** (`packages/exo-core/src/exo/`): `Agent`, `Tool`, `@tool` decorator, `run`/`run.sync`/`run.stream`, `Swarm`, hooks, events, config, registry. The `_internal/` subpackage has message building, output parsing, call execution, state machine, and graph algorithms.
+- **exo-models** (`packages/exo-models/`): LLM provider implementations. Provider SDKs are isolated here — core has zero heavy deps.
+- **exo-guardrail** (`packages/exo-guardrail/`): Security guardrails — pattern-based and LLM-based prompt injection/jailbreak detection with pluggable backends.
+- **exo-retrieval** (`packages/exo-retrieval/`): RAG pipeline — embeddings (OpenAI, Vertex, HTTP), vector stores (pgvector, ChromaDB), hybrid search, reranking, knowledge graph, agentic retrieval.
+- **exo-search** (`packages/exo-search/`): AI search engine with query classification, parallel research agents, result reranking, citation generation, and 3 quality modes (speed/balanced/quality).
+- **exo-web** (`packages/exo-web/`): Full platform UI. Hybrid package — Astro 5.x frontend (`src/pages/`, `src/islands/`) + FastAPI backend (`src/exo_web/`). Has its own `package.json` AND `pyproject.toml`.
 
-### orbiter-web Backend Structure
+### exo-web Backend Structure
 
 - `app.py` — FastAPI app entry point, middleware, route registration
-- `config.py` — Settings dataclass (env vars: `ORBITER_DATABASE_URL`, `ORBITER_SECRET_KEY`, `ORBITER_DEBUG`)
+- `config.py` — Settings dataclass (env vars: `EXO_DATABASE_URL`, `EXO_SECRET_KEY`, `EXO_DEBUG`)
 - `database.py` — `get_db()` async context manager, WAL mode, foreign keys
 - `engine.py` — Workflow execution engine (topological sort, node execution, retry)
 - `migrations/` — Sequential SQL files, run automatically on startup via lifespan
@@ -91,7 +91,7 @@ orbiter (meta-package, re-exports everything)
 - `services/` — Business logic layer (agent runtime, sandbox, scheduler, memory)
 - `middleware/` — CSRF, rate limiting, security headers, API version redirect
 
-### orbiter-web Frontend Structure
+### exo-web Frontend Structure
 
 - Astro 5.x pages in `src/pages/`, layouts in `src/layouts/`
 - React islands in `src/islands/` (e.g., ReactFlow canvas)
@@ -120,11 +120,11 @@ orbiter (meta-package, re-exports everything)
 ## Important File Locations
 
 - Root config: `pyproject.toml` (workspace definition, ruff, pyright, pytest config)
-- Public API exports: `packages/orbiter-core/src/orbiter/__init__.py`
-- Provider resolution: `packages/orbiter-models/`
-- Web app entry: `packages/orbiter-web/src/orbiter_web/app.py`
-- DB migrations: `packages/orbiter-web/src/orbiter_web/migrations/`
-- Handle types (keep in sync): `packages/orbiter-web/src/islands/Canvas/handleTypes.ts` ↔ `routes/tools.py` (`_NODE_HANDLE_MAP`)
+- Public API exports: `packages/exo-core/src/exo/__init__.py`
+- Provider resolution: `packages/exo-models/`
+- Web app entry: `packages/exo-web/src/exo_web/app.py`
+- DB migrations: `packages/exo-web/src/exo_web/migrations/`
+- Handle types (keep in sync): `packages/exo-web/src/islands/Canvas/handleTypes.ts` ↔ `routes/tools.py` (`_NODE_HANDLE_MAP`)
 
 ---
 
@@ -142,8 +142,8 @@ TeamCreate → TaskCreate (per package) → Task(..., team_name=...) x N → all
 
 ### Logging conventions (two patterns, do NOT mix)
 
-- **orbiter-core internal files** (`_internal/`): `from orbiter.observability.logging import get_logger  # pyright: ignore[reportMissingImports]` → `_log = get_logger(__name__)`
-- **orbiter-models / orbiter-mcp** (and all other external packages): `import logging` → `logger = logging.getLogger(__name__)`
+- **exo-core internal files** (`_internal/`): `from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]` → `_log = get_logger(__name__)`
+- **exo-models / exo-mcp** (and all other external packages): `import logging` → `logger = logging.getLogger(__name__)`
 
 ---
 
@@ -161,19 +161,19 @@ TeamCreate → TaskCreate (per package) → Task(..., team_name=...) x N → all
 
 | Package | File | Change |
 |---|---|---|
-| orbiter-core | `_internal/handlers.py` | `except*` ExceptionGroup fix in `_run_parallel`; `_log` + debug/warning logging throughout |
-| orbiter-core | `_internal/agent_group.py` | `except*` ExceptionGroup fix in `ParallelGroup.run`; `_log` + debug logging |
-| orbiter-core | `_internal/state.py` | `_log` + state transition logging (`→ RUNNING/SUCCESS/FAILED/TIMEOUT`) in all `RunNode`/`RunState` methods |
-| orbiter-core | `_internal/background.py` | `_log` + lifecycle logging in `submit`, `handle_result`, `handle_error` |
-| orbiter-models | `provider.py` | `logger` + resolved provider debug log in `get_provider()` |
-| orbiter-models | `openai.py` | `logger` + debug before call + error with `exc_info=True` in `complete()` and `stream()` |
-| orbiter-models | `anthropic.py` | Same pattern as `openai.py` |
-| orbiter-models | `gemini.py` | Same pattern (catches bare `Exception`) |
-| orbiter-models | `vertex.py` | Same pattern |
-| orbiter-mcp | `tools.py` | `asyncio.Lock` double-check reconnect; `cleanup()` try/finally; `logger.debug/error` throughout |
-| orbiter-mcp | `client.py` | `logger.debug` on connect reuse, cache hit, tool list, call, disconnect |
+| exo-core | `_internal/handlers.py` | `except*` ExceptionGroup fix in `_run_parallel`; `_log` + debug/warning logging throughout |
+| exo-core | `_internal/agent_group.py` | `except*` ExceptionGroup fix in `ParallelGroup.run`; `_log` + debug logging |
+| exo-core | `_internal/state.py` | `_log` + state transition logging (`→ RUNNING/SUCCESS/FAILED/TIMEOUT`) in all `RunNode`/`RunState` methods |
+| exo-core | `_internal/background.py` | `_log` + lifecycle logging in `submit`, `handle_result`, `handle_error` |
+| exo-models | `provider.py` | `logger` + resolved provider debug log in `get_provider()` |
+| exo-models | `openai.py` | `logger` + debug before call + error with `exc_info=True` in `complete()` and `stream()` |
+| exo-models | `anthropic.py` | Same pattern as `openai.py` |
+| exo-models | `gemini.py` | Same pattern (catches bare `Exception`) |
+| exo-models | `vertex.py` | Same pattern |
+| exo-mcp | `tools.py` | `asyncio.Lock` double-check reconnect; `cleanup()` try/finally; `logger.debug/error` throughout |
+| exo-mcp | `client.py` | `logger.debug` on connect reuse, cache hit, tool list, call, disconnect |
 
-**Tests after changes:** orbiter-core 809 ✓ · orbiter-models 163 ✓ · orbiter-mcp 231 ✓
+**Tests after changes:** exo-core 809 ✓ · exo-models 163 ✓ · exo-mcp 231 ✓
 
 ---
 
@@ -181,7 +181,7 @@ TeamCreate → TaskCreate (per package) → Task(..., team_name=...) x N → all
 
 The session above did **not** address any items from the audit's Recommended Fix Priority list. Start there next.
 
-**Immediate priority — all in `orbiter-web`:**
+**Immediate priority — all in `exo-web`:**
 
 | # | ID | File | Issue |
 |---|---|---|---|

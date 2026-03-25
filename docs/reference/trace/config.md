@@ -1,9 +1,9 @@
-# orbiter.trace.config
+# exo.trace.config
 
 Trace configuration and semantic conventions for agent/tool observability.
 
 ```python
-from orbiter.trace.config import TraceBackend, TraceConfig
+from exo.trace.config import TraceBackend, TraceConfig
 ```
 
 ---
@@ -30,7 +30,7 @@ Supported trace export backends.
 class TraceConfig(BaseModel, frozen=True)
 ```
 
-Immutable configuration for the trace / observability layer. Controls backend selection, sampling, export endpoint, and attribute namespace used for all Orbiter-specific span attributes.
+Immutable configuration for the trace / observability layer. Controls backend selection, sampling, export endpoint, and attribute namespace used for all Exo-specific span attributes.
 
 Built on Pydantic `BaseModel` with `frozen=True`.
 
@@ -40,17 +40,17 @@ Built on Pydantic `BaseModel` with `frozen=True`.
 |---|---|---|---|
 | `backend` | `TraceBackend` | `TraceBackend.OTLP` | Trace export backend |
 | `endpoint` | `str \| None` | `None` | OTLP collector endpoint (e.g. `http://localhost:4318`) |
-| `service_name` | `str` | `"orbiter"` | Service name reported in exported spans |
+| `service_name` | `str` | `"exo"` | Service name reported in exported spans |
 | `sample_rate` | `float` | `1.0` | Probability of sampling a trace (0.0 = none, 1.0 = all). Must be in [0.0, 1.0] |
 | `enabled` | `bool` | `True` | Global toggle -- when False, tracing is a no-op |
 | `headers` | `dict[str, str]` | `{}` | Extra headers sent with each export request |
-| `namespace` | `str` | `"orbiter"` | Attribute namespace prefix (e.g. `orbiter.agent.name`) |
+| `namespace` | `str` | `"exo"` | Attribute namespace prefix (e.g. `exo.agent.name`) |
 | `extra` | `dict[str, Any]` | `{}` | Extension point for custom exporter/processor config |
 
 ### Example
 
 ```python
-from orbiter.trace import TraceConfig, TraceBackend
+from exo.trace import TraceConfig, TraceBackend
 
 config = TraceConfig(
     backend=TraceBackend.OTLP,
@@ -67,7 +67,7 @@ config = TraceConfig(
 
 ## Semantic conventions
 
-The module defines constants for OpenTelemetry semantic conventions used across Orbiter's trace instrumentation.
+The module defines constants for OpenTelemetry semantic conventions used across Exo's trace instrumentation.
 
 ### GenAI conventions (`gen_ai.*`)
 
@@ -95,39 +95,39 @@ The module defines constants for OpenTelemetry semantic conventions used across 
 | `GEN_AI_OPERATION_NAME` | `"gen_ai.operation.name"` | Operation name |
 | `GEN_AI_SERVER_ADDRESS` | `"gen_ai.server.address"` | Server address |
 
-### Agent conventions (`orbiter.agent.*`)
+### Agent conventions (`exo.agent.*`)
 
 | Constant | Value | Description |
 |---|---|---|
-| `AGENT_ID` | `"orbiter.agent.id"` | Agent identifier |
-| `AGENT_NAME` | `"orbiter.agent.name"` | Agent name |
-| `AGENT_TYPE` | `"orbiter.agent.type"` | Agent type |
-| `AGENT_MODEL` | `"orbiter.agent.model"` | Agent model |
-| `AGENT_STEP` | `"orbiter.agent.step"` | Current step number |
-| `AGENT_MAX_STEPS` | `"orbiter.agent.max_steps"` | Maximum steps allowed |
-| `AGENT_RUN_SUCCESS` | `"orbiter.agent.run.success"` | Whether the run succeeded |
+| `AGENT_ID` | `"exo.agent.id"` | Agent identifier |
+| `AGENT_NAME` | `"exo.agent.name"` | Agent name |
+| `AGENT_TYPE` | `"exo.agent.type"` | Agent type |
+| `AGENT_MODEL` | `"exo.agent.model"` | Agent model |
+| `AGENT_STEP` | `"exo.agent.step"` | Current step number |
+| `AGENT_MAX_STEPS` | `"exo.agent.max_steps"` | Maximum steps allowed |
+| `AGENT_RUN_SUCCESS` | `"exo.agent.run.success"` | Whether the run succeeded |
 
-### Tool conventions (`orbiter.tool.*`)
+### Tool conventions (`exo.tool.*`)
 
 | Constant | Value | Description |
 |---|---|---|
-| `TOOL_NAME` | `"orbiter.tool.name"` | Tool name |
-| `TOOL_CALL_ID` | `"orbiter.tool.call_id"` | Tool call identifier |
-| `TOOL_ARGUMENTS` | `"orbiter.tool.arguments"` | Tool arguments |
-| `TOOL_RESULT` | `"orbiter.tool.result"` | Tool result |
-| `TOOL_ERROR` | `"orbiter.tool.error"` | Tool error |
-| `TOOL_DURATION` | `"orbiter.tool.duration"` | Tool execution duration |
-| `TOOL_STEP_SUCCESS` | `"orbiter.tool.step.success"` | Whether the tool step succeeded |
+| `TOOL_NAME` | `"exo.tool.name"` | Tool name |
+| `TOOL_CALL_ID` | `"exo.tool.call_id"` | Tool call identifier |
+| `TOOL_ARGUMENTS` | `"exo.tool.arguments"` | Tool arguments |
+| `TOOL_RESULT` | `"exo.tool.result"` | Tool result |
+| `TOOL_ERROR` | `"exo.tool.error"` | Tool error |
+| `TOOL_DURATION` | `"exo.tool.duration"` | Tool execution duration |
+| `TOOL_STEP_SUCCESS` | `"exo.tool.step.success"` | Whether the tool step succeeded |
 
 ### Task/session conventions
 
 | Constant | Value | Description |
 |---|---|---|
-| `TASK_ID` | `"orbiter.task.id"` | Task identifier |
-| `TASK_INPUT` | `"orbiter.task.input"` | Task input |
-| `SESSION_ID` | `"orbiter.session.id"` | Session identifier |
-| `USER_ID` | `"orbiter.user.id"` | User identifier |
-| `TRACE_ID` | `"orbiter.trace.id"` | Trace identifier |
+| `TASK_ID` | `"exo.task.id"` | Task identifier |
+| `TASK_INPUT` | `"exo.task.input"` | Task input |
+| `SESSION_ID` | `"exo.session.id"` | Session identifier |
+| `USER_ID` | `"exo.user.id"` | User identifier |
+| `TRACE_ID` | `"exo.trace.id"` | Trace identifier |
 
 ### Span name prefixes
 

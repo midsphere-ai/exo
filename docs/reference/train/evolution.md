@@ -1,9 +1,9 @@
-# orbiter.train.evolution
+# exo.train.evolution
 
 Agent evolution utilities for iterative improvement via multi-epoch synthesis-training-evaluation cycles.
 
 ```python
-from orbiter.train.evolution import (
+from exo.train.evolution import (
     EpochResult,
     EvolutionConfig,
     EvolutionError,
@@ -240,7 +240,7 @@ Reset pipeline to `IDLE` so it can be re-run.
 ### Example
 
 ```python
-from orbiter.train import EvolutionPipeline, EvolutionConfig, EvolutionStrategy
+from exo.train import EvolutionPipeline, EvolutionConfig, EvolutionStrategy
 
 class MyStrategy(EvolutionStrategy):
     async def synthesise(self, agent, data, epoch):

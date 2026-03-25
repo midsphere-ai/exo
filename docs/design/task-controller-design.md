@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter's execution model centers on the `Agent.run()` loop (LLM call →
+Exo's execution model centers on the `Agent.run()` loop (LLM call →
 tool execution → repeat) tracked by `RunState` / `RunNode`. While effective
 for single-agent and multi-agent workflows, it lacks:
 
@@ -27,19 +27,19 @@ for single-agent and multi-agent workflows, it lacks:
 
 Agent-core's controller modules (`TaskManager`, `TaskScheduler`,
 `EventQueue`, `IntentRecognizer`) address all five gaps. This document
-proposes porting these concepts into Orbiter as a new internal module.
+proposes porting these concepts into Exo as a new internal module.
 
 ---
 
-## 2. Key Decision: Module in orbiter-core `_internal/task_controller/`
+## 2. Key Decision: Module in exo-core `_internal/task_controller/`
 
-### Option A — New package `orbiter-task` (rejected)
+### Option A — New package `exo-task` (rejected)
 
 A separate package with its own pyproject.toml. This adds dependency
 management overhead and forces consumers to install an extra package for
 basic task management.
 
-### Option B — Top-level module in `orbiter/` (rejected)
+### Option B — Top-level module in `exo/` (rejected)
 
 Placing task controller files alongside `agent.py` and `swarm.py`
 pollutes the public API surface when task management is an optional,
@@ -48,18 +48,18 @@ internal coordination mechanism.
 ### Option C — Internal module `_internal/task_controller/` (chosen)
 
 The task controller lives in
-`packages/orbiter-core/src/orbiter/_internal/task_controller/` as a
+`packages/exo-core/src/exo/_internal/task_controller/` as a
 private implementation module, consistent with existing internal modules
 (`_internal/state.py`, `_internal/background.py`, `_internal/loop_node.py`).
 
-Public re-exports from `orbiter/task_controller.py` expose only the
+Public re-exports from `exo/task_controller.py` expose only the
 user-facing API.
 
 **Why Option C:**
 
 - Follows the established `_internal/` pattern for implementation details.
 - Task controller is optional — agents work fine without it.
-- Keeps `orbiter/` public API clean; only re-exports are public.
+- Keeps `exo/` public API clean; only re-exports are public.
 - No new package, no new dependency graph changes.
 - Easy to promote to a standalone package later if needed.
 
@@ -280,7 +280,7 @@ Event types:
 
 ## 6. File Layout
 
-All new files in `packages/orbiter-core/src/orbiter/_internal/task_controller/`:
+All new files in `packages/exo-core/src/exo/_internal/task_controller/`:
 
 | File | Contents |
 |------|----------|
@@ -291,10 +291,10 @@ All new files in `packages/orbiter-core/src/orbiter/_internal/task_controller/`:
 | `intent.py` | `IntentRecognizer` |
 | `event_bus.py` | `TaskEventBus` |
 
-Public re-export in `packages/orbiter-core/src/orbiter/task_controller.py`:
+Public re-export in `packages/exo-core/src/exo/task_controller.py`:
 
 ```python
-from orbiter._internal.task_controller import (
+from exo._internal.task_controller import (
     Task,
     TaskStatus,
     TaskManager,
@@ -306,7 +306,7 @@ from orbiter._internal.task_controller import (
 )
 ```
 
-Tests in `packages/orbiter-core/tests/`:
+Tests in `packages/exo-core/tests/`:
 
 | File | Contents |
 |------|----------|

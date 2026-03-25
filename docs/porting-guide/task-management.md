@@ -1,10 +1,10 @@
-# Task Management — agent-core to Orbiter Mapping
+# Task Management — agent-core to Exo Mapping
 
 **Epic:** 7 — Task Management & Controller
 **Date:** 2026-03-11
 
 This document maps agent-core's (openJiuwen) controller/task system to
-Orbiter's task management module, covering CRUD operations, scheduling,
+Exo's task management module, covering CRUD operations, scheduling,
 intent routing, event queues, and task loop control.
 
 ---
@@ -48,16 +48,16 @@ controller system.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's task management lives in `orbiter._internal.task_controller`
-(implementation) with public re-exports from `orbiter.task_controller`.
+Exo's task management lives in `exo._internal.task_controller`
+(implementation) with public re-exports from `exo.task_controller`.
 
 ### Architecture Difference
 
 Where agent-core uses async-locked managers with a pluggable executor
-registry, Orbiter uses Pydantic models with explicit state-transition
-validation and a semaphore-based scheduler. Orbiter also adds a
+registry, Exo uses Pydantic models with explicit state-transition
+validation and a semaphore-based scheduler. Exo also adds a
 `TaskLoopQueue` for mid-execution agent steering — a concept not present
 in agent-core's controller.
 
@@ -68,8 +68,8 @@ await task_manager.create_task("Research topic", priority=5)
 scheduler = TaskScheduler(task_manager, executors={...})
 await scheduler.run()
 
-# Orbiter: Pydantic models + semaphore scheduler
-from orbiter.task_controller import (
+# Exo: Pydantic models + semaphore scheduler
+from exo.task_controller import (
     TaskManager, TaskScheduler, TaskEventBus,
     IntentRecognizer, TaskLoopQueue,
 )
@@ -83,7 +83,7 @@ await scheduler.schedule(executor=my_agent_executor)
 
 ### Component Mapping
 
-| Agent-Core Component | Orbiter Equivalent | Notes |
+| Agent-Core Component | Exo Equivalent | Notes |
 |---------------------|-------------------|-------|
 | `TaskManager` (async-locked) | `TaskManager` | Dict-based CRUD; sync methods; event emission via optional `TaskEventBus` |
 | `TaskScheduler` + executor registry | `TaskScheduler` | `asyncio.Semaphore` throttling; single `executor` callable (not registry) |
@@ -95,9 +95,9 @@ await scheduler.schedule(executor=my_agent_executor)
 | *(no equivalent)* | `TaskLoopEvent` / `TaskLoopEventType` | Prioritized events: ABORT (0) > STEER (1) > FOLLOWUP (2) |
 | *(no equivalent)* | `steer_agent_tool` / `abort_agent_tool` | Queue-based tools for external agent loop control |
 | *(no equivalent)* | `InvalidTransitionError` | Explicit error for invalid state transitions |
-| `TaskExecutor` registry | *(simplified)* | Orbiter uses a single `executor` callable instead of per-type registry |
+| `TaskExecutor` registry | *(simplified)* | Exo uses a single `executor` callable instead of per-type registry |
 
-### Key Orbiter Additions Beyond Agent-Core
+### Key Exo Additions Beyond Agent-Core
 
 **Task Loop Queue** — A thread-safe priority queue (`TaskLoopQueue`) that
 bridges external threads with the async agent loop. Three event priorities:
@@ -145,8 +145,8 @@ child3 = await task_manager.create_task(
 scheduler = TaskScheduler(task_manager, max_concurrent=2)
 await scheduler.run()  # Picks up SUBMITTED tasks by priority
 
-# Orbiter
-from orbiter.task_controller import (
+# Exo
+from exo.task_controller import (
     TaskManager, TaskScheduler, TaskEventBus,
 )
 
@@ -177,8 +177,8 @@ recognizer = IntentRecognizer(llm=my_llm)
 intent = await recognizer.recognize("pause the data gathering task")
 # intent.action == "pause_task", intent.task_id == child1.id
 
-# Orbiter
-from orbiter.task_controller import IntentRecognizer
+# Exo
+from exo.task_controller import IntentRecognizer
 
 recognizer = IntentRecognizer(model="openai:gpt-4o")
 intent = await recognizer.recognize(
@@ -201,8 +201,8 @@ event_queue = EventQueue(session_id="session-1")
 event_queue.subscribe("task.completed", on_task_done)
 # Events emitted implicitly by task lifecycle
 
-# Orbiter
-from orbiter.task_controller import (
+# Exo
+from exo.task_controller import (
     TaskEventBus, TaskEventType, TaskEvent,
 )
 
@@ -221,10 +221,10 @@ manager.update(task.id, status=TaskStatus.COMPLETED)
 # on_task_done is called with TaskEvent(event_type=COMPLETED, task_id=task.id)
 ```
 
-### Task Loop Steering (Orbiter-only)
+### Task Loop Steering (Exo-only)
 
 ```python
-from orbiter.task_controller import (
+from exo.task_controller import (
     TaskLoopQueue, TaskLoopEvent, TaskLoopEventType,
     get_task_loop_tools,
 )
@@ -255,30 +255,30 @@ for tool in tools:
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.controller.TaskManager` | `orbiter.task_controller.TaskManager` | CRUD with priority sort, parent-child hierarchy, cancel cascade, auto-complete parent |
-| `openjiuwen.core.controller.TaskScheduler` | `orbiter.task_controller.TaskScheduler` | Semaphore-based concurrent execution with pause/resume/cancel |
-| `openjiuwen.core.controller.TaskState` | `orbiter.task_controller.TaskStatus` | 8-state enum: SUBMITTED, WORKING, PAUSED, INPUT_REQUIRED, COMPLETED, CANCELED, FAILED, WAITING |
-| `openjiuwen.core.controller.IntentRecognizer` | `orbiter.task_controller.IntentRecognizer` | LLM-powered intent classification returning `Intent` dataclass |
-| `openjiuwen.core.controller.EventQueue` | `orbiter.task_controller.TaskEventBus` | Typed pub/sub with `TaskEventType` enum and async handlers |
-| *(task dict)* | `orbiter.task_controller.Task` | Pydantic `BaseModel` with `transition()` validation and `is_terminal` property |
-| *(task events)* | `orbiter.task_controller.TaskEvent` | Dataclass with `event_type`, `task_id`, `data`, `timestamp` |
-| *(event types)* | `orbiter.task_controller.TaskEventType` | `StrEnum`: `task.created`, `task.started`, `task.completed`, `task.failed`, `task.paused`, `task.canceled` |
-| *(intent actions)* | `orbiter.task_controller.TASK_ACTIONS` | `frozenset` of 8 action strings (create, pause, resume, cancel, list, get_status, update, unknown) |
-| *(intent result)* | `orbiter.task_controller.Intent` | Dataclass with `action`, `task_id`, `confidence`, `details` |
-| *(no equivalent)* | `orbiter.task_controller.TaskLoopQueue` | Thread-safe priority queue for ABORT/STEER/FOLLOWUP events |
-| *(no equivalent)* | `orbiter.task_controller.TaskLoopEvent` | Priority-ordered event with `type`, `content`, `metadata` |
-| *(no equivalent)* | `orbiter.task_controller.TaskLoopEventType` | `IntEnum`: ABORT (0), STEER (1), FOLLOWUP (2) |
-| *(no equivalent)* | `orbiter.task_controller.steer_agent_tool` | Queue-bound tool to redirect agent mid-task |
-| *(no equivalent)* | `orbiter.task_controller.abort_agent_tool` | Queue-bound tool to stop agent execution |
-| *(no equivalent)* | `orbiter.task_controller.get_task_loop_tools` | Returns `[steer_agent_tool, abort_agent_tool]` |
-| *(no equivalent)* | `orbiter.task_controller.TaskError` | Base exception for task controller errors |
-| *(no equivalent)* | `orbiter.task_controller.TaskNotFoundError` | Raised when task ID does not exist |
-| *(no equivalent)* | `orbiter.task_controller.InvalidTransitionError` | Raised on invalid status transitions |
-| *(no equivalent)* | `orbiter.task_controller.TaskEventHandler` | Type alias: `Callable[[TaskEvent], Coroutine[Any, Any, None]]` |
+| `openjiuwen.core.controller.TaskManager` | `exo.task_controller.TaskManager` | CRUD with priority sort, parent-child hierarchy, cancel cascade, auto-complete parent |
+| `openjiuwen.core.controller.TaskScheduler` | `exo.task_controller.TaskScheduler` | Semaphore-based concurrent execution with pause/resume/cancel |
+| `openjiuwen.core.controller.TaskState` | `exo.task_controller.TaskStatus` | 8-state enum: SUBMITTED, WORKING, PAUSED, INPUT_REQUIRED, COMPLETED, CANCELED, FAILED, WAITING |
+| `openjiuwen.core.controller.IntentRecognizer` | `exo.task_controller.IntentRecognizer` | LLM-powered intent classification returning `Intent` dataclass |
+| `openjiuwen.core.controller.EventQueue` | `exo.task_controller.TaskEventBus` | Typed pub/sub with `TaskEventType` enum and async handlers |
+| *(task dict)* | `exo.task_controller.Task` | Pydantic `BaseModel` with `transition()` validation and `is_terminal` property |
+| *(task events)* | `exo.task_controller.TaskEvent` | Dataclass with `event_type`, `task_id`, `data`, `timestamp` |
+| *(event types)* | `exo.task_controller.TaskEventType` | `StrEnum`: `task.created`, `task.started`, `task.completed`, `task.failed`, `task.paused`, `task.canceled` |
+| *(intent actions)* | `exo.task_controller.TASK_ACTIONS` | `frozenset` of 8 action strings (create, pause, resume, cancel, list, get_status, update, unknown) |
+| *(intent result)* | `exo.task_controller.Intent` | Dataclass with `action`, `task_id`, `confidence`, `details` |
+| *(no equivalent)* | `exo.task_controller.TaskLoopQueue` | Thread-safe priority queue for ABORT/STEER/FOLLOWUP events |
+| *(no equivalent)* | `exo.task_controller.TaskLoopEvent` | Priority-ordered event with `type`, `content`, `metadata` |
+| *(no equivalent)* | `exo.task_controller.TaskLoopEventType` | `IntEnum`: ABORT (0), STEER (1), FOLLOWUP (2) |
+| *(no equivalent)* | `exo.task_controller.steer_agent_tool` | Queue-bound tool to redirect agent mid-task |
+| *(no equivalent)* | `exo.task_controller.abort_agent_tool` | Queue-bound tool to stop agent execution |
+| *(no equivalent)* | `exo.task_controller.get_task_loop_tools` | Returns `[steer_agent_tool, abort_agent_tool]` |
+| *(no equivalent)* | `exo.task_controller.TaskError` | Base exception for task controller errors |
+| *(no equivalent)* | `exo.task_controller.TaskNotFoundError` | Raised when task ID does not exist |
+| *(no equivalent)* | `exo.task_controller.InvalidTransitionError` | Raised on invalid status transitions |
+| *(no equivalent)* | `exo.task_controller.TaskEventHandler` | Type alias: `Callable[[TaskEvent], Coroutine[Any, Any, None]]` |
 
-All public symbols are re-exported from `orbiter.task_controller` (via
-`packages/orbiter-core/src/orbiter/task_controller.py`), so
-`from orbiter.task_controller import TaskManager` works as a convenience
+All public symbols are re-exported from `exo.task_controller` (via
+`packages/exo-core/src/exo/task_controller.py`), so
+`from exo.task_controller import TaskManager` works as a convenience
 import.

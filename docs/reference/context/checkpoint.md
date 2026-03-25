@@ -1,11 +1,11 @@
-# orbiter.context.checkpoint
+# exo.context.checkpoint
 
 Save and restore complete execution state for long-running tasks.
 
 ## Module Path
 
 ```python
-from orbiter.context.checkpoint import Checkpoint, CheckpointStore, CheckpointError
+from exo.context.checkpoint import Checkpoint, CheckpointStore, CheckpointError
 ```
 
 ---
@@ -147,7 +147,7 @@ List all available checkpoint version numbers.
 ### Example
 
 ```python
-from orbiter.context.checkpoint import CheckpointStore, Checkpoint
+from exo.context.checkpoint import CheckpointStore, Checkpoint
 
 # Create store
 store = CheckpointStore("task-1")
@@ -185,7 +185,7 @@ assert restored.version == 1
 The `Context` class uses `CheckpointStore` internally:
 
 ```python
-from orbiter.context import Context
+from exo.context import Context
 
 ctx = Context("task-1")
 ctx.state.set("progress", "step 1")

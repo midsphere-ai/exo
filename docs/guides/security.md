@@ -1,22 +1,22 @@
 # Security
 
-Orbiter Web ships with layered security defaults: encrypted secrets, session-based auth, RBAC, CSRF protection, rate limiting, input sanitization, and restrictive HTTP headers. This guide covers configuration, hardening, and the threat model for production deployments.
+Exo Web ships with layered security defaults: encrypted secrets, session-based auth, RBAC, CSRF protection, rate limiting, input sanitization, and restrictive HTTP headers. This guide covers configuration, hardening, and the threat model for production deployments.
 
-## Secret Key (`ORBITER_SECRET_KEY`)
+## Secret Key (`EXO_SECRET_KEY`)
 
 The secret key derives the Fernet encryption key used to encrypt provider API keys at rest (via `crypto.py`). If the key changes, all previously encrypted data becomes unreadable.
 
 **Generate a secure key:**
 
 ```bash
-export ORBITER_SECRET_KEY=$(openssl rand -hex 32)
+export EXO_SECRET_KEY=$(openssl rand -hex 32)
 ```
 
 **Startup validation:** The application logs a warning if the default `change-me-in-production` value is detected. Never deploy with the default.
 
 | Environment Variable | Default | Purpose |
 |---|---|---|
-| `ORBITER_SECRET_KEY` | `change-me-in-production` | Derives the Fernet key for API-key encryption |
+| `EXO_SECRET_KEY` | `change-me-in-production` | Derives the Fernet key for API-key encryption |
 
 **Key rotation:** There is no automatic rotation. To rotate, decrypt all stored provider keys with the old secret, update the environment variable, then re-encrypt. A maintenance script or manual DB migration is required.
 
@@ -26,10 +26,10 @@ Cross-origin requests are blocked by default (same-origin only). Enable CORS onl
 
 ```bash
 # Single origin
-export ORBITER_CORS_ORIGINS="https://app.example.com"
+export EXO_CORS_ORIGINS="https://app.example.com"
 
 # Multiple origins (comma-separated)
-export ORBITER_CORS_ORIGINS="https://app.example.com,https://widget.example.com"
+export EXO_CORS_ORIGINS="https://app.example.com,https://widget.example.com"
 ```
 
 When enabled, the middleware allows:
@@ -42,7 +42,7 @@ When enabled, the middleware allows:
 
 - Never use `*` as an origin — it disables credential support and exposes the API to any domain.
 - List only the exact origins that need access.
-- If you only serve Orbiter from a single domain, leave `ORBITER_CORS_ORIGINS` unset.
+- If you only serve Exo from a single domain, leave `EXO_CORS_ORIGINS` unset.
 
 ## Rate Limiting
 
@@ -50,9 +50,9 @@ An in-memory sliding-window rate limiter protects all API endpoints. Three separ
 
 | Environment Variable | Default | Scope | Key |
 |---|---|---|---|
-| `ORBITER_RATE_LIMIT_AUTH` | 5/min | `POST /api/v1/auth/login` | Client IP |
-| `ORBITER_RATE_LIMIT_GENERAL` | 60/min | All other `/api/` routes | Session ID (or IP) |
-| `ORBITER_RATE_LIMIT_AGENT` | 10/min | Workflow `/run` and `/debug` | Session ID (or IP) |
+| `EXO_RATE_LIMIT_AUTH` | 5/min | `POST /api/v1/auth/login` | Client IP |
+| `EXO_RATE_LIMIT_GENERAL` | 60/min | All other `/api/` routes | Session ID (or IP) |
+| `EXO_RATE_LIMIT_AGENT` | 10/min | Workflow `/run` and `/debug` | Session ID (or IP) |
 
 The `/api/health` endpoint is exempt.
 
@@ -67,8 +67,8 @@ The `/api/health` endpoint is exempt.
 
 **Tuning for production:**
 
-- Increase `ORBITER_RATE_LIMIT_GENERAL` if legitimate users hit 429s during normal use.
-- Keep `ORBITER_RATE_LIMIT_AUTH` low (5–10) to slow credential-stuffing attacks.
+- Increase `EXO_RATE_LIMIT_GENERAL` if legitimate users hit 429s during normal use.
+- Keep `EXO_RATE_LIMIT_AUTH` low (5–10) to slow credential-stuffing attacks.
 - The sliding window is in-memory and per-process — behind a load balancer with multiple workers, effective limits multiply by the number of processes. Use an external rate limiter (e.g., nginx `limit_req`) for coordinated limiting across workers.
 
 ## RBAC (Role-Based Access Control)
@@ -84,7 +84,7 @@ Three roles form a strict hierarchy:
 Roles are enforced via the `require_role()` FastAPI dependency:
 
 ```python
-from orbiter_web.routes.auth import require_role
+from exo_web.routes.auth import require_role
 from fastapi import Depends
 
 @router.delete("/dangerous")
@@ -113,7 +113,7 @@ Sessions use server-side storage (SQLite `sessions` table) with HttpOnly cookies
 
 | Property | Value |
 |---|---|
-| Cookie name | `orbiter_session` |
+| Cookie name | `exo_session` |
 | HttpOnly | Yes (not accessible to JavaScript) |
 | SameSite | `Lax` (CSRF mitigation) |
 | Session ID | `uuid4()` (cryptographically random) |
@@ -123,7 +123,7 @@ Sessions use server-side storage (SQLite `sessions` table) with HttpOnly cookies
 **Configuring expiry:**
 
 ```bash
-export ORBITER_SESSION_EXPIRY_HOURS=24   # Shorter sessions for sensitive environments
+export EXO_SESSION_EXPIRY_HOURS=24   # Shorter sessions for sensitive environments
 ```
 
 **Expiry enforcement:** Every authenticated request validates `expires_at > datetime('now')`. Expired sessions are rejected with 401.
@@ -185,7 +185,7 @@ The `SecurityHeadersMiddleware` injects security headers on every response:
 
 **Customizing for embedding:**
 
-If you need to embed Orbiter pages in an iframe (e.g., an agent widget), add the path to `_FRAMEABLE_PATHS` in `middleware/security.py`:
+If you need to embed Exo pages in an iframe (e.g., an agent widget), add the path to `_FRAMEABLE_PATHS` in `middleware/security.py`:
 
 ```python
 _FRAMEABLE_PATHS: set[str] = {"/embed/chat", "/embed/agent"}
@@ -211,7 +211,7 @@ Only add origins you trust. Every addition widens the attack surface.
 
 ## Input Sanitization
 
-All user-provided text fields are sanitized before database storage using `sanitize_html()` from `orbiter_web/sanitize.py`. The function:
+All user-provided text fields are sanitized before database storage using `sanitize_html()` from `exo_web/sanitize.py`. The function:
 
 1. **Strips all HTML tags** — removes any `<tag>` markup.
 2. **Neutralizes dangerous patterns:**
@@ -251,13 +251,13 @@ This means security headers are applied to every response (including rate-limite
 
 ## Production Hardening Checklist
 
-- [ ] Set `ORBITER_SECRET_KEY` to a random 64-character hex string
-- [ ] Set `ORBITER_SESSION_EXPIRY_HOURS` appropriate to your security requirements
-- [ ] Leave `ORBITER_CORS_ORIGINS` unset (or set to exact production origins only)
+- [ ] Set `EXO_SECRET_KEY` to a random 64-character hex string
+- [ ] Set `EXO_SESSION_EXPIRY_HOURS` appropriate to your security requirements
+- [ ] Leave `EXO_CORS_ORIGINS` unset (or set to exact production origins only)
 - [ ] Deploy behind a reverse proxy (nginx, Caddy) with TLS termination
 - [ ] Enable the reverse proxy's rate limiting for coordinated protection across workers
 - [ ] Set up a cron job to purge expired sessions periodically
 - [ ] Create CI/CD API keys with minimal permissions per pipeline
 - [ ] Review `_FRAMEABLE_PATHS` — keep empty unless you need iframe embedding
 - [ ] Monitor audit logs for suspicious activity (login failures, role changes)
-- [ ] Ensure `ORBITER_DEBUG` is `false` in production
+- [ ] Ensure `EXO_DEBUG` is `false` in production

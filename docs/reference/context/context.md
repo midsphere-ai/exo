@@ -1,11 +1,11 @@
-# orbiter.context.context
+# exo.context.context
 
 Core context lifecycle with fork/merge for hierarchical task decomposition.
 
 ## Module Path
 
 ```python
-from orbiter.context.context import Context, ContextError
+from exo.context.context import Context, ContextError
 ```
 
 ---
@@ -145,7 +145,7 @@ Restore a context from a checkpoint. Creates a new `Context` with state and toke
 
 ```python
 import asyncio
-from orbiter.context import Context, ContextConfig, AutomationMode
+from exo.context import Context, ContextConfig, AutomationMode
 
 async def main():
     # Create root context

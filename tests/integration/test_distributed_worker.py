@@ -41,13 +41,13 @@ async def test_worker_executes_task_and_stores_result(
     vertex_model: str,
 ) -> None:
     """Worker processes a task and stores a COMPLETED result in Redis."""
-    from orbiter.distributed.broker import TaskBroker  # pyright: ignore[reportMissingImports]
-    from orbiter.distributed.models import (  # pyright: ignore[reportMissingImports]
+    from exo.distributed.broker import TaskBroker  # pyright: ignore[reportMissingImports]
+    from exo.distributed.models import (  # pyright: ignore[reportMissingImports]
         TaskPayload,
         TaskStatus,
     )
-    from orbiter.distributed.store import TaskStore  # pyright: ignore[reportMissingImports]
-    from orbiter.distributed.worker import Worker  # pyright: ignore[reportMissingImports]
+    from exo.distributed.store import TaskStore  # pyright: ignore[reportMissingImports]
+    from exo.distributed.worker import Worker  # pyright: ignore[reportMissingImports]
 
     redis_url = redis_container
 
@@ -93,13 +93,13 @@ async def test_worker_handles_task_failure_gracefully(
     redis_container: str,
 ) -> None:
     """Worker marks task as FAILED and records an error when agent config is invalid."""
-    from orbiter.distributed.broker import TaskBroker  # pyright: ignore[reportMissingImports]
-    from orbiter.distributed.models import (  # pyright: ignore[reportMissingImports]
+    from exo.distributed.broker import TaskBroker  # pyright: ignore[reportMissingImports]
+    from exo.distributed.models import (  # pyright: ignore[reportMissingImports]
         TaskPayload,
         TaskStatus,
     )
-    from orbiter.distributed.store import TaskStore  # pyright: ignore[reportMissingImports]
-    from orbiter.distributed.worker import Worker  # pyright: ignore[reportMissingImports]
+    from exo.distributed.store import TaskStore  # pyright: ignore[reportMissingImports]
+    from exo.distributed.worker import Worker  # pyright: ignore[reportMissingImports]
 
     redis_url = redis_container
 

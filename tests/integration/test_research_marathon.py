@@ -44,17 +44,17 @@ async def test_research_agent_produces_structured_report(
     - At least 5 tool calls in result.tool_calls
     - Memory store has > 10 items after the run
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     # -------------------------------------------------------------------------
     # Tool definitions — return pre-set data so no external calls are needed.

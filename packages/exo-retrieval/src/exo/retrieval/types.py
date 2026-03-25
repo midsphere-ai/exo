@@ -1,0 +1,79 @@
+"""Core retrieval types: documents, chunks, results, and errors."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from exo.types import ExoError
+
+
+class Document(BaseModel):
+    """A document stored in a retrieval system.
+
+    Attributes:
+        id: Unique identifier for the document.
+        content: Full text content of the document.
+        metadata: Arbitrary metadata (e.g., source, author, tags).
+        embedding: Optional pre-computed embedding vector.
+    """
+
+    id: str
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    embedding: list[float] | None = None
+
+
+class Chunk(BaseModel, frozen=True):
+    """An immutable slice of a document for retrieval.
+
+    Attributes:
+        document_id: ID of the parent document.
+        index: Position of this chunk within the document (0-based).
+        content: Text content of the chunk.
+        start: Character offset where the chunk begins in the document.
+        end: Character offset where the chunk ends in the document.
+        metadata: Arbitrary metadata inherited or derived from the document.
+    """
+
+    document_id: str
+    index: int
+    content: str
+    start: int
+    end: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RetrievalResult(BaseModel, frozen=True):
+    """A scored chunk returned from a retrieval query.
+
+    Attributes:
+        chunk: The matched chunk.
+        score: Similarity or relevance score (higher is better).
+        metadata: Additional metadata from the retrieval process.
+    """
+
+    chunk: Chunk
+    score: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RetrievalError(ExoError):
+    """Raised when a retrieval operation fails.
+
+    Attributes:
+        operation: The operation that failed (e.g., "embed", "search", "index").
+        details: Additional context about the failure.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.operation = operation
+        self.details = details or {}

@@ -12,8 +12,8 @@ Usage:
 from pathlib import Path
 from textwrap import dedent
 
-from orbiter import Agent, run, tool
-from orbiter.skills import Skill, SkillRegistry
+from exo import Agent, run, tool
+from exo.skills import Skill, SkillRegistry
 
 # --- Define tools that correspond to skills ----------------------------------
 

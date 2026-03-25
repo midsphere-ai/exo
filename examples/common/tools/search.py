@@ -15,7 +15,7 @@ import json
 import os
 from urllib.parse import quote_plus
 
-from orbiter import tool
+from exo import tool
 
 
 @tool

@@ -1,11 +1,11 @@
-# orbiter.models.provider
+# exo.models.provider
 
 Abstract base class for LLM provider implementations and the factory function for building providers from model strings.
 
 ## Module Path
 
 ```python
-from orbiter.models.provider import ModelProvider, model_registry, get_provider
+from exo.models.provider import ModelProvider, model_registry, get_provider
 ```
 
 ---
@@ -37,7 +37,7 @@ Global registry mapping provider name strings to `ModelProvider` subclasses. Bui
 ### Example: Custom Provider Registration
 
 ```python
-from orbiter.models.provider import ModelProvider, model_registry
+from exo.models.provider import ModelProvider, model_registry
 
 class MyProvider(ModelProvider):
     async def complete(self, messages, **kwargs):
@@ -157,7 +157,7 @@ def get_provider(
 ### Example
 
 ```python
-from orbiter.models import get_provider
+from exo.models import get_provider
 
 # OpenAI
 provider = get_provider("openai:gpt-4o", api_key="sk-...")
@@ -184,7 +184,7 @@ provider = get_provider(
 
 ---
 
-## ModelConfig (from orbiter.config)
+## ModelConfig (from exo.config)
 
 Configuration for an LLM provider connection.
 

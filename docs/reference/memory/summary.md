@@ -1,11 +1,11 @@
-# orbiter.memory.summary
+# exo.memory.summary
 
 Summary trigger logic and multi-template summary generation for compressing long conversations.
 
 ## Module Path
 
 ```python
-from orbiter.memory.summary import (
+from exo.memory.summary import (
     Summarizer,
     SummaryConfig,
     SummaryResult,
@@ -176,7 +176,7 @@ async def generate_summary(
 
 ```python
 import asyncio
-from orbiter.memory import (
+from exo.memory import (
     HumanMemory, AIMemory,
     SummaryConfig, SummaryTemplate,
     check_trigger, generate_summary,

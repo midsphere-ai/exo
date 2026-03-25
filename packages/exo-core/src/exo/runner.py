@@ -1,0 +1,719 @@
+"""Public entry point for running agents.
+
+Provides ``run()`` (async), ``run.sync()`` (blocking), and
+``run.stream()`` (async generator) as the primary API for executing
+an ``Agent``.  Internally delegates to
+:func:`exo._internal.call_runner.call_runner` for state tracking
+and loop detection.
+
+Usage::
+
+    result = await run(agent, "Hello!")
+    result = run.sync(agent, "Hello!")
+    async for event in run.stream(agent, "Hello!"):
+        print(event)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import AsyncIterator, Sequence
+from typing import Any
+
+from exo._internal.call_runner import call_runner
+from exo._internal.message_builder import build_messages
+from exo._internal.output_parser import parse_tool_arguments
+from exo._internal.planner import prepare_planned_execution
+from exo.hooks import HookPoint
+from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
+from exo.observability.metrics import (  # pyright: ignore[reportMissingImports]
+    HAS_OTEL,
+    _collector,
+    _get_meter,
+)
+from exo.observability.semconv import (  # pyright: ignore[reportMissingImports]
+    METRIC_STREAM_EVENTS_EMITTED,
+    STREAM_EVENT_TYPE,
+)
+from exo.types import (
+    AssistantMessage,
+    ContextEvent,
+    ErrorEvent,
+    MCPProgressEvent,
+    Message,
+    MessageContent,
+    MessageInjectedEvent,
+    RunResult,
+    StatusEvent,
+    StepEvent,
+    StreamEvent,
+    TextEvent,
+    ToolCall,
+    ToolCallEvent,
+    ToolResultEvent,
+    Usage,
+    UsageEvent,
+    UserMessage,
+)
+
+_log = get_logger(__name__)
+
+
+async def run(
+    agent: Any,
+    input: MessageContent,
+    *,
+    messages: Sequence[Message] | None = None,
+    provider: Any = None,
+    max_retries: int = 3,
+    loop_threshold: int = 3,
+) -> RunResult:
+    """Execute an agent (or swarm) and return the result.
+
+    This is the primary async API for running agents.  For a blocking
+    variant, use ``run.sync()``.
+
+    If *provider* is ``None``, a default provider is resolved from the
+    agent's ``provider_name`` using the model registry (if available).
+
+    Args:
+        agent: An ``Agent`` (or ``Swarm``) instance.
+        input: User query — a string or list of ContentBlock objects.
+        messages: Prior conversation history to continue from.
+        provider: LLM provider with ``async complete()`` method.
+            When ``None``, auto-resolved from the agent's model string.
+        max_retries: Retry attempts for transient LLM errors.
+        loop_threshold: Consecutive identical tool-call patterns
+            before raising a loop error.
+
+    Returns:
+        ``RunResult`` with the agent's output, message history,
+        usage stats, and step count.
+    """
+    resolved_provider = provider or _resolve_provider(agent)
+    _log.debug(
+        "run() starting agent='%s' provider=%s",
+        getattr(agent, "name", "?"),
+        type(resolved_provider).__name__ if resolved_provider else None,
+    )
+
+    # Detect Swarm: delegate to its own run() method
+    if hasattr(agent, "flow_order"):
+        return await agent.run(
+            input,
+            messages=messages,
+            provider=resolved_provider,
+            max_retries=max_retries,
+        )
+
+    return await call_runner(
+        agent,
+        input,
+        messages=messages,
+        provider=resolved_provider,
+        max_retries=max_retries,
+        loop_threshold=loop_threshold,
+    )
+
+
+def _sync(
+    agent: Any,
+    input: MessageContent,
+    *,
+    messages: Sequence[Message] | None = None,
+    provider: Any = None,
+    max_retries: int = 3,
+    loop_threshold: int = 3,
+) -> RunResult:
+    """Execute an agent synchronously (blocking wrapper).
+
+    Calls ``run()`` via ``asyncio.run()``.  This is a convenience for
+    scripts and notebooks where an event loop is not already running.
+
+    Args:
+        agent: An ``Agent`` (or ``Swarm``) instance.
+        input: User query — a string or list of ContentBlock objects.
+        messages: Prior conversation history to continue from.
+        provider: LLM provider with ``async complete()`` method.
+        max_retries: Retry attempts for transient LLM errors.
+        loop_threshold: Consecutive identical tool-call patterns
+            before raising a loop error.
+
+    Returns:
+        ``RunResult`` with the agent's output, message history,
+        usage stats, and step count.
+    """
+    return asyncio.run(
+        run(
+            agent,
+            input,
+            messages=messages,
+            provider=provider,
+            max_retries=max_retries,
+            loop_threshold=loop_threshold,
+        )
+    )
+
+
+async def _stream(
+    agent: Any,
+    input: MessageContent,
+    *,
+    messages: Sequence[Message] | None = None,
+    provider: Any = None,
+    max_steps: int | None = None,
+    detailed: bool = False,
+    event_types: set[str] | None = None,
+    conversation_id: str | None = None,
+) -> AsyncIterator[StreamEvent]:
+    """Stream agent execution, yielding events in real-time.
+
+    Uses the provider's ``stream()`` method to deliver text deltas
+    as ``TextEvent`` objects and emit ``ToolCallEvent`` for each tool
+    invocation. When tool calls are detected, tools are executed and
+    the LLM is re-streamed with the results — looping until a
+    text-only response or *max_steps* is reached.
+
+    When *detailed* is ``True``, additional event types are emitted:
+    ``StatusEvent``, ``StepEvent``, ``UsageEvent``, and
+    ``ToolResultEvent``.  ``ErrorEvent`` is emitted on errors
+    regardless of the *detailed* flag.
+
+    Args:
+        agent: An ``Agent`` instance.
+        input: User query string.
+        messages: Prior conversation history.
+        provider: LLM provider with an ``async stream()`` method.
+            When ``None``, auto-resolved from the agent's model string.
+        max_steps: Maximum LLM-tool round-trips. Defaults to
+            ``agent.max_steps``.
+        detailed: When ``True``, emit rich event types (StepEvent,
+            UsageEvent, ToolResultEvent, StatusEvent) in addition to
+            the default TextEvent and ToolCallEvent.
+        event_types: When provided, only events whose ``type`` field
+            matches one of the given strings are yielded.  When
+            ``None`` (default), all events pass through (respecting
+            the *detailed* flag).
+
+    Yields:
+        ``TextEvent`` for text chunks and ``ToolCallEvent`` for tool
+        invocations.  When *detailed* is ``True``, also yields
+        ``StepEvent``, ``UsageEvent``, ``ToolResultEvent``, and
+        ``StatusEvent``.  ``ErrorEvent`` is yielded on errors
+        regardless of the *detailed* flag.
+    """
+    resolved = provider or _resolve_provider(agent)
+
+    # Track total events emitted for metrics (only recorded when detailed=True).
+    events_emitted: dict[str, int] = {}
+
+    def _passes_filter(event: StreamEvent) -> bool:
+        passes = event_types is None or event.type in event_types
+        if passes and detailed:
+            events_emitted[event.type] = events_emitted.get(event.type, 0) + 1
+        return passes
+
+    # Hoist OTel counter creation out of the per-step recording function (L-13)
+    _otel_counter = None
+    if HAS_OTEL:
+        meter = _get_meter()
+        _otel_counter = meter.create_counter(
+            name=METRIC_STREAM_EVENTS_EMITTED,
+            unit="1",
+            description="Number of streaming events emitted",
+        )
+
+    def _record_stream_metrics() -> None:
+        """Record total events emitted during this stream run."""
+        if not detailed or not events_emitted:
+            return
+        for evt_type, count in events_emitted.items():
+            attrs: dict[str, str] = {STREAM_EVENT_TYPE: evt_type}
+            if _otel_counter is not None:
+                _otel_counter.add(count, attrs)
+            else:
+                _collector.add_counter(METRIC_STREAM_EVENTS_EMITTED, float(count), attrs)
+
+    # Detect Swarm: delegate to its stream() method
+    if hasattr(agent, "flow_order"):
+        async for event in agent.stream(
+            input,
+            messages=messages,
+            provider=resolved,
+            detailed=detailed,
+            max_steps=max_steps,
+            event_types=event_types,
+        ):
+            yield event
+        return
+
+    if resolved is None:
+        from exo.agent import AgentError
+
+        raise AgentError(f"Agent '{agent.name}' requires a provider for stream()")
+
+    input, messages = await prepare_planned_execution(
+        agent,
+        input,
+        messages,
+        resolved,
+        max_retries=3,
+    )
+
+    steps = max_steps if max_steps is not None else agent.max_steps
+
+    # Resolve instructions (may be async callable)
+    instr: str = ""
+    raw_instr = agent.instructions
+    if callable(raw_instr):
+        if asyncio.iscoroutinefunction(raw_instr):
+            instr = str(await raw_instr(agent.name))
+        else:
+            instr = str(raw_instr(agent.name))
+    elif raw_instr:
+        instr = str(raw_instr)
+
+    # ---- Memory: load history and persist user input before streaming ----
+    history: list[Message] = list(messages) if messages else []
+    _persistence = getattr(agent, "_memory_persistence", None)
+    if _persistence is not None:
+        import uuid as _uuid
+
+        _active_conv = conversation_id or getattr(agent, "conversation_id", None)
+        if _active_conv is None:
+            _active_conv = str(_uuid.uuid4())
+            if conversation_id is None:
+                agent.conversation_id = _active_conv
+        from exo.memory.base import (  # pyright: ignore[reportMissingImports]
+            HumanMemory,
+            MemoryMetadata,
+        )
+
+        _persistence.metadata = MemoryMetadata(
+            agent_id=agent.name,
+            task_id=_active_conv,
+        )
+        _db_history = await _persistence.load_history(
+            agent_name=agent.name,
+            conversation_id=_active_conv,
+            rounds=max_steps or agent.max_steps,
+        )
+        history = list(_db_history) + history
+        await _persistence.store.add(
+            HumanMemory(
+                content=input,
+                metadata=_persistence.metadata,
+            )
+        )
+        _log.debug(
+            "memory stream pre-run: agent=%s conversation=%s db_history=%d",
+            agent.name,
+            _active_conv,
+            len(_db_history),
+        )
+    # ---- end Memory ----
+
+    # Build initial message list
+    history.append(UserMessage(content=input))
+    msg_list = build_messages(instr, history)
+
+    # ---- Context: apply windowing and summarization ----
+    _agent_context = getattr(agent, "context", None)
+    _agent_name = getattr(agent, "name", "")
+    if _agent_context is not None:
+        from exo.agent import _apply_context_windowing  # pyright: ignore[reportMissingImports]
+
+        msg_list, _ctx_actions = await _apply_context_windowing(
+            msg_list,
+            _agent_context,
+            resolved,
+        )
+        for _ca in _ctx_actions:
+            _ev = ContextEvent(
+                action=_ca.action,
+                agent_name=_agent_name,
+                before_count=_ca.before_count,
+                after_count=_ca.after_count,
+                details=_ca.details,
+            )
+            if _passes_filter(_ev):
+                yield _ev
+    # ---- end Context ----
+
+    # ---- Long-term memory: inject relevant knowledge into system message ----
+    _agent_memory_lt = getattr(agent, "memory", None)
+    if _agent_memory_lt is not None:
+        try:
+            from exo.agent import (
+                _inject_long_term_knowledge,  # pyright: ignore[reportMissingImports]
+            )
+
+            msg_list = await _inject_long_term_knowledge(_agent_memory_lt, input, msg_list)
+        except ImportError:
+            pass
+    # ---- end Long-term memory ----
+
+    model_name = getattr(agent, "model", "") or ""
+
+    # ---- Token tracking: init per-stream tracker and look up context window ----
+    _model_name_only = model_name.partition(":")[2] or model_name
+    _stream_context_window: int | None = None
+    _stream_token_tracker: Any = None
+    if _agent_context is not None:
+        try:
+            from exo.agent import (  # pyright: ignore[reportMissingImports]
+                _get_context_window_tokens,
+                _update_system_token_info,
+            )
+            from exo.context.token_tracker import (
+                TokenTracker,  # pyright: ignore[reportMissingImports]
+            )
+
+            _stream_context_window = _get_context_window_tokens(_model_name_only)
+            _stream_token_tracker = TokenTracker()
+        except ImportError:
+            pass
+    # ---- end Token tracking init ----
+
+    # Fire START hook (parity with run() path)
+    await agent.hook_manager.run(HookPoint.START, agent=agent, input=input)
+
+    if detailed:
+        _ev = StatusEvent(
+            status="starting",
+            agent_name=agent.name,
+            message=f"Agent '{agent.name}' starting execution",
+        )
+        if _passes_filter(_ev):
+            yield _ev
+
+    for step_num in range(steps):
+        step_started_at = time.time()
+
+        # Re-enumerate tool schemas each step so dynamically added/removed
+        # tools (via add_tool/remove_tool) take effect without restarting.
+        tool_schemas = agent.get_tool_schemas() or None
+
+        # Augment system message with token context info from previous step
+        if _stream_token_tracker is not None and _stream_context_window:
+            _traj = _stream_token_tracker.get_trajectory(agent.name)
+            if _traj:
+                _last_input = _traj[-1].prompt_tokens
+                msg_list = _update_system_token_info(msg_list, _last_input, _stream_context_window)  # type: ignore[possibly-undefined]
+
+        # ---- Drain injected messages ----
+        while not agent._injected_messages.empty():
+            try:
+                _injected = agent._injected_messages.get_nowait()
+                msg_list.append(UserMessage(content=_injected))
+                _inj_ev = MessageInjectedEvent(content=_injected, agent_name=agent.name)
+                if _passes_filter(_inj_ev):
+                    yield _inj_ev
+            except asyncio.QueueEmpty:
+                break
+
+        if detailed:
+            _ev = StepEvent(
+                step_number=step_num + 1,
+                agent_name=agent.name,
+                status="started",
+                started_at=step_started_at,
+            )
+            if _passes_filter(_ev):
+                yield _ev
+
+        try:
+            # Accumulate text and tool call deltas from the stream
+            text_parts: list[str] = []
+            # dict of index -> accumulated tool call data
+            tc_acc: dict[int, dict[str, str]] = {}
+            step_usage = Usage()
+
+            await agent.hook_manager.run(HookPoint.PRE_LLM_CALL, agent=agent, messages=msg_list)
+
+            async for chunk in resolved.stream(
+                msg_list,
+                tools=tool_schemas,
+                temperature=agent.temperature,
+                max_tokens=agent.max_tokens,
+            ):
+                # Yield text deltas
+                if chunk.delta:
+                    text_parts.append(chunk.delta)
+                    _ev = TextEvent(text=chunk.delta, agent_name=agent.name)
+                    if _passes_filter(_ev):
+                        yield _ev
+
+                # Accumulate tool call deltas
+                for tcd in chunk.tool_call_deltas:
+                    idx = tcd.index
+                    if idx not in tc_acc:
+                        tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                    if tcd.id is not None:
+                        tc_acc[idx]["id"] = tcd.id
+                    if tcd.name is not None:
+                        tc_acc[idx]["name"] = tcd.name
+                    tc_acc[idx]["arguments"] += tcd.arguments
+
+                # Capture usage from final chunk
+                if chunk.usage and chunk.usage.total_tokens > 0:
+                    step_usage = Usage(
+                        input_tokens=chunk.usage.input_tokens,
+                        output_tokens=chunk.usage.output_tokens,
+                        total_tokens=chunk.usage.total_tokens,
+                    )
+
+            if detailed:
+                _ev = UsageEvent(
+                    usage=step_usage,
+                    agent_name=agent.name,
+                    step_number=step_num + 1,
+                    model=model_name,
+                )
+                if _passes_filter(_ev):
+                    yield _ev
+
+            # Build completed tool calls
+            tool_calls = [
+                ToolCall(
+                    id=data["id"],
+                    name=data["name"],
+                    arguments=data["arguments"],
+                )
+                for data in tc_acc.values()
+                if data["id"]
+            ]
+
+            full_text = "".join(text_parts)
+            from types import SimpleNamespace
+
+            _synth = SimpleNamespace(
+                content=full_text,
+                tool_calls=tool_calls,
+                usage=step_usage,
+                finish_reason="tool_calls" if tool_calls else "stop",
+            )
+            await agent.hook_manager.run(HookPoint.POST_LLM_CALL, agent=agent, response=_synth)
+
+            # Record token usage in tracker
+            if _stream_token_tracker is not None and step_usage.total_tokens > 0:
+                _stream_token_tracker.add_usage(agent.name, step_usage)
+
+            # No tool calls — done streaming
+            if not tool_calls:
+                if detailed:
+                    _ev = StepEvent(
+                        step_number=step_num + 1,
+                        agent_name=agent.name,
+                        status="completed",
+                        started_at=step_started_at,
+                        completed_at=time.time(),
+                        usage=step_usage,
+                    )
+                    if _passes_filter(_ev):
+                        yield _ev
+                    _ev = StatusEvent(
+                        status="completed",
+                        agent_name=agent.name,
+                        message=f"Agent '{agent.name}' completed execution",
+                    )
+                    if _passes_filter(_ev):
+                        yield _ev
+                # Fire FINISHED hook (parity with run() path)
+                await agent.hook_manager.run(HookPoint.FINISHED, agent=agent, output=full_text)
+                _record_stream_metrics()
+                return
+
+            # Yield ToolCallEvent for each tool call
+            for tc in tool_calls:
+                _ev = ToolCallEvent(
+                    tool_name=tc.name,
+                    tool_call_id=tc.id,
+                    agent_name=agent.name,
+                )
+                if _passes_filter(_ev):
+                    yield _ev
+
+            # Execute tools and feed results back
+            actions = parse_tool_arguments(tool_calls)
+            tool_exec_start = time.time()
+            tool_results = await agent._execute_tools(actions)
+            tool_exec_end = time.time()
+
+            # Drain MCP progress queues and yield MCPProgressEvent items.
+            # Progress notifications are captured by MCPToolWrapper.execute()
+            # into per-wrapper asyncio.Queue instances during _execute_tools().
+            # They are yielded here (after all tools complete) so the LLM
+            # never sees them — only the caller's async-for loop does.
+            for action in actions:
+                tool = agent.tools.get(action.tool_name)
+                if tool is not None and hasattr(tool, "progress_queue"):
+                    q = tool.progress_queue
+                    while not q.empty():
+                        try:
+                            progress_evt: MCPProgressEvent = q.get_nowait()
+                            # Stamp agent_name if not already set
+                            if not progress_evt.agent_name:
+                                progress_evt = MCPProgressEvent(
+                                    tool_name=progress_evt.tool_name,
+                                    progress=progress_evt.progress,
+                                    total=progress_evt.total,
+                                    message=progress_evt.message,
+                                    agent_name=agent.name,
+                                )
+                            if _passes_filter(progress_evt):
+                                yield progress_evt
+                        except Exception:
+                            break
+
+            # Emit ToolResultEvent for each tool execution when detailed
+            if detailed:
+                total_tool_duration_ms = (tool_exec_end - tool_exec_start) * 1000
+                per_tool_duration_ms = (
+                    total_tool_duration_ms / len(tool_results) if tool_results else 0.0
+                )
+                for action, tr in zip(actions, tool_results, strict=False):
+                    _ev = ToolResultEvent(
+                        tool_name=tr.tool_name,
+                        tool_call_id=tr.tool_call_id,
+                        arguments=action.arguments,
+                        result=tr.content,
+                        error=tr.error,
+                        success=tr.error is None,
+                        duration_ms=per_tool_duration_ms,
+                        agent_name=agent.name,
+                    )
+                    if _passes_filter(_ev):
+                        yield _ev
+
+            if detailed:
+                _ev = StepEvent(
+                    step_number=step_num + 1,
+                    agent_name=agent.name,
+                    status="completed",
+                    started_at=step_started_at,
+                    completed_at=time.time(),
+                    usage=step_usage,
+                )
+                if _passes_filter(_ev):
+                    yield _ev
+
+            # Append assistant message + tool results to conversation
+            msg_list.append(AssistantMessage(content=full_text, tool_calls=tool_calls))
+            msg_list.extend(tool_results)
+
+            # Check token budget trigger → force early summarization before next step
+            if (
+                _stream_token_tracker is not None
+                and _stream_context_window
+                and _agent_context is not None
+                and step_usage.input_tokens > 0
+            ):
+                _fill_ratio = step_usage.input_tokens / _stream_context_window
+                _trigger = getattr(_agent_context, "token_budget_trigger", 0.8)
+                if _fill_ratio > _trigger:
+                    _log.info(
+                        "stream token budget trigger: %.0f%% full (%d/%d tokens) on '%s'",
+                        100.0 * _fill_ratio,
+                        step_usage.input_tokens,
+                        _stream_context_window,
+                        agent.name,
+                    )
+                    _tb_ev = ContextEvent(
+                        action="token_budget",
+                        agent_name=_agent_name,
+                        before_count=len(msg_list),
+                        after_count=len(msg_list),
+                        details={
+                            "fill_ratio": _fill_ratio,
+                            "input_tokens": step_usage.input_tokens,
+                            "context_window_tokens": _stream_context_window,
+                            "trigger": _trigger,
+                        },
+                    )
+                    if _passes_filter(_tb_ev):
+                        yield _tb_ev
+                    from exo.agent import (
+                        _apply_context_windowing as _acw,  # pyright: ignore[reportMissingImports]
+                    )
+
+                    msg_list, _budget_actions = await _acw(
+                        msg_list,
+                        _agent_context,
+                        resolved,
+                        force_summarize=True,
+                    )
+                    for _ba in _budget_actions:
+                        _ba_ev = ContextEvent(
+                            action=_ba.action,
+                            agent_name=_agent_name,
+                            before_count=_ba.before_count,
+                            after_count=_ba.after_count,
+                            details=_ba.details,
+                        )
+                        if _passes_filter(_ba_ev):
+                            yield _ba_ev
+
+        except Exception as exc:
+            _ev = ErrorEvent(
+                error=str(exc),
+                error_type=type(exc).__name__,
+                agent_name=agent.name,
+                step_number=step_num + 1,
+                recoverable=False,
+            )
+            if _passes_filter(_ev):
+                yield _ev
+            if detailed:
+                _ev = StatusEvent(
+                    status="error",
+                    agent_name=agent.name,
+                    message=str(exc),
+                )
+                if _passes_filter(_ev):
+                    yield _ev
+            # Fire ERROR hook (parity with run() path)
+            await agent.hook_manager.run(HookPoint.ERROR, agent=agent, error=exc)
+            _record_stream_metrics()
+            raise
+
+
+def _resolve_provider(agent: Any) -> Any:
+    """Attempt to auto-resolve a provider from the agent's model config.
+
+    Tries the model registry from ``exo.models`` if available.
+    For Swarms (which lack a ``.model`` attribute), resolves from the
+    first agent in the flow order.
+
+    Returns ``None`` if auto-resolution fails (call_runner will then
+    let Agent.run() raise its own error for missing provider).
+    """
+    try:
+        from exo.models.provider import get_provider  # pyright: ignore[reportMissingImports]
+
+        model = getattr(agent, "model", None)
+        if model is None and hasattr(agent, "agents"):
+            # Swarm: resolve from the first agent's model
+            first = (
+                next(iter(agent.agents.values()), None)
+                if isinstance(agent.agents, dict)
+                else (agent.agents[0] if agent.agents else None)
+            )
+            if first is not None:
+                model = first.model
+        if model is None:
+            return None
+        return get_provider(model)
+    except Exception as exc:
+        _log.warning(
+            "Failed to auto-resolve provider for model '%s': %s",
+            getattr(agent, "model", "?"),
+            exc,
+        )
+        return None
+
+
+# Attach sync and stream as attributes of the run function
+run.sync = _sync  # type: ignore[attr-defined]
+run.stream = _stream  # type: ignore[attr-defined]

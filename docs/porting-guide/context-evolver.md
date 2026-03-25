@@ -1,10 +1,10 @@
-# Context Evolver — agent-core to Orbiter Mapping
+# Context Evolver — agent-core to Exo Mapping
 
 **Epic:** 9 — Context Evolution
 **Date:** 2026-03-11
 
 This document maps agent-core's (openJiuwen) context evolution algorithms
-(ACE, ReasoningBank, ReMe) to Orbiter's `orbiter-memory` evolution package,
+(ACE, ReasoningBank, ReMe) to Exo's `exo-memory` evolution package,
 covering memory quality scoring, structured recall, pattern extraction, and
 composable pipeline operators.
 
@@ -64,10 +64,10 @@ Agent-core composes strategies using two operators:
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's context evolution lives in the `orbiter-memory` package at
-`packages/orbiter-memory/src/orbiter/memory/evolution/` and implements
+Exo's context evolution lives in the `exo-memory` package at
+`packages/exo-memory/src/exo/memory/evolution/` and implements
 the same three strategies behind a shared `MemoryEvolutionStrategy` ABC.
 
 ### Architecture
@@ -97,7 +97,7 @@ results (union by item ID, last-write-wins).
 ### ACEStrategy
 
 ```python
-from orbiter.memory.evolution import ACEStrategy
+from exo.memory.evolution import ACEStrategy
 
 ace = ACEStrategy(counter_path="counters.json", harmful_threshold=0.5)
 ```
@@ -114,7 +114,7 @@ or `None` for in-memory-only operation.
 ### ReasoningBankStrategy
 
 ```python
-from orbiter.memory.evolution import ReasoningBankStrategy
+from exo.memory.evolution import ReasoningBankStrategy
 
 bank = ReasoningBankStrategy(embeddings=my_provider, similarity_threshold=0.85)
 ```
@@ -129,7 +129,7 @@ configured. The `ReasoningEntry` dataclass has `title`, `description`,
 ### ReMeStrategy
 
 ```python
-from orbiter.memory.evolution import ReMeStrategy
+from exo.memory.evolution import ReMeStrategy
 
 reme = ReMeStrategy(similarity_threshold=0.85)
 ```
@@ -161,10 +161,10 @@ pipeline = (ACE(config) | ReasoningBank(embeddings)) >> ReMe()
 evolved = await pipeline.evolve(memory_items, context={"feedback": text})
 ```
 
-### Orbiter
+### Exo
 
 ```python
-from orbiter.memory.evolution import (
+from exo.memory.evolution import (
     ACEStrategy,
     ReasoningBankStrategy,
     ReMeStrategy,
@@ -188,8 +188,8 @@ evolved = await pipeline.evolve(memory_items, context={"model": my_llm})
 ```
 
 Key differences:
-- Orbiter uses explicit `counter_path` instead of a config object for ACE
-- Orbiter passes the LLM via `context={"model": ...}` rather than constructor injection
+- Exo uses explicit `counter_path` instead of a config object for ACE
+- Exo passes the LLM via `context={"model": ...}` rather than constructor injection
 - Pipeline flattening is automatic: `a >> b >> c` produces a single
   3-strategy sequential pipeline (no nesting)
 - Parallel merge uses last-write-wins by item ID, matching agent-core semantics
@@ -201,7 +201,7 @@ Key differences:
 ace = ACE(config)
 labels = await ace.classify(memories, user_feedback, llm=my_model)
 
-# Orbiter
+# Exo
 ace = ACEStrategy(counter_path="counters.json")
 labels = await ace.reflect(memories, feedback="User said this was wrong", model=my_llm)
 # labels: {"mem-id-1": "harmful", "mem-id-2": "neutral", ...}
@@ -215,7 +215,7 @@ labels = await ace.reflect(memories, feedback="User said this was wrong", model=
 bank = ReasoningBank(embeddings=emb_provider)
 entries = await bank.query("how to handle rate limits", top_k=3)
 
-# Orbiter
+# Exo
 bank = ReasoningBankStrategy(embeddings=emb_provider)
 await bank.evolve(memory_items)  # populate the bank first
 entries = await bank.recall("how to handle rate limits", top_k=3)
@@ -226,25 +226,25 @@ entries = await bank.recall("how to handle rate limits", top_k=3)
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.context_evolver.ACE` | `orbiter.memory.evolution.ACEStrategy` | Playbook-based memory scoring with helpful/harmful/neutral counters |
-| `openjiuwen.context_evolver.ACE.classify` | `orbiter.memory.evolution.ACEStrategy.reflect` | LLM-based memory classification against user feedback |
-| `openjiuwen.context_evolver.ACE.curate` | `orbiter.memory.evolution.ACEStrategy.curate` | Score-threshold pruning (removes items below quality floor) |
+| `openjiuwen.context_evolver.ACE` | `exo.memory.evolution.ACEStrategy` | Playbook-based memory scoring with helpful/harmful/neutral counters |
+| `openjiuwen.context_evolver.ACE.classify` | `exo.memory.evolution.ACEStrategy.reflect` | LLM-based memory classification against user feedback |
+| `openjiuwen.context_evolver.ACE.curate` | `exo.memory.evolution.ACEStrategy.curate` | Score-threshold pruning (removes items below quality floor) |
 | *(counter persistence)* | `ACEStrategy(counter_path=...)` | JSON file persistence for per-memory counters |
-| `openjiuwen.context_evolver.ReasoningBank` | `orbiter.memory.evolution.ReasoningBankStrategy` | Structured entries (title/description/content) with semantic dedup |
+| `openjiuwen.context_evolver.ReasoningBank` | `exo.memory.evolution.ReasoningBankStrategy` | Structured entries (title/description/content) with semantic dedup |
 | `openjiuwen.context_evolver.ReasoningBank.query` | `ReasoningBankStrategy.recall` | Top-k semantic search with embedding or keyword fallback |
-| *(ReasoningBank entry)* | `orbiter.memory.evolution.ReasoningEntry` | Frozen dataclass: `title`, `description`, `content`, `item_id` |
-| `openjiuwen.context_evolver.ReMe` | `orbiter.memory.evolution.ReMeStrategy` | LLM-based pattern extraction with when-to-use metadata |
+| *(ReasoningBank entry)* | `exo.memory.evolution.ReasoningEntry` | Frozen dataclass: `title`, `description`, `content`, `item_id` |
+| `openjiuwen.context_evolver.ReMe` | `exo.memory.evolution.ReMeStrategy` | LLM-based pattern extraction with when-to-use metadata |
 | *(ReMe pattern type)* | `MemoryItem.metadata.extra["pattern_type"]` | `"success"` or `"failure"` — stored in metadata extra dict |
 | *(ReMe when-to-use)* | `MemoryItem.metadata.extra["when_to_use"]` | Applicability hint stored in metadata extra dict |
 | `openjiuwen.context_evolver.>>` operator | `MemoryEvolutionStrategy.__rshift__` | Sequential composition — output of each strategy feeds into the next |
 | `openjiuwen.context_evolver.\|` operator | `MemoryEvolutionStrategy.__or__` | Parallel composition — union by item ID, last-write-wins |
-| *(pipeline)* | `orbiter.memory.evolution.MemoryEvolutionPipeline` | Composes strategies; auto-flattens same-mode nesting |
-| *(base class)* | `orbiter.memory.evolution.MemoryEvolutionStrategy` | ABC with `evolve()` method and composition operators |
-| *(LLM protocol — classification)* | `orbiter.memory.evolution.ace.ReflectionModel` | `async (prompt: str) -> str` returning "helpful"/"harmful"/"neutral" |
-| *(LLM protocol — extraction)* | `orbiter.memory.evolution.reme.PatternModel` | `async (prompt: str) -> str` returning JSON array of patterns |
+| *(pipeline)* | `exo.memory.evolution.MemoryEvolutionPipeline` | Composes strategies; auto-flattens same-mode nesting |
+| *(base class)* | `exo.memory.evolution.MemoryEvolutionStrategy` | ABC with `evolve()` method and composition operators |
+| *(LLM protocol — classification)* | `exo.memory.evolution.ace.ReflectionModel` | `async (prompt: str) -> str` returning "helpful"/"harmful"/"neutral" |
+| *(LLM protocol — extraction)* | `exo.memory.evolution.reme.PatternModel` | `async (prompt: str) -> str` returning JSON array of patterns |
 
-All public symbols are re-exported from `orbiter.memory.evolution` (the
-package `__init__.py`), so `from orbiter.memory.evolution import ACEStrategy`
+All public symbols are re-exported from `exo.memory.evolution` (the
+package `__init__.py`), so `from exo.memory.evolution import ACEStrategy`
 works as a convenience import.

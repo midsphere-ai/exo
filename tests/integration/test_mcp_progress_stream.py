@@ -42,11 +42,11 @@ async def test_mcp_progress_events_fire_before_tool_result(vertex_model: str) ->
        - At least 1 MCPProgressEvent present in the stream.
        - All MCPProgressEvent items appear before the first ToolResultEvent.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.runner import run  # pyright: ignore[reportMissingImports]
-    from orbiter.types import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.runner import run  # pyright: ignore[reportMissingImports]
+    from exo.types import (  # pyright: ignore[reportMissingImports]
         MCPProgressEvent,
         ToolResultEvent,
     )

@@ -1,9 +1,9 @@
-# orbiter_server.app
+# exo_server.app
 
 FastAPI application factory with `/chat` endpoint. Supports both synchronous request/response and streaming SSE.
 
 ```python
-from orbiter_server.app import ChatRequest, ChatResponse, create_app, register_agent
+from exo_server.app import ChatRequest, ChatResponse, create_app, register_agent
 ```
 
 ---
@@ -73,7 +73,7 @@ Register an agent with the FastAPI app. The first registered agent automatically
 ### Example
 
 ```python
-from orbiter_server import create_app, register_agent
+from exo_server import create_app, register_agent
 
 app = create_app()
 register_agent(app, helper_agent, default=True)
@@ -142,7 +142,7 @@ Inject a message into a running agent's context. The message is added as a `User
 ### Example
 
 ```python
-from orbiter_server import create_app, register_agent
+from exo_server import create_app, register_agent
 
 app = create_app()
 register_agent(app, my_agent, default=True)

@@ -1,11 +1,11 @@
-# orbiter.context.token_tracker
+# exo.context.token_tracker
 
 Per-agent, per-step token tracking for cost analysis and budget enforcement.
 
 ## Module Path
 
 ```python
-from orbiter.context.token_tracker import TokenTracker, TokenStep, TokenUsageSummary
+from exo.context.token_tracker import TokenTracker, TokenStep, TokenUsageSummary
 ```
 
 ---
@@ -145,7 +145,7 @@ Aggregate token usage for a specific agent.
 ### Example
 
 ```python
-from orbiter.context.token_tracker import TokenTracker
+from exo.context.token_tracker import TokenTracker
 
 tracker = TokenTracker()
 

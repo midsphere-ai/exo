@@ -1,12 +1,12 @@
-# Orbiter: Granular Rewrite Plan
+# Exo: Granular Rewrite Plan
 
 ## Context
 
-AWorld (96,500 LOC) is being rewritten as **Orbiter** — a modern, minimal, multi-package agent framework. This plan breaks the work into **unit-level sessions** (~100-150 lines of new code each) for maximum accuracy. The `old/` directory is read-only reference — understand the logic, rewrite clean. No copy-paste-modify.
+AWorld (96,500 LOC) is being rewritten as **Exo** — a modern, minimal, multi-package agent framework. This plan breaks the work into **unit-level sessions** (~100-150 lines of new code each) for maximum accuracy. The `old/` directory is read-only reference — understand the logic, rewrite clean. No copy-paste-modify.
 
 **Decisions:**
 - Port ALL examples (including environment-specific ones)
-- Keep A2A protocol from experimental; keep AMNI context engine (rewritten clean as orbiter-context); drop CAST, PTC, continuous
+- Keep A2A protocol from experimental; keep AMNI context engine (rewritten clean as exo-context); drop CAST, PTC, continuous
 - Training: port core + VeRL integration only (drop Swift, AREAL, TRL)
 - ~100-150 lines new code per session
 
@@ -15,25 +15,25 @@ AWorld (96,500 LOC) is being rewritten as **Orbiter** — a modern, minimal, mul
 ## Package Architecture
 
 ```
-orbiter/                          # Monorepo root
+exo/                          # Monorepo root
 ├── pyproject.toml                # UV workspace + shared tool config
 ├── .python-version               # 3.11
 ├── .pre-commit-config.yaml
 ├── CLAUDE.md
 ├── packages/
-│   ├── orbiter-core/             # Agent, Tool, Runner, Config, Events, Hooks, Swarm
-│   ├── orbiter-models/           # LLM provider abstractions
-│   ├── orbiter-context/          # Context engine (prompt building, state, RAG, checkpoints)
-│   ├── orbiter-memory/           # Memory backends
-│   ├── orbiter-sandbox/          # Sandboxed execution
-│   ├── orbiter-trace/            # Observability
-│   ├── orbiter-eval/             # Evaluation framework
-│   ├── orbiter-mcp/              # MCP client/tools
-│   ├── orbiter-a2a/              # Agent-to-Agent protocol
-│   ├── orbiter-cli/              # CLI agent runner
-│   ├── orbiter-server/           # Web UI + API server
-│   ├── orbiter-train/            # Training framework (core + VeRL)
-│   └── orbiter/                  # Meta-package (installs all above)
+│   ├── exo-core/             # Agent, Tool, Runner, Config, Events, Hooks, Swarm
+│   ├── exo-models/           # LLM provider abstractions
+│   ├── exo-context/          # Context engine (prompt building, state, RAG, checkpoints)
+│   ├── exo-memory/           # Memory backends
+│   ├── exo-sandbox/          # Sandboxed execution
+│   ├── exo-trace/            # Observability
+│   ├── exo-eval/             # Evaluation framework
+│   ├── exo-mcp/              # MCP client/tools
+│   ├── exo-a2a/              # Agent-to-Agent protocol
+│   ├── exo-cli/              # CLI agent runner
+│   ├── exo-server/           # Web UI + API server
+│   ├── exo-train/            # Training framework (core + VeRL)
+│   └── exo/                  # Meta-package (installs all above)
 ├── examples/
 ├── docs/
 └── old/                          # Read-only reference (deleted at end)
@@ -46,7 +46,7 @@ orbiter/                          # Monorepo root
 ### Phase 0: Planning & Documentation
 > Goal: Establish CLAUDE.md, planning docs, and session guide. No code.
 
-**Session 0.1** — Write CLAUDE.md for the Orbiter project with build instructions, architecture overview, and session references. Write this plan document.
+**Session 0.1** — Write CLAUDE.md for the Exo project with build instructions, architecture overview, and session references. Write this plan document.
 
 ---
 
@@ -58,21 +58,21 @@ orbiter/                          # Monorepo root
 - `.pre-commit-config.yaml` (ruff hooks)
 
 **Session 1.2 — Package pyproject.toml files (batch 1)** [DONE]
-- `packages/orbiter-core/pyproject.toml`
-- `packages/orbiter-models/pyproject.toml`
-- `packages/orbiter-memory/pyproject.toml`
-- `packages/orbiter-mcp/pyproject.toml`
+- `packages/exo-core/pyproject.toml`
+- `packages/exo-models/pyproject.toml`
+- `packages/exo-memory/pyproject.toml`
+- `packages/exo-mcp/pyproject.toml`
 - Minimal `__init__.py` stubs so packages are importable
 
 **Session 1.3 — Package pyproject.toml files (batch 2)** [DONE]
-- `packages/orbiter-sandbox/pyproject.toml`
-- `packages/orbiter-trace/pyproject.toml`
-- `packages/orbiter-eval/pyproject.toml`
-- `packages/orbiter-a2a/pyproject.toml`
-- `packages/orbiter-cli/pyproject.toml`
-- `packages/orbiter-server/pyproject.toml`
-- `packages/orbiter-train/pyproject.toml`
-- `packages/orbiter/pyproject.toml` (meta-package)
+- `packages/exo-sandbox/pyproject.toml`
+- `packages/exo-trace/pyproject.toml`
+- `packages/exo-eval/pyproject.toml`
+- `packages/exo-a2a/pyproject.toml`
+- `packages/exo-cli/pyproject.toml`
+- `packages/exo-server/pyproject.toml`
+- `packages/exo-train/pyproject.toml`
+- `packages/exo/pyproject.toml` (meta-package)
 - Minimal `__init__.py` stubs
 - **Verified:** `uv sync` succeeds, all 12 packages importable, ruff clean
 
@@ -87,20 +87,20 @@ orbiter/                          # Monorepo root
 - `old/aworld/core/factory.py` (89 LOC — registry pattern)
 
 **Session 2.1 — Core types: Messages** [DONE]
-- `packages/orbiter-core/src/orbiter/types.py`
+- `packages/exo-core/src/exo/types.py`
 - Message types: `UserMessage`, `AssistantMessage`, `SystemMessage`, `ToolCall`, `ToolResult`
 - Base `Message` union type
 - ~100 lines
 - **Verify:** pytest on message creation, serialization, type narrowing
 
 **Session 2.2 — Core types: Agent I/O & Actions** [DONE]
-- Add to `orbiter/types.py`: `AgentInput`, `AgentOutput`, `ActionModel`, `RunResult`
+- Add to `exo/types.py`: `AgentInput`, `AgentOutput`, `ActionModel`, `RunResult`
 - Streaming event types: `TextEvent`, `ToolCallEvent`, `StreamEvent`
 - ~100 lines
 - **Verify:** pytest on all new types
 
 **Session 2.3 — Config: AgentConfig & ModelConfig** [DONE]
-- `packages/orbiter-core/src/orbiter/config.py`
+- `packages/exo-core/src/exo/config.py`
 - `AgentConfig` (name, model, instructions, tools, temperature, max_tokens, etc.)
 - `ModelConfig` (provider, model, api_key, base_url, etc.)
 - Pure Pydantic v2, sensible defaults
@@ -108,12 +108,12 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest on config creation, validation, defaults, serialization
 
 **Session 2.4 — Config: TaskConfig & RunConfig** [DONE]
-- Add to `orbiter/config.py`: `TaskConfig`, `RunConfig`, `MemoryConfig`
+- Add to `exo/config.py`: `TaskConfig`, `RunConfig`, `MemoryConfig`
 - ~100 lines
 - **Verify:** pytest on all config models
 
 **Session 2.5 — Registry** [DONE]
-- `packages/orbiter-core/src/orbiter/registry.py`
+- `packages/exo-core/src/exo/registry.py`
 - Single generic `Registry[T]` class replacing 8+ factories
 - `register()`, `get()`, `__contains__()`, decorator form
 - Global `agent_registry` and `tool_registry` instances
@@ -121,14 +121,14 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest on register/get/contains/decorator
 
 **Session 2.6 — Events** [DONE]
-- `packages/orbiter-core/src/orbiter/events.py`
+- `packages/exo-core/src/exo/events.py`
 - Simple async in-memory event bus: `EventBus` with `emit()`, `on()`, `off()`
 - Typed event names (enum or literal)
 - ~80 lines
 - **Verify:** pytest on emit/subscribe/unsubscribe, async event handling
 
 **Session 2.7 — Hooks** [DONE]
-- `packages/orbiter-core/src/orbiter/hooks.py`
+- `packages/exo-core/src/exo/hooks.py`
 - `HookPoint` enum (START, FINISHED, ERROR, PRE_LLM_CALL, POST_LLM_CALL, PRE_TOOL_CALL, POST_TOOL_CALL)
 - `Hook` protocol, `HookManager` class
 - `run_hooks()` async function
@@ -145,21 +145,21 @@ orbiter/                          # Monorepo root
 - `old/aworld/tools/function_tools_executor.py` (144 LOC)
 
 **Session 3.1 — Tool base class + @tool decorator** [DONE]
-- `packages/orbiter-core/src/orbiter/tool.py`
+- `packages/exo-core/src/exo/tool.py`
 - `Tool` base class with async `execute()` method
 - `@tool` decorator that wraps a Python function into a `FunctionTool`
 - ~120 lines
 - **Verify:** pytest — decorate sync/async functions, verify Tool interface
 
 **Session 3.2 — Schema generation + tool execution** [DONE]
-- Add to `orbiter/tool.py`: JSON Schema generation from function signatures
+- Add to `exo/tool.py`: JSON Schema generation from function signatures
 - `FunctionTool.execute()` — call the wrapped function, handle sync/async
 - Type mapping (Python types → JSON Schema)
 - ~120 lines
 - **Verify:** pytest — schema generation for various signatures, execution of sync/async tools
 
 **Session 3.3 — Tool tests + tool registry integration** [DONE]
-- `packages/orbiter-core/tests/test_tool.py`
+- `packages/exo-core/tests/test_tool.py`
 - Wire `FunctionTool` into `tool_registry`
 - Test edge cases: optional params, default values, complex types, docstring extraction
 - ~100 lines tests
@@ -177,21 +177,21 @@ orbiter/                          # Monorepo root
 - `old/aworld/models/utils.py` (445 LOC — token counting)
 
 **Session 4.1 — Model types** [DONE]
-- `packages/orbiter-models/src/orbiter/models/types.py`
+- `packages/exo-models/src/exo/models/types.py`
 - `ModelResponse`, `Usage`, `ToolCallRequest`, `StreamChunk`
 - Provider-agnostic response types
 - ~100 lines
 - **Verify:** pytest on type creation/serialization
 
 **Session 4.2 — Provider base** [DONE]
-- `packages/orbiter-models/src/orbiter/models/provider.py`
+- `packages/exo-models/src/exo/models/provider.py`
 - `ModelProvider` abstract base: `async complete()`, `async stream()`
 - `get_provider()` factory function (provider detection from model name/config)
 - ~100 lines
 - **Verify:** pytest on provider interface
 
 **Session 4.3 — OpenAI provider: completion** [DONE]
-- `packages/orbiter-models/src/orbiter/models/openai.py`
+- `packages/exo-models/src/exo/models/openai.py`
 - `OpenAIProvider` — `async complete()` using openai SDK
 - Message formatting, tool call parsing
 - ~130 lines
@@ -203,7 +203,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest with mocked streaming responses
 
 **Session 4.5 — Anthropic provider: completion** [DONE]
-- `packages/orbiter-models/src/orbiter/models/anthropic.py`
+- `packages/exo-models/src/exo/models/anthropic.py`
 - `AnthropicProvider` — `async complete()` using anthropic SDK
 - Message/tool format conversion (Anthropic uses different format)
 - ~130 lines
@@ -215,10 +215,10 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest with mocked streaming responses
 
 **Session 4.7 — Models __init__ + integration tests** [DONE]
-- `packages/orbiter-models/src/orbiter/models/__init__.py` — public API (10 exports)
+- `packages/exo-models/src/exo/models/__init__.py` — public API (10 exports)
 - Integration tests: public API validation, auto-registration, get_provider() end-to-end, cross-provider consistency
 - ~85 lines (13 tests)
-- **Verify:** full pytest pass for orbiter-models (127 tests), full suite (288 tests)
+- **Verify:** full pytest pass for exo-models (127 tests), full suite (288 tests)
 
 ---
 
@@ -234,14 +234,14 @@ orbiter/                          # Monorepo root
 - `old/aworld/core/model_output_parser/` (~150 LOC — output parsing framework)
 
 **Session 5.1 — Message builder**
-- `packages/orbiter-core/src/orbiter/_internal/message_builder.py`
+- `packages/exo-core/src/exo/_internal/message_builder.py`
 - Build LLM message list from: system instructions, conversation history, tool results
 - Handle message ordering (user → assistant → tool cycles)
 - ~120 lines
 - **Verify:** pytest — various conversation histories produce correct message lists
 
 **Session 5.2 — Output parser**
-- `packages/orbiter-core/src/orbiter/_internal/output_parser.py`
+- `packages/exo-core/src/exo/_internal/output_parser.py`
 - Parse LLM response into: text output, tool calls, or both
 - Extract tool call names, arguments, IDs
 - Handle structured output (Pydantic model validation)
@@ -249,7 +249,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — parse text-only, tool-call-only, mixed responses
 
 **Session 5.3 — Agent class: init + configuration**
-- `packages/orbiter-core/src/orbiter/agent.py`
+- `packages/exo-core/src/exo/agent.py`
 - `Agent` class with `__init__`: name, model, instructions, tools, hooks, memory, handoffs, output_type
 - Tool registration, config validation
 - Agent description/metadata: `describe()` method for capability advertisement
@@ -273,13 +273,13 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — agent calls tool, gets result, produces final answer
 
 **Session 5.6 — Agent tests + edge cases**
-- `packages/orbiter-core/tests/test_agent.py`
+- `packages/exo-core/tests/test_agent.py`
 - Multi-tool calls, parallel tool calls, tool errors, max iterations, retry behavior
 - ~120 lines tests
 - **Verify:** full pytest pass
 
 **Session 5.7 — Human-in-the-loop tool**
-- `packages/orbiter-core/src/orbiter/human.py`
+- `packages/exo-core/src/exo/human.py`
 - `HumanInputTool` — async tool that blocks for user confirmation/input
 - `HumanInputHandler` protocol — pluggable handler for different UIs (CLI, web, etc.)
 - Default console handler for interactive use
@@ -299,7 +299,7 @@ orbiter/                          # Monorepo root
 - `old/aworld/runners/runtime_engine.py` (283 LOC — distributed execution backends)
 
 **Session 6.1 — Run state tracking**
-- `packages/orbiter-core/src/orbiter/_internal/state.py`
+- `packages/exo-core/src/exo/_internal/state.py`
 - `RunState` — tracks messages, tool calls, iterations, status
 - `RunNodeStatus` enum (INIT, RUNNING, SUCCESS, FAILED, TIMEOUT)
 - `RunNode` — per-step state with agent_id, group tracking
@@ -307,14 +307,14 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest on state transitions, node lifecycle
 
 **Session 6.2 — Call runner: core loop**
-- `packages/orbiter-core/src/orbiter/_internal/call_runner.py`
+- `packages/exo-core/src/exo/_internal/call_runner.py`
 - `async call_runner(agent, input, state)` — the LLM→tool→LLM loop
 - Endless loop detection with configurable threshold
 - ~120 lines
 - **Verify:** pytest — single-turn and multi-turn execution with mocked agent
 
 **Session 6.3 — Public run() entry point**
-- `packages/orbiter-core/src/orbiter/runner.py`
+- `packages/exo-core/src/exo/runner.py`
 - `async run(agent_or_swarm, input)` → `RunResult`
 - `run.sync()` — sync wrapper using `asyncio.run()`
 - ~100 lines
@@ -326,7 +326,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — streaming produces text/tool events in order
 
 **Session 6.5 — Handler system: base + agent handler**
-- `packages/orbiter-core/src/orbiter/_internal/handlers.py`
+- `packages/exo-core/src/exo/_internal/handlers.py`
 - `Handler[IN, OUT]` ABC with `async handle()` → `AsyncGenerator`
 - `AgentHandler` — routes between agents in swarm, handles handoff dispatch
 - Swarm topology-aware stop checks (workflow/handoff/team modes)
@@ -340,7 +340,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — parallel execution, dependency ordering
 
 **Session 6.7 — Background task handler**
-- `packages/orbiter-core/src/orbiter/_internal/background.py`
+- `packages/exo-core/src/exo/_internal/background.py`
 - `BackgroundTaskHandler` — hot-merge (running task) and wake-up-merge (checkpoint restore) patterns
 - Pending message queue for background results
 - Integration with checkpoint system
@@ -351,7 +351,7 @@ orbiter/                          # Monorepo root
 - End-to-end tests: `Agent` + `@tool` + `run()` with mocked LLM
 - Handler pipeline tests, background task scenarios
 - ~100 lines tests
-- **Verify:** full pytest pass for orbiter-core
+- **Verify:** full pytest pass for exo-core
 
 ---
 
@@ -366,7 +366,7 @@ orbiter/                          # Monorepo root
 - `old/aworld/agents/swarm_composer_agent.py` (1,042 LOC — LLM-based YAML planning)
 
 **Session 7.1 — Graph utilities**
-- `packages/orbiter-core/src/orbiter/_internal/graph.py`
+- `packages/exo-core/src/exo/_internal/graph.py`
 - Simple adjacency list graph
 - `topological_sort()` (Kahn's algorithm), cycle detection
 - `parse_flow_dsl()` — parse `"a >> b >> c"` into edges
@@ -374,7 +374,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — topo sort, cycle detection, DSL parsing
 
 **Session 7.2 — Swarm class: workflow mode**
-- `packages/orbiter-core/src/orbiter/swarm.py`
+- `packages/exo-core/src/exo/swarm.py`
 - `Swarm` class with `mode="workflow"`
 - Takes agents list + `flow="a >> b >> c"` DSL
 - Sequential execution: run agents in topological order, pass output as input
@@ -395,7 +395,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — lead delegates, members respond, lead synthesizes
 
 **Session 7.5 — Agent grouping: parallel + serial**
-- `packages/orbiter-core/src/orbiter/_internal/agent_group.py`
+- `packages/exo-core/src/exo/_internal/agent_group.py`
 - `ParallelGroup` — concurrent agent execution via `asyncio.TaskGroup`, custom result aggregation
 - `SerialGroup` — dependency-based sequential execution with output→input chaining
 - Both integrate as nodes in Swarm flow DSL (e.g., `"(a | b) >> c"` for parallel a,b then serial c)
@@ -403,7 +403,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — parallel execution, serial chaining, mixed topologies
 
 **Session 7.6 — Nested swarms (TaskAgent pattern)**
-- `packages/orbiter-core/src/orbiter/_internal/nested.py`
+- `packages/exo-core/src/exo/_internal/nested.py`
 - Allow `Swarm` to be used as an agent within another `Swarm` (hierarchical nesting)
 - Recursive execution with context isolation
 - ~100 lines
@@ -411,7 +411,7 @@ orbiter/                          # Monorepo root
 
 **Session 7.7 — Swarm integration + runner wiring**
 - Wire `Swarm` into `run()` — detect if input is Agent or Swarm
-- `packages/orbiter-core/src/orbiter/__init__.py` — public API exports
+- `packages/exo-core/src/exo/__init__.py` — public API exports
 - Integration tests for all swarm modes including parallel/serial groups and nesting
 - ~100 lines
 - **Verify:** full end-to-end test
@@ -435,15 +435,15 @@ orbiter/                          # Monorepo root
 - `old/aworld/core/context/prompts/` (~500 LOC — prompt templates, dynamic variables)
 
 **Session 8.1 — ContextConfig + ContextState**
-- `packages/orbiter-context/src/orbiter/context/config.py`
+- `packages/exo-context/src/exo/context/config.py`
 - `ContextConfig` — Pydantic v2 model (mode, history_rounds, summary_threshold, offload_threshold, enable_retrieval, neuron_names)
-- `packages/orbiter-context/src/orbiter/context/state.py`
+- `packages/exo-context/src/exo/context/state.py`
 - `ContextState` — hierarchical key-value state with parent inheritance (get/set/local_dict/to_dict)
 - ~120 lines
 - **Verify:** pytest — config creation/validation, state inheritance, local vs parent, merge
 
 **Session 8.2 — Context class: core lifecycle**
-- `packages/orbiter-context/src/orbiter/context/context.py`
+- `packages/exo-context/src/exo/context/context.py`
 - `Context` class: task_id, config, state, parent reference
 - `fork()` — create child context with state inheritance
 - `merge()` — consolidate child state back into parent (net token calculation)
@@ -451,7 +451,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — context creation, fork, merge, hierarchical state
 
 **Session 8.3 — TokenTracker**
-- `packages/orbiter-context/src/orbiter/context/token_tracker.py`
+- `packages/exo-context/src/exo/context/token_tracker.py`
 - `TokenTracker` — per-agent, per-step token tracking
 - `TokenStep` — prompt_tokens, output_tokens per step
 - `add_step()`, `get_trajectory()`, `total_usage()`
@@ -459,7 +459,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — step tracking, usage aggregation, multi-agent
 
 **Session 8.4 — Neuron base + core built-in neurons**
-- `packages/orbiter-context/src/orbiter/context/neuron.py`
+- `packages/exo-context/src/exo/context/neuron.py`
 - `Neuron` ABC with `async format(ctx) -> str` and `priority: int`
 - `neuron_registry` — `Registry[Neuron]` for neuron discovery
 - Built-in core: `SystemNeuron` (date/time/platform), `TaskNeuron` (task info), `HistoryNeuron` (conversation windowing)
@@ -473,7 +473,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — each neuron type produces correct prompt fragment
 
 **Session 8.5 — PromptBuilder**
-- `packages/orbiter-context/src/orbiter/context/prompt_builder.py`
+- `packages/exo-context/src/exo/context/prompt_builder.py`
 - `PromptBuilder` — composable prompt construction via `add(neuron_name, **kwargs)`
 - `async build()` — resolve all neurons in priority order, compose final prompt
 - Template variable resolution with hierarchical context traversal
@@ -481,7 +481,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — add neurons, build prompt, variable resolution
 
 **Session 8.6 — ContextProcessor pipeline**
-- `packages/orbiter-context/src/orbiter/context/processor.py`
+- `packages/exo-context/src/exo/context/processor.py`
 - `ContextProcessor` ABC with `async process(ctx, payload) -> None`
 - `ProcessorPipeline` — event-driven execution (pre_llm_call, post_tool_call, etc.)
 - Built-in: `SummarizeProcessor`, `ToolResultOffloader`
@@ -489,7 +489,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — processor registration, event filtering, pipeline execution
 
 **Session 8.7 — Workspace + artifact system**
-- `packages/orbiter-context/src/orbiter/context/workspace.py`
+- `packages/exo-context/src/exo/context/workspace.py`
 - `Workspace` — artifact storage (write, read, list, delete)
 - `ArtifactType` enum (TEXT, CODE, MARKDOWN, JSON, CSV, IMAGE, etc.)
 - Artifact versioning: `version_history`, `revert_to_version()`
@@ -505,21 +505,21 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — artifact → chunk → search round-trip
 
 **Session 8.8 — Checkpoint**
-- `packages/orbiter-context/src/orbiter/context/checkpoint.py`
+- `packages/exo-context/src/exo/context/checkpoint.py`
 - `Checkpoint` — serialized context snapshot (values, metadata, version)
 - `Context.snapshot()` / `Context.restore()` — save/restore execution state
 - ~100 lines
 - **Verify:** pytest — snapshot, restore, version incrementing
 
 **Session 8.9 — Knowledge store + RAG basics**
-- `packages/orbiter-context/src/orbiter/context/_internal/knowledge.py`
+- `packages/exo-context/src/exo/context/_internal/knowledge.py`
 - `KnowledgeStore` — add artifacts, semantic search, range queries
 - Basic chunking + in-memory vector store for testing
 - ~130 lines
 - **Verify:** pytest — add/search/get artifacts
 
 **Session 8.10 — Context tools**
-- `packages/orbiter-context/src/orbiter/context/tools.py`
+- `packages/exo-context/src/exo/context/tools.py`
 - `planning_tool` — add_todo, get_todo (task planning checklist)
 - `knowledge_tool` — get_knowledge, grep_knowledge (artifact search)
 - `file_tool` — read_file from working directory
@@ -527,11 +527,11 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — tool execution, context mutation
 
 **Session 8.11 — Context __init__ + integration tests**
-- `packages/orbiter-context/src/orbiter/context/__init__.py` — public API exports
+- `packages/exo-context/src/exo/context/__init__.py` — public API exports
 - Integration tests: Context + PromptBuilder + Processor + Workspace end-to-end
 - Wire context into Agent (agent.py context parameter)
 - ~100 lines
-- **Verify:** full pytest pass for orbiter-context
+- **Verify:** full pytest pass for exo-context
 
 ---
 
@@ -547,7 +547,7 @@ orbiter/                          # Monorepo root
 - `old/aworld/memory/vector/dbs/` (~200 LOC — Chroma, Qdrant backends)
 
 **Session 9.1 — Memory interface + types**
-- `packages/orbiter-memory/src/orbiter/memory/base.py`
+- `packages/exo-memory/src/exo/memory/base.py`
 - `MemoryStore` protocol: `add()`, `get()`, `search()`, `clear()`
 - `MemoryItem` model with subtypes: `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`
 - `MemoryMetadata` with user_id, session_id, task_id, agent_id scoping
@@ -556,7 +556,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest on types, status transitions
 
 **Session 9.2 — Short-term memory**
-- `packages/orbiter-memory/src/orbiter/memory/short_term.py`
+- `packages/exo-memory/src/exo/memory/short_term.py`
 - `ShortTermMemory` — conversation context management
 - Scope-based filtering: user, session, task
 - Incomplete message pair filtering (tool call/response integrity for LLM API compatibility)
@@ -564,7 +564,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — add messages, truncation, windowing, scope filtering
 
 **Session 9.3 — Summary + compression**
-- `packages/orbiter-memory/src/orbiter/memory/summary.py`
+- `packages/exo-memory/src/exo/memory/summary.py`
 - Summary trigger logic: message count threshold, token count threshold, incomplete pair check
 - Multi-template summary generation with typed summaries (conversation, facts, profiles)
 - `SummaryConfig` — prompts, thresholds, compression rules
@@ -572,7 +572,7 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — trigger detection, summary generation with mocked LLM
 
 **Session 9.4 — Long-term memory: orchestrator + extraction**
-- `packages/orbiter-memory/src/orbiter/memory/long_term.py`
+- `packages/exo-memory/src/exo/memory/long_term.py`
 - `LongTermMemory` — persistent memory across sessions
 - `MemoryOrchestrator` — async processing tasks for extracting UserProfile, AgentExperience, Facts from conversations
 - Processing task queue with status tracking (initial/processing/completed/failed)
@@ -580,20 +580,20 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest with in-memory backend, mocked LLM extraction
 
 **Session 9.5 — SQLite backend**
-- `packages/orbiter-memory/src/orbiter/memory/backends/sqlite.py`
+- `packages/exo-memory/src/exo/memory/backends/sqlite.py`
 - `SQLiteMemoryStore` implementing `MemoryStore`
 - JSON indexes for metadata fields, soft deletes, version field
 - ~120 lines
 - **Verify:** pytest with temp SQLite database
 
 **Session 9.6 — Postgres backend**
-- `packages/orbiter-memory/src/orbiter/memory/backends/postgres.py`
+- `packages/exo-memory/src/exo/memory/backends/postgres.py`
 - `PostgresMemoryStore`
 - ~120 lines
 - **Verify:** pytest (may need mock or skip if no postgres)
 
 **Session 9.7 — Embeddings + vector search**
-- `packages/orbiter-memory/src/orbiter/memory/backends/vector.py`
+- `packages/exo-memory/src/exo/memory/backends/vector.py`
 - `VectorMemoryStore` — wraps embedding + vector DB
 - `Embeddings` ABC with sync + async variants
 - OpenAI-compatible embedding provider with dimension support
@@ -604,7 +604,7 @@ orbiter/                          # Monorepo root
 - Public API, wire memory into Agent
 - Memory event integration (emit memory events for async processing)
 - ~80 lines
-- **Verify:** full pytest pass for orbiter-memory
+- **Verify:** full pytest pass for exo-memory
 
 ---
 
@@ -641,7 +641,7 @@ orbiter/                          # Monorepo root
 - `old/aworld/utils/skill_loader.py` (822 LOC — multi-source skill registry, GitHub cloning)
 
 **Session 10.5a — YAML agent loader**
-- `packages/orbiter-core/src/orbiter/loader.py`
+- `packages/exo-core/src/exo/loader.py`
 - Load agent/swarm definitions from YAML with `${ENV_VAR}` and `${vars.KEY}` substitution
 - Swarm topology patterns: workflow, handoff, team
 - Agent factory dispatch (builtin vs. custom classes)
@@ -649,9 +649,9 @@ orbiter/                          # Monorepo root
 - **Verify:** pytest — YAML parsing, variable substitution, swarm creation
 
 **Session 10.5b — Skill registry**
-- `packages/orbiter-core/src/orbiter/skills.py`
+- `packages/exo-core/src/exo/skills.py`
 - `SkillRegistry` — multi-source skill management (local paths, GitHub URLs)
-- GitHub URL parsing & shallow clone with branch support, cached at `~/.orbiter/skills/`
+- GitHub URL parsing & shallow clone with branch support, cached at `~/.exo/skills/`
 - YAML front-matter extraction (name, desc, tool_list, type, active)
 - Conflict resolution strategies (keep_first, keep_last, raise)
 - Search + filtering capabilities
@@ -759,21 +759,21 @@ orbiter/                          # Monorepo root
 - `old/aworld/ralph_loop/state/` (~100 LOC — LoopContext, LoopState)
 
 **Session 13.5a — Ralph loop: state + config**
-- `packages/orbiter-eval/src/orbiter/eval/ralph/config.py`
+- `packages/exo-eval/src/exo/eval/ralph/config.py`
 - `RalphConfig` unifying: `ValidationConfig` (scorers, min_score_threshold), `ReflectionConfig` (reflectors, level), `StopConditionConfig` (max_iterations, timeout, max_cost, max_consecutive_failures)
 - `LoopState` — iteration tracking, score history, reflection history
 - ~120 lines
 - **Verify:** pytest — config creation, state transitions
 
 **Session 13.5b — Ralph loop: stop detectors**
-- `packages/orbiter-eval/src/orbiter/eval/ralph/detectors.py`
+- `packages/exo-eval/src/exo/eval/ralph/detectors.py`
 - `StopDetector` ABC with pluggable implementations
 - Built-in: `MaxIterationDetector`, `TimeoutDetector`, `CostLimitDetector`, `ConsecutiveFailureDetector`, `ScoreThresholdDetector`
 - ~100 lines
 - **Verify:** pytest — each detector type, composite detection
 
 **Session 13.5c — Ralph loop: runner**
-- `packages/orbiter-eval/src/orbiter/eval/ralph/runner.py`
+- `packages/exo-eval/src/exo/eval/ralph/runner.py`
 - `RalphRunner` implementing 5-phase loop: Run → Analyze (score) → Learn (reflect) → Plan (re-prompt) → Halt (detect stop)
 - Integration with Evaluator scorers and Reflection framework
 - ~130 lines
@@ -952,44 +952,44 @@ uv run pytest                       # all tests pass
 
 | New Module | Reference Source (old/) | Complexity |
 |---|---|---|
-| `orbiter/types.py` | `core/event/base.py`, `core/common.py` | Medium |
-| `orbiter/config.py` | `config/conf.py` | Medium |
-| `orbiter/registry.py` | `core/factory.py` | Low |
-| `orbiter/events.py` | `events/inmemory.py` | Low |
-| `orbiter/hooks.py` | `runners/hook/` | Medium |
-| `orbiter/tool.py` | `core/tool/base.py`, `tools/function_tools.py` | High |
-| `orbiter/human.py` | `tools/human/human.py`, `runners/handler/human.py` | Medium |
-| `orbiter/agent.py` | `agents/llm_agent.py`, `core/agent/base.py`, `core/agent/agent_desc.py` | **Very High** |
-| `orbiter/runner.py` | `runner.py`, `runners/call_driven_runner.py` | **Very High** |
-| `orbiter/_internal/handlers.py` | `runners/handler/` (10 handlers, ~2,400 LOC) | **Very High** |
-| `orbiter/_internal/background.py` | `runners/handler/background_task.py` | High |
-| `orbiter/_internal/state.py` | `runners/state_manager.py` | High |
-| `orbiter/swarm.py` | `core/agent/swarm.py` | **Very High** |
-| `orbiter/_internal/agent_group.py` | `agents/parallel_llm_agent.py`, `agents/serial_llm_agent.py` | High |
-| `orbiter/_internal/nested.py` | `agents/task_llm_agent.py` | Medium |
-| `orbiter/loader.py` | `config/agent_loader.py`, `config/task_loader.py` | High |
-| `orbiter/skills.py` | `utils/skill_loader.py` | High |
-| `orbiter/models/` | `models/` | High |
-| `orbiter/context/` | `core/context/amni/`, `core/context/prompts/` | **Very High** |
-| `orbiter/memory/` | `memory/` | High |
-| `orbiter/memory/summary.py` | `memory/main.py` (summary logic) | High |
-| `orbiter/memory/long_term.py` | `memory/longterm/` | High |
-| `orbiter/mcp/` | `mcp_client/`, `tools/mcp_tool/` | High |
-| `orbiter/sandbox/` | `sandbox/` | Medium-High |
-| `orbiter/trace/` | `trace/`, `logs/`, `metrics/` | High |
-| `orbiter/eval/` | `evaluations/` | High |
-| `orbiter/eval/ralph/` | `ralph_loop/` | High |
-| `orbiter/a2a/` | `experimental/a2a/` | Medium-High |
-| `orbiter-cli` | `aworld-cli/` | **Very High** |
-| `orbiter-server` | `cmd/web/` | Medium |
-| `orbiter-train` | `train/`, `dataset/` | High |
+| `exo/types.py` | `core/event/base.py`, `core/common.py` | Medium |
+| `exo/config.py` | `config/conf.py` | Medium |
+| `exo/registry.py` | `core/factory.py` | Low |
+| `exo/events.py` | `events/inmemory.py` | Low |
+| `exo/hooks.py` | `runners/hook/` | Medium |
+| `exo/tool.py` | `core/tool/base.py`, `tools/function_tools.py` | High |
+| `exo/human.py` | `tools/human/human.py`, `runners/handler/human.py` | Medium |
+| `exo/agent.py` | `agents/llm_agent.py`, `core/agent/base.py`, `core/agent/agent_desc.py` | **Very High** |
+| `exo/runner.py` | `runner.py`, `runners/call_driven_runner.py` | **Very High** |
+| `exo/_internal/handlers.py` | `runners/handler/` (10 handlers, ~2,400 LOC) | **Very High** |
+| `exo/_internal/background.py` | `runners/handler/background_task.py` | High |
+| `exo/_internal/state.py` | `runners/state_manager.py` | High |
+| `exo/swarm.py` | `core/agent/swarm.py` | **Very High** |
+| `exo/_internal/agent_group.py` | `agents/parallel_llm_agent.py`, `agents/serial_llm_agent.py` | High |
+| `exo/_internal/nested.py` | `agents/task_llm_agent.py` | Medium |
+| `exo/loader.py` | `config/agent_loader.py`, `config/task_loader.py` | High |
+| `exo/skills.py` | `utils/skill_loader.py` | High |
+| `exo/models/` | `models/` | High |
+| `exo/context/` | `core/context/amni/`, `core/context/prompts/` | **Very High** |
+| `exo/memory/` | `memory/` | High |
+| `exo/memory/summary.py` | `memory/main.py` (summary logic) | High |
+| `exo/memory/long_term.py` | `memory/longterm/` | High |
+| `exo/mcp/` | `mcp_client/`, `tools/mcp_tool/` | High |
+| `exo/sandbox/` | `sandbox/` | Medium-High |
+| `exo/trace/` | `trace/`, `logs/`, `metrics/` | High |
+| `exo/eval/` | `evaluations/` | High |
+| `exo/eval/ralph/` | `ralph_loop/` | High |
+| `exo/a2a/` | `experimental/a2a/` | Medium-High |
+| `exo-cli` | `aworld-cli/` | **Very High** |
+| `exo-server` | `cmd/web/` | Medium |
+| `exo-train` | `train/`, `dataset/` | High |
 
 ---
 
 ## Implementation Notes
 
 ### Namespace Packages
-The `orbiter` namespace is shared across multiple packages using `pkgutil.extend_path()` in `orbiter-core`'s `__init__.py`. This allows `orbiter.models`, `orbiter.memory`, etc. to be provided by separate installable packages while sharing the `orbiter` top-level namespace.
+The `exo` namespace is shared across multiple packages using `pkgutil.extend_path()` in `exo-core`'s `__init__.py`. This allows `exo.models`, `exo.memory`, etc. to be provided by separate installable packages while sharing the `exo` top-level namespace.
 
 ### Meta-Package
-The `orbiter` meta-package (in `packages/orbiter/`) installs all sub-packages. It uses a dummy `_orbiter_meta` package for hatchling build compatibility since it has no source code of its own.
+The `exo` meta-package (in `packages/exo/`) installs all sub-packages. It uses a dummy `_exo_meta` package for hatchling build compatibility since it has no source code of its own.

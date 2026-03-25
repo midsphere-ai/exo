@@ -1,9 +1,9 @@
-# orbiter.train.synthesis
+# exo.train.synthesis
 
 Data synthesis utilities for generating training data from trajectories.
 
 ```python
-from orbiter.train.synthesis import (
+from exo.train.synthesis import (
     DataSynthesiser,
     SynthesisConfig,
     SynthesisError,
@@ -285,7 +285,7 @@ Execute the full synthesis pipeline.
 ### Example
 
 ```python
-from orbiter.train import SynthesisPipeline, SynthesisConfig
+from exo.train import SynthesisPipeline, SynthesisConfig
 
 pipeline = SynthesisPipeline(
     SynthesisConfig(num_samples=100, train_ratio=0.8, seed=42),

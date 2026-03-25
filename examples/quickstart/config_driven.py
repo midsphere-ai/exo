@@ -11,8 +11,8 @@ Usage:
 
 from pathlib import Path
 
-from orbiter import run
-from orbiter.loader import load_agents, load_swarm
+from exo import run
+from exo.loader import load_agents, load_swarm
 
 YAML_PATH = Path(__file__).parent / "agents.yaml"
 

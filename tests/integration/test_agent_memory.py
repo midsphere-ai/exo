@@ -18,14 +18,14 @@ async def test_memory_persists_across_agent_instances(vertex_model: str, tmp_sql
     """Conversation history stored by one Agent instance is recalled by a second."""
     from pydantic import BaseModel
 
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     class CityResponse(BaseModel):
         city: str
@@ -81,10 +81,10 @@ async def test_memory_persists_across_agent_instances(vertex_model: str, tmp_sql
 @pytest.mark.timeout(30)
 async def test_memory_metadata_scoping(tmp_sqlite_db: str) -> None:
     """Memory items stored with different user_id are invisible to each other's queries."""
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         HumanMemory,
         MemoryMetadata,
     )

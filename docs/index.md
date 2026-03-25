@@ -1,14 +1,14 @@
-# Orbiter
+# Exo
 
 **A modern, modular multi-agent framework for building LLM-powered applications in Python.**
 
-Orbiter is the next-generation rewrite of [AWorld](https://github.com/inclusionAI/AWorld), designed around composability, type safety, and a clean async-first API.
+Exo is the next-generation rewrite of [AWorld](https://github.com/inclusionAI/AWorld), designed around composability, type safety, and a clean async-first API.
 
 ## Install
 
 ```bash
-pip install orbiter            # everything
-pip install orbiter-core       # minimal: agent, tools, runner, swarm
+pip install exo            # everything
+pip install exo-core       # minimal: agent, tools, runner, swarm
 ```
 
 Requires Python 3.11+.
@@ -16,7 +16,7 @@ Requires Python 3.11+.
 ## Quick Start
 
 ```python
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool
@@ -70,23 +70,23 @@ print(result.output)
 
 ## Package Overview
 
-Orbiter is organized as a UV workspace monorepo with 13 packages:
+Exo is organized as a UV workspace monorepo with 13 packages:
 
 | Package | Description |
 |---------|-------------|
-| **orbiter-core** | Agent, Tool, Runner, Swarm, Config, Events, Hooks, Registry |
-| **orbiter-models** | LLM providers -- OpenAI, Anthropic, Gemini, Vertex AI |
-| **orbiter-context** | Context engine, neurons, prompt builder, workspace |
-| **orbiter-memory** | Short/long-term memory, SQLite, Postgres, vector search |
-| **orbiter-mcp** | Model Context Protocol client/server |
-| **orbiter-sandbox** | Local + Kubernetes sandboxed execution |
-| **orbiter-trace** | OpenTelemetry tracing, span decorators |
-| **orbiter-eval** | Evaluators, scorers, reflection framework |
-| **orbiter-a2a** | Agent-to-Agent protocol (server + client) |
-| **orbiter-cli** | CLI runner, interactive console, batch processing |
-| **orbiter-server** | FastAPI server, sessions, WebSocket streaming |
-| **orbiter-train** | Trajectory dataset, trainers, data synthesis |
-| **orbiter** | Meta-package that installs core + all extras |
+| **exo-core** | Agent, Tool, Runner, Swarm, Config, Events, Hooks, Registry |
+| **exo-models** | LLM providers -- OpenAI, Anthropic, Gemini, Vertex AI |
+| **exo-context** | Context engine, neurons, prompt builder, workspace |
+| **exo-memory** | Short/long-term memory, SQLite, Postgres, vector search |
+| **exo-mcp** | Model Context Protocol client/server |
+| **exo-sandbox** | Local + Kubernetes sandboxed execution |
+| **exo-trace** | OpenTelemetry tracing, span decorators |
+| **exo-eval** | Evaluators, scorers, reflection framework |
+| **exo-a2a** | Agent-to-Agent protocol (server + client) |
+| **exo-cli** | CLI runner, interactive console, batch processing |
+| **exo-server** | FastAPI server, sessions, WebSocket streaming |
+| **exo-train** | Trajectory dataset, trainers, data synthesis |
+| **exo** | Meta-package that installs core + all extras |
 
 ## Documentation
 
@@ -125,6 +125,6 @@ Orbiter is organized as a UV workspace monorepo with 13 packages:
 
 - **[Architecture](architecture/index.md)** -- design philosophy, dependency graph, execution flow
 - **[API Reference](reference/index.md)** -- complete reference for all public APIs (90+ pages)
-- **[Migration Guide](migration-guide.md)** -- migrating from AWorld to Orbiter
+- **[Migration Guide](migration-guide.md)** -- migrating from AWorld to Exo
 - **[Contributing](contributing/index.md)** -- development setup, code style, testing
 - **[Changelog](changelog.md)** -- version history

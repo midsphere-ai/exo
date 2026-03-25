@@ -1,13 +1,13 @@
-# orbiter._internal.background
+# exo._internal.background
 
 Background task handler with hot-merge and wake-up-merge patterns. Manages long-running background tasks that produce results asynchronously. Results can be merged into the running execution (hot-merge) or queued for later retrieval (wake-up-merge) when the main task has already completed.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.background`
+**Module:** `exo._internal.background`
 
 ```python
-from orbiter._internal.background import (
+from exo._internal.background import (
     BackgroundTask,
     BackgroundTaskError,
     BackgroundTaskHandler,
@@ -21,10 +21,10 @@ from orbiter._internal.background import (
 ## BackgroundTaskError
 
 ```python
-class BackgroundTaskError(OrbiterError)
+class BackgroundTaskError(ExoError)
 ```
 
-Raised for background task handler errors (duplicate task IDs, unknown tasks). Inherits from `OrbiterError`.
+Raised for background task handler errors (duplicate task IDs, unknown tasks). Inherits from `ExoError`.
 
 ---
 
@@ -354,7 +354,7 @@ Access the pending queue for wake-up-merge tasks.
 
 ```python
 import asyncio
-from orbiter._internal.background import BackgroundTaskHandler, MergeMode
+from exo._internal.background import BackgroundTaskHandler, MergeMode
 
 handler = BackgroundTaskHandler()
 

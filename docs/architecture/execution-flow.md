@@ -1,10 +1,10 @@
 # Execution Flow
 
-This document traces what happens when you call `run()` -- from user code through Orbiter's internals and back.
+This document traces what happens when you call `run()` -- from user code through Exo's internals and back.
 
 ## Entry Points
 
-Orbiter provides three entry points, all defined in `orbiter.runner`:
+Exo provides three entry points, all defined in `exo.runner`:
 
 | Entry Point | Signature | Description |
 |-------------|-----------|-------------|
@@ -15,12 +15,12 @@ Orbiter provides three entry points, all defined in `orbiter.runner`:
 ## Full Execution Trace
 
 ```
-User code                    orbiter internals
+User code                    exo internals
 ---------                    -----------------
 run(agent, input)
   |
   +---> resolve provider from agent.model string
-  |       (via orbiter.models.provider.get_provider)
+  |       (via exo.models.provider.get_provider)
   |
   +---> detect Swarm vs Agent
   |       if Swarm: delegate to swarm.run()
@@ -87,7 +87,7 @@ run(agent, input)
 
 ## Key Components in the Loop
 
-### RunState (`orbiter._internal.state`)
+### RunState (`exo._internal.state`)
 
 `RunState` is the mutable execution tracker for a single run. It holds:
 
@@ -102,7 +102,7 @@ Each `RunNode` tracks:
 - Token usage for that step
 - Metadata (e.g., `tool_signature` for loop detection)
 
-### Message Builder (`orbiter._internal.message_builder`)
+### Message Builder (`exo._internal.message_builder`)
 
 `build_messages()` constructs the correctly ordered message list:
 
@@ -115,7 +115,7 @@ It also provides:
 - `extract_last_assistant_tool_calls()` -- Checks if conversation is mid-tool-execution
 - `merge_usage()` -- Accumulates token counts across multiple LLM calls
 
-### Output Parser (`orbiter._internal.output_parser`)
+### Output Parser (`exo._internal.output_parser`)
 
 Bridges the model layer to the agent layer:
 
@@ -123,7 +123,7 @@ Bridges the model layer to the agent layer:
 - `parse_tool_arguments()` -- Decodes JSON-encoded `ToolCall.arguments` into `ActionModel` objects with `dict[str, Any]` arguments
 - `parse_structured_output()` -- Validates LLM text against a Pydantic model when `output_type` is set
 
-### Loop Detection (`orbiter._internal.call_runner`)
+### Loop Detection (`exo._internal.call_runner`)
 
 The call runner detects endless loops where an agent repeatedly produces identical tool calls. It works by:
 

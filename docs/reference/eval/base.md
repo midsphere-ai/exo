@@ -1,11 +1,11 @@
-# orbiter.eval.base
+# exo.eval.base
 
 Core evaluation framework: targets, scorers, criteria, result types, and the parallel evaluator.
 
 ## Module Path
 
 ```python
-from orbiter.eval.base import (
+from exo.eval.base import (
     EvalError,
     EvalStatus,
     ScorerResult,
@@ -22,10 +22,10 @@ from orbiter.eval.base import (
 
 ## EvalError
 
-Raised when an evaluation fails. Inherits from `OrbiterError`.
+Raised when an evaluation fails. Inherits from `ExoError`.
 
 ```python
-class EvalError(OrbiterError): ...
+class EvalError(ExoError): ...
 ```
 
 ---
@@ -267,7 +267,7 @@ Run the target over every case in the dataset, score each case, and return aggre
 
 ```python
 import asyncio
-from orbiter.eval import (
+from exo.eval import (
     Evaluator,
     EvalTarget,
     EvalCriteria,

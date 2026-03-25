@@ -10,7 +10,7 @@ Usage:
     uv run python examples/multi_agent/debate.py
 """
 
-from orbiter import Agent, ParallelGroup, Swarm, run
+from exo import Agent, ParallelGroup, Swarm, run
 
 # --- Debaters run in parallel, each given the same topic ----------------
 

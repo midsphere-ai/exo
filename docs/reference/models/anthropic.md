@@ -1,11 +1,11 @@
-# orbiter.models.anthropic
+# exo.models.anthropic
 
 Anthropic LLM provider implementation. Wraps the `anthropic` SDK to implement `ModelProvider.complete()` and `ModelProvider.stream()` with normalized response types.
 
 ## Module Path
 
 ```python
-from orbiter.models.anthropic import AnthropicProvider
+from exo.models.anthropic import AnthropicProvider
 ```
 
 ## Auto-Registration
@@ -101,9 +101,9 @@ Anthropic requires an explicit `max_tokens` parameter. If not specified by the c
 
 ### Message Conversion
 
-Orbiter messages are converted to Anthropic format with these transformations:
+Exo messages are converted to Anthropic format with these transformations:
 
-| Orbiter Type | Anthropic Format | Notes |
+| Exo Type | Anthropic Format | Notes |
 |---|---|---|
 | `SystemMessage` | Extracted to `system=` kwarg | Multiple system messages are joined with newlines |
 | `UserMessage` | `{"role": "user", "content": ...}` | Direct content mapping |
@@ -126,7 +126,7 @@ Tools are provided in OpenAI format and automatically converted to Anthropic for
 
 ### Stop Reason Mapping
 
-| Anthropic Value | Orbiter FinishReason |
+| Anthropic Value | Exo FinishReason |
 |---|---|
 | `"end_turn"` | `"stop"` |
 | `"stop_sequence"` | `"stop"` |
@@ -153,8 +153,8 @@ For Claude models with extended thinking enabled, `thinking` content blocks are 
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import SystemMessage, UserMessage
+from exo.models import get_provider
+from exo.types import SystemMessage, UserMessage
 
 async def main():
     provider = get_provider(

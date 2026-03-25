@@ -3,7 +3,7 @@
 US-INT-011: Verifies that Agent A correctly delegates to Agent B via a
 handoff and the final output reflects Agent B's work.
 
-The handoff mechanism in Orbiter's Swarm is output-based: when Agent A's
+The handoff mechanism in Exo's Swarm is output-based: when Agent A's
 output exactly matches a registered handoff target's name, the Swarm
 transfers control to that agent with the full conversation history.
 """
@@ -35,10 +35,10 @@ async def test_handoff_from_agent_a_to_agent_b(vertex_model: str) -> None:
     - An AssistantMessage with content 'poet' appears in messages,
       indicating delegation occurred.
     """
-    from orbiter import Swarm  # pyright: ignore[reportMissingImports]
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.types import AssistantMessage  # pyright: ignore[reportMissingImports]
+    from exo import Swarm  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.types import AssistantMessage  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 
@@ -114,12 +114,12 @@ async def test_handoff_result_is_from_target_agent(vertex_model: str) -> None:
     by outputting 'specialist'.  We parse the final output as
     HandoffResponse and assert handled_by contains the target agent's name.
     """
-    from orbiter import Swarm  # pyright: ignore[reportMissingImports]
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo import Swarm  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 

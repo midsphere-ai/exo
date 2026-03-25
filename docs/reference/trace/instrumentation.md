@@ -1,9 +1,9 @@
-# orbiter.trace.instrumentation
+# exo.trace.instrumentation
 
 Agent and tool metrics instrumentation using OpenTelemetry.
 
 ```python
-from orbiter.trace.instrumentation import (
+from exo.trace.instrumentation import (
     Timer,
     build_agent_attributes,
     build_tool_attributes,
@@ -37,7 +37,7 @@ Build an attribute dict for agent metrics.
 | `user_id` | `str` | `""` | User identifier |
 | `step` | `int \| None` | `None` | Current step number (omitted from dict if None) |
 
-**Returns:** Dict with keys from the semantic conventions: `orbiter.agent.name`, `orbiter.task.id`, `orbiter.session.id`, `orbiter.user.id`, and optionally `orbiter.agent.step`.
+**Returns:** Dict with keys from the semantic conventions: `exo.agent.name`, `exo.task.id`, `exo.session.id`, `exo.user.id`, and optionally `exo.agent.step`.
 
 ---
 
@@ -60,7 +60,7 @@ Build an attribute dict for tool metrics.
 | `agent_name` | `str` | `""` | Name of the invoking agent |
 | `task_id` | `str` | `""` | Task identifier |
 
-**Returns:** Dict with keys `orbiter.tool.name`, `orbiter.agent.name`, `orbiter.task.id`.
+**Returns:** Dict with keys `exo.tool.name`, `exo.agent.name`, `exo.task.id`.
 
 ---
 
@@ -98,7 +98,7 @@ Record agent run metrics (duration, counter, token usage). Creates instruments f
 ### Example
 
 ```python
-from orbiter.trace import record_agent_run, build_agent_attributes
+from exo.trace import record_agent_run, build_agent_attributes
 
 attrs = build_agent_attributes(agent_name="assistant", task_id="task-123")
 record_agent_run(
@@ -175,7 +175,7 @@ Stop the timer and return elapsed seconds.
 ### Example
 
 ```python
-from orbiter.trace import Timer
+from exo.trace import Timer
 
 timer = Timer()
 timer.start()

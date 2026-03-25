@@ -1,13 +1,13 @@
 # Multi-Agent Swarms
 
-A `Swarm` groups multiple agents and defines their execution topology. Orbiter supports three orchestration modes: **workflow** (sequential pipeline), **handoff** (agent-driven delegation), and **team** (lead-worker delegation).
+A `Swarm` groups multiple agents and defines their execution topology. Exo supports three orchestration modes: **workflow** (sequential pipeline), **handoff** (agent-driven delegation), and **team** (lead-worker delegation).
 
 ## Basic Usage
 
 ```python
-from orbiter.agent import Agent
-from orbiter.swarm import Swarm
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.swarm import Swarm
+from exo.runner import run
 
 researcher = Agent(name="researcher", instructions="You research topics deeply.")
 writer = Agent(name="writer", instructions="You write clear, concise articles.")
@@ -137,7 +137,7 @@ Team mode requires at least two agents (lead + at least one worker).
 Swarms work seamlessly with `run()`:
 
 ```python
-from orbiter.runner import run
+from exo.runner import run
 
 # Async
 result = await run(swarm, "Hello!")
@@ -171,7 +171,7 @@ print(swarm.describe())
 Swarm errors raise `SwarmError`:
 
 ```python
-from orbiter.swarm import Swarm, SwarmError
+from exo.swarm import Swarm, SwarmError
 
 # No agents
 try:
@@ -203,7 +203,7 @@ except SwarmError as e:
 You can nest swarms within swarms using [SwarmNode](agent-groups.md#nested-swarms-with-swarmnode) to combine different orchestration modes:
 
 ```python
-from orbiter._internal.nested import SwarmNode
+from exo._internal.nested import SwarmNode
 
 # Inner pipeline (workflow mode)
 pipeline = Swarm(agents=[writer, editor], flow="writer >> editor")
@@ -220,8 +220,8 @@ outer = Swarm(
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Swarm` | `orbiter.swarm` | Multi-agent orchestration container |
-| `SwarmError` | `orbiter.swarm` | Swarm-level error |
-| `SwarmNode` | `orbiter._internal.nested` | Wrap a swarm as a node in another swarm |
-| `ParallelGroup` | `orbiter._internal.agent_group` | Concurrent agent execution |
-| `SerialGroup` | `orbiter._internal.agent_group` | Sequential agent execution |
+| `Swarm` | `exo.swarm` | Multi-agent orchestration container |
+| `SwarmError` | `exo.swarm` | Swarm-level error |
+| `SwarmNode` | `exo._internal.nested` | Wrap a swarm as a node in another swarm |
+| `ParallelGroup` | `exo._internal.agent_group` | Concurrent agent execution |
+| `SerialGroup` | `exo._internal.agent_group` | Sequential agent execution |

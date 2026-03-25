@@ -9,7 +9,7 @@ Usage:
     uv run python examples/quickstart/multi_root_agent.py
 """
 
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 lead = Agent(
     name="lead",

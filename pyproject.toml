@@ -1,51 +1,51 @@
 [project]
-name = "orbiter-workspace"
+name = "exo-workspace"
 version = "0.1.0"
-description = "Orbiter: A modern multi-agent framework"
+description = "Exo: A modern multi-agent framework"
 requires-python = ">=3.11"
 
 [tool.uv.workspace]
 members = [
-    "packages/orbiter-core",
-    "packages/orbiter-models",
-    "packages/orbiter-context",
-    "packages/orbiter-memory",
-    "packages/orbiter-mcp",
-    "packages/orbiter-sandbox",
-    "packages/orbiter-observability",
-    "packages/orbiter-distributed",
-    "packages/orbiter-eval",
-    "packages/orbiter-a2a",
-    "packages/orbiter-cli",
-    "packages/orbiter-server",
-    "packages/orbiter-train",
-    "packages/orbiter-web",
-    "packages/orbiter-guardrail",
-    "packages/orbiter-retrieval",
-    "packages/orbiter-perplexica",
-    "packages/orbiter",
+    "packages/exo-core",
+    "packages/exo-models",
+    "packages/exo-context",
+    "packages/exo-memory",
+    "packages/exo-mcp",
+    "packages/exo-sandbox",
+    "packages/exo-observability",
+    "packages/exo-distributed",
+    "packages/exo-eval",
+    "packages/exo-a2a",
+    "packages/exo-cli",
+    "packages/exo-server",
+    "packages/exo-train",
+    "packages/exo-web",
+    "packages/exo-guardrail",
+    "packages/exo-retrieval",
+    "packages/exo-search",
+    "packages/exo",
 ]
 
 [dependency-groups]
 dev = [
-    "orbiter-core",
-    "orbiter-models",
-    "orbiter-context",
-    "orbiter-memory",
-    "orbiter-mcp",
-    "orbiter-sandbox",
-    "orbiter-observability",
-    "orbiter-distributed",
-    "orbiter-eval",
-    "orbiter-a2a",
-    "orbiter-cli",
-    "orbiter-server",
-    "orbiter-train",
-    "orbiter-web",
-    "orbiter-guardrail",
-    "orbiter-retrieval",
-    "orbiter-perplexica",
-    "orbiter-ai",
+    "exo-core",
+    "exo-models",
+    "exo-context",
+    "exo-memory",
+    "exo-mcp",
+    "exo-sandbox",
+    "exo-observability",
+    "exo-distributed",
+    "exo-eval",
+    "exo-a2a",
+    "exo-cli",
+    "exo-server",
+    "exo-train",
+    "exo-web",
+    "exo-guardrail",
+    "exo-retrieval",
+    "exo-search",
+    "exo-ai",
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
     "pytest>=8.0",
@@ -60,27 +60,28 @@ dev = [
     "httpx>=0.27",
     "chromadb>=0.6",
     "sentence-transformers>=3.0",
+    "tiktoken>=0.5",
 ]
 
 [tool.uv.sources]
-orbiter-core = { workspace = true }
-orbiter-models = { workspace = true }
-orbiter-context = { workspace = true }
-orbiter-memory = { workspace = true }
-orbiter-mcp = { workspace = true }
-orbiter-sandbox = { workspace = true }
-orbiter-observability = { workspace = true }
-orbiter-distributed = { workspace = true }
-orbiter-eval = { workspace = true }
-orbiter-a2a = { workspace = true }
-orbiter-cli = { workspace = true }
-orbiter-server = { workspace = true }
-orbiter-train = { workspace = true }
-orbiter-web = { workspace = true }
-orbiter-guardrail = { workspace = true }
-orbiter-retrieval = { workspace = true }
-orbiter-perplexica = { workspace = true }
-orbiter-ai = { workspace = true }
+exo-core = { workspace = true }
+exo-models = { workspace = true }
+exo-context = { workspace = true }
+exo-memory = { workspace = true }
+exo-mcp = { workspace = true }
+exo-sandbox = { workspace = true }
+exo-observability = { workspace = true }
+exo-distributed = { workspace = true }
+exo-eval = { workspace = true }
+exo-a2a = { workspace = true }
+exo-cli = { workspace = true }
+exo-server = { workspace = true }
+exo-train = { workspace = true }
+exo-web = { workspace = true }
+exo-guardrail = { workspace = true }
+exo-retrieval = { workspace = true }
+exo-search = { workspace = true }
+exo-ai = { workspace = true }
 
 [tool.ruff]
 target-version = "py311"
@@ -91,7 +92,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["orbiter", "orbiter_cli", "orbiter_server", "orbiter_web"]
+known-first-party = ["exo", "exo_cli", "exo_server", "exo_web"]
 
 [tool.pyright]
 pythonVersion = "3.11"

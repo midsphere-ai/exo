@@ -1,11 +1,11 @@
-# orbiter.eval.scorers
+# exo.eval.scorers
 
 Rule-based scorers for format validation, schema validation, correctness, length, relevance, and completeness.
 
 ## Module Path
 
 ```python
-from orbiter.eval.scorers import (
+from exo.eval.scorers import (
     FormatValidationScorer,
     SchemaValidationScorer,
     OutputCorrectnessScorer,
@@ -58,7 +58,7 @@ Returns score `1.0` if format is valid, `0.0` otherwise. Details include `{"form
 
 ```python
 import asyncio
-from orbiter.eval import FormatValidationScorer
+from exo.eval import FormatValidationScorer
 
 async def main():
     json_scorer = FormatValidationScorer("json")
@@ -119,7 +119,7 @@ Returns `1.0` if the output is valid JSON matching the schema, `0.0` otherwise. 
 
 ```python
 import asyncio
-from orbiter.eval import SchemaValidationScorer
+from exo.eval import SchemaValidationScorer
 
 async def main():
     schema = {
@@ -185,7 +185,7 @@ async def score(self, case_id: str, input: Any, output: Any) -> ScorerResult
 
 ```python
 import asyncio
-from orbiter.eval import OutputCorrectnessScorer
+from exo.eval import OutputCorrectnessScorer
 
 async def main():
     # Exact match
@@ -239,7 +239,7 @@ Returns `1.0` if `min_length <= len(output) <= max_length`, else `0.0`. Details 
 
 ```python
 import asyncio
-from orbiter.eval import OutputLengthScorer
+from exo.eval import OutputLengthScorer
 
 async def main():
     scorer = OutputLengthScorer(min_length=10, max_length=100)
@@ -286,7 +286,7 @@ Details include `{"overlap": int, "input_words": int}`.
 
 ```python
 import asyncio
-from orbiter.eval import OutputRelevanceScorer
+from exo.eval import OutputRelevanceScorer
 
 async def main():
     scorer = OutputRelevanceScorer()
@@ -333,7 +333,7 @@ Score = fraction of required sections found. Details include `{"found": [...], "
 
 ```python
 import asyncio
-from orbiter.eval import OutputCompletenessScorer
+from exo.eval import OutputCompletenessScorer
 
 async def main():
     scorer = OutputCompletenessScorer(

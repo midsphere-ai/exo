@@ -1,9 +1,9 @@
-# orbiter.a2a.client
+# exo.a2a.client
 
 A2A client -- HTTP client and RemoteAgent for calling remote A2A agents.
 
 ```python
-from orbiter.a2a.client import (
+from exo.a2a.client import (
     A2AClient,
     A2AClientError,
     ClientManager,
@@ -16,10 +16,10 @@ from orbiter.a2a.client import (
 ## A2AClientError
 
 ```python
-class A2AClientError(OrbiterError)
+class A2AClientError(ExoError)
 ```
 
-Raised for A2A client-level errors. Inherits from `orbiter.types.OrbiterError`.
+Raised for A2A client-level errors. Inherits from `exo.types.ExoError`.
 
 ---
 
@@ -112,7 +112,7 @@ Close the underlying HTTP client.
 ### Example
 
 ```python
-from orbiter.a2a import A2AClient
+from exo.a2a import A2AClient
 
 # From URL
 client = A2AClient("http://localhost:8000/.well-known/agent-card")
@@ -191,7 +191,7 @@ class RemoteAgent(
 )
 ```
 
-Agent-compatible wrapper for calling a remote A2A agent. Provides the same `run(input, ...)` interface as `orbiter.agent.Agent` so it can be used as a handoff target or standalone caller.
+Agent-compatible wrapper for calling a remote A2A agent. Provides the same `run(input, ...)` interface as `exo.agent.Agent` so it can be used as a handoff target or standalone caller.
 
 ### Constructor parameters
 
@@ -243,7 +243,7 @@ Close the underlying client.
 ### Example
 
 ```python
-from orbiter.a2a import RemoteAgent
+from exo.a2a import RemoteAgent
 
 agent = RemoteAgent(
     name="remote-helper",

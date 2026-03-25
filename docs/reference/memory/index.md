@@ -1,22 +1,22 @@
-# orbiter-memory
+# exo-memory
 
 Pluggable memory backends for short-term, long-term, and vector-based memory storage.
 
 ## Module Path
 
 ```
-orbiter.memory
+exo.memory
 ```
 
 ## Installation
 
 ```bash
-pip install orbiter-memory
+pip install exo-memory
 ```
 
 ## Overview
 
-The `orbiter-memory` package provides a memory system for agents with:
+The `exo-memory` package provides a memory system for agents with:
 
 - **MemoryStore protocol** -- pluggable backend interface for add/get/search/clear
 - **Typed memory items** -- `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory` with status lifecycle
@@ -64,32 +64,32 @@ The `orbiter-memory` package provides a memory system for agents with:
 
 ```python
 # Common imports
-from orbiter.memory import (
+from exo.memory import (
     MemoryStore, MemoryItem, MemoryMetadata, MemoryStatus,
     ShortTermMemory, LongTermMemory,
     HumanMemory, AIMemory, SystemMemory, ToolMemory,
 )
 
 # Summary system
-from orbiter.memory import (
+from exo.memory import (
     SummaryConfig, SummaryTemplate, SummaryResult,
     Summarizer, check_trigger, generate_summary,
 )
 
 # Auto-persistence
-from orbiter.memory import MemoryPersistence
+from exo.memory import MemoryPersistence
 
 # Backends (import directly from submodules)
-from orbiter.memory.backends.sqlite import SQLiteMemoryStore
-from orbiter.memory.backends.postgres import PostgresMemoryStore
-from orbiter.memory.backends.vector import VectorMemoryStore, Embeddings, OpenAIEmbeddings
+from exo.memory.backends.sqlite import SQLiteMemoryStore
+from exo.memory.backends.postgres import PostgresMemoryStore
+from exo.memory.backends.vector import VectorMemoryStore, Embeddings, OpenAIEmbeddings
 ```
 
 ## Quick Example
 
 ```python
 import asyncio
-from orbiter.memory import (
+from exo.memory import (
     ShortTermMemory, HumanMemory, AIMemory, MemoryMetadata,
 )
 

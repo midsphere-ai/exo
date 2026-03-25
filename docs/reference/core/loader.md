@@ -1,11 +1,11 @@
-# orbiter.loader
+# exo.loader
 
 YAML agent and swarm loader with variable substitution.
 
-**Module:** `orbiter.loader`
+**Module:** `exo.loader`
 
 ```python
-from orbiter.loader import (
+from exo.loader import (
     load_agents,
     load_swarm,
     load_yaml,
@@ -19,10 +19,10 @@ from orbiter.loader import (
 ## LoaderError
 
 ```python
-class LoaderError(OrbiterError)
+class LoaderError(ExoError)
 ```
 
-Raised for YAML loading or validation errors (file not found, missing sections, unknown agents, invalid format). Inherits from `OrbiterError`.
+Raised for YAML loading or validation errors (file not found, missing sections, unknown agents, invalid format). Inherits from `ExoError`.
 
 ---
 
@@ -52,7 +52,7 @@ Dict mapping agent name to `Agent` (or custom class) instance.
 ### Example
 
 ```python
-from orbiter.loader import load_agents
+from exo.loader import load_agents
 
 agents = load_agents("agents.yaml")
 for name, agent in agents.items():
@@ -89,8 +89,8 @@ Configured `Swarm` instance.
 ### Example
 
 ```python
-from orbiter.loader import load_swarm
-from orbiter import run
+from exo.loader import load_swarm
+from exo import run
 
 swarm = load_swarm("agents.yaml")
 result = run.sync(swarm, "Analyze this dataset")
@@ -141,7 +141,7 @@ Register a custom agent class for YAML `type:` dispatch. When a YAML agent spec 
 ### Example
 
 ```python
-from orbiter.loader import register_agent_class, load_agents
+from exo.loader import register_agent_class, load_agents
 
 class MyCustomAgent:
     def __init__(self, *, name: str, **kwargs):

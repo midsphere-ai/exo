@@ -1,11 +1,11 @@
-# orbiter.context.processor
+# exo.context.processor
 
 Event-driven context processing pipeline. Processors intervene at specific points in the LLM execution cycle to dynamically transform context.
 
 ## Module Path
 
 ```python
-from orbiter.context.processor import (
+from exo.context.processor import (
     ContextProcessor,
     ProcessorPipeline,
     ProcessorError,
@@ -225,7 +225,7 @@ When a tool result's content exceeds `max_size` characters:
 
 ```python
 import asyncio
-from orbiter.context import (
+from exo.context import (
     Context, ContextConfig,
     ProcessorPipeline, SummarizeProcessor, ToolResultOffloader,
 )

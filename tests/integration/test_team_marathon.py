@@ -49,17 +49,17 @@ async def test_team_produces_aggregated_structured_output(
       identifiable by agent_id metadata.
     - TextEvent, ToolCallEvent, and UsageEvent all appear in streamed events.
     """
-    from orbiter import Swarm  # pyright: ignore[reportMissingImports]
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo import Swarm  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.types import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.types import (  # pyright: ignore[reportMissingImports]
         TextEvent,
         ToolCallEvent,
     )

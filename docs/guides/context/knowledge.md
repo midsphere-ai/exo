@@ -5,12 +5,12 @@ The `KnowledgeStore` provides text chunking and TF-IDF-like search for ingested 
 ## Basic Usage
 
 ```python
-from orbiter.context._internal.knowledge import KnowledgeStore
+from exo.context._internal.knowledge import KnowledgeStore
 
 store = KnowledgeStore()
 
 # Add documents
-store.add("readme", "Orbiter is a multi-agent framework for building AI applications.")
+store.add("readme", "Exo is a multi-agent framework for building AI applications.")
 store.add("guide", "To create an agent, use the Agent class with a model and tools.")
 
 # Search with TF-IDF scoring
@@ -25,7 +25,7 @@ for result in results:
 When ingesting large documents, use `chunk_text()` to split them into overlapping chunks before indexing:
 
 ```python
-from orbiter.context._internal.knowledge import chunk_text, KnowledgeStore
+from exo.context._internal.knowledge import chunk_text, KnowledgeStore
 
 store = KnowledgeStore()
 
@@ -88,8 +88,8 @@ store.remove("doc-1")
 The `Workspace` can automatically index artifacts into a `KnowledgeStore`:
 
 ```python
-from orbiter.context import Workspace
-from orbiter.context._internal.knowledge import KnowledgeStore
+from exo.context import Workspace
+from exo.context._internal.knowledge import KnowledgeStore
 
 knowledge = KnowledgeStore()
 workspace = Workspace(base_dir="/tmp/project", knowledge_store=knowledge)
@@ -108,7 +108,7 @@ See the [Workspace guide](workspace.md) for more.
 The built-in `KnowledgeNeuron` (priority 20) retrieves relevant knowledge during prompt building:
 
 ```python
-from orbiter.context import PromptBuilder
+from exo.context import PromptBuilder
 
 builder = PromptBuilder(ctx)
 builder.add("knowledge")  # retrieves relevant docs based on current task
@@ -120,7 +120,7 @@ prompt = builder.build()
 The knowledge tools let agents search the knowledge store directly:
 
 ```python
-from orbiter.context import get_knowledge_tools
+from exo.context import get_knowledge_tools
 
 tools = get_knowledge_tools()
 # Returns:
@@ -184,12 +184,12 @@ code_results = [r for r in all_results if r.key.startswith("code:")]
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `KnowledgeStore` | `orbiter.context._internal.knowledge` | Text storage with TF-IDF search |
+| `KnowledgeStore` | `exo.context._internal.knowledge` | Text storage with TF-IDF search |
 | `KnowledgeStore.add(key, content)` | | Add or update a document |
 | `KnowledgeStore.get(key)` | | Retrieve a document by key |
 | `KnowledgeStore.get_range(start, end)` | | Get documents by index range |
 | `KnowledgeStore.remove(key)` | | Remove a document |
 | `KnowledgeStore.search(query, limit)` | | TF-IDF ranked search |
 | `chunk_text(text, chunk_size, overlap)` | | Split text into overlapping chunks |
-| `SearchResult` | `orbiter.context._internal.knowledge` | Dataclass: `key`, `content`, `score` |
-| `Chunk` | `orbiter.context._internal.knowledge` | Dataclass representing a text chunk |
+| `SearchResult` | `exo.context._internal.knowledge` | Dataclass: `key`, `content`, `score` |
+| `Chunk` | `exo.context._internal.knowledge` | Dataclass representing a text chunk |

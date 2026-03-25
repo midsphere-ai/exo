@@ -1,13 +1,13 @@
 # Core Concepts
 
-This page describes the fundamental building blocks of Orbiter. Every agent system you build combines these primitives.
+This page describes the fundamental building blocks of Exo. Every agent system you build combines these primitives.
 
 ## Agent
 
 An `Agent` is the core autonomous unit. It wraps an LLM model, a set of tools, optional handoff targets, and lifecycle hooks. Agents are created with keyword-only arguments:
 
 ```python
-from orbiter import Agent
+from exo import Agent
 
 agent = Agent(
     name="my-agent",                       # required -- unique identifier
@@ -67,7 +67,7 @@ agent = Agent(
 A `Tool` is a typed function the agent can call. The `@tool` decorator is the simplest way to create one:
 
 ```python
-from orbiter import tool
+from exo import tool
 
 @tool
 async def search(query: str) -> str:
@@ -127,7 +127,7 @@ async def fetch_url(url: str) -> str:
 For more control, subclass `Tool` directly:
 
 ```python
-from orbiter.tool import Tool
+from exo.tool import Tool
 
 class DatabaseTool(Tool):
     def __init__(self, connection_string: str):
@@ -152,7 +152,7 @@ class DatabaseTool(Tool):
 Raise `ToolError` in your tool to send an error message back to the LLM (instead of crashing the agent):
 
 ```python
-from orbiter.tool import ToolError
+from exo.tool import ToolError
 
 @tool
 async def divide(a: float, b: float) -> str:
@@ -171,7 +171,7 @@ The runner is the primary API for executing agents. It provides three entry poin
 ### `await run(agent, input, ...)` -- Async
 
 ```python
-from orbiter import run
+from exo import run
 
 result = await run(agent, "Hello!")
 ```
@@ -222,7 +222,7 @@ All three entry points accept the same core parameters:
 
 ### Provider Auto-Resolution
 
-When `provider` is `None`, the runner automatically resolves a provider from the agent's model string. If `orbiter-models` is installed, it uses the model registry to look up `"openai"`, `"anthropic"`, etc. If auto-resolution fails, the agent's own `run()` method raises an `AgentError`.
+When `provider` is `None`, the runner automatically resolves a provider from the agent's model string. If `exo-models` is installed, it uses the model registry to look up `"openai"`, `"anthropic"`, etc. If auto-resolution fails, the agent's own `run()` method raises an `AgentError`.
 
 ---
 
@@ -231,7 +231,7 @@ When `provider` is `None`, the runner automatically resolves a provider from the
 A `Swarm` groups multiple agents and defines their execution topology:
 
 ```python
-from orbiter import Agent, Swarm
+from exo import Agent, Swarm
 
 researcher = Agent(name="researcher", model="openai:gpt-4o", ...)
 writer = Agent(name="writer", model="openai:gpt-4o", ...)
@@ -304,7 +304,7 @@ flow="a >> b >> c"  # a runs first, then b, then c
 For concurrent execution within a flow, use `ParallelGroup` and `SerialGroup`:
 
 ```python
-from orbiter import ParallelGroup, SerialGroup
+from exo import ParallelGroup, SerialGroup
 
 parallel = ParallelGroup(
     name="research_team",
@@ -325,7 +325,7 @@ Groups behave like agents in a Swarm's flow DSL and can be placed in the `agents
 Use `SwarmNode` to nest one swarm inside another:
 
 ```python
-from orbiter import Swarm, SwarmNode
+from exo import Swarm, SwarmNode
 
 inner = Swarm(agents=[a, b], flow="a >> b")
 node = SwarmNode(swarm=inner, name="inner_pipeline")
@@ -338,14 +338,14 @@ Each nested swarm runs with context isolation -- it creates its own message hist
 
 ## Message Types
 
-Orbiter uses a typed message system. All messages are frozen Pydantic models:
+Exo uses a typed message system. All messages are frozen Pydantic models:
 
 ### UserMessage
 
 A message from the user:
 
 ```python
-from orbiter.types import UserMessage
+from exo.types import UserMessage
 
 msg = UserMessage(content="What's the weather?")
 # msg.role == "user"
@@ -356,7 +356,7 @@ msg = UserMessage(content="What's the weather?")
 A system instruction:
 
 ```python
-from orbiter.types import SystemMessage
+from exo.types import SystemMessage
 
 msg = SystemMessage(content="You are a helpful assistant.")
 # msg.role == "system"
@@ -367,7 +367,7 @@ msg = SystemMessage(content="You are a helpful assistant.")
 A response from the LLM. May contain text, tool calls, or both:
 
 ```python
-from orbiter.types import AssistantMessage, ToolCall
+from exo.types import AssistantMessage, ToolCall
 
 msg = AssistantMessage(
     content="Let me check the weather.",
@@ -383,7 +383,7 @@ msg = AssistantMessage(
 The result of executing a tool call:
 
 ```python
-from orbiter.types import ToolResult
+from exo.types import ToolResult
 
 msg = ToolResult(
     tool_call_id="call_1",
@@ -399,7 +399,7 @@ msg = ToolResult(
 A request from the LLM to invoke a tool (embedded in `AssistantMessage.tool_calls`):
 
 ```python
-from orbiter.types import ToolCall
+from exo.types import ToolCall
 
 tc = ToolCall(
     id="call_abc123",
@@ -423,7 +423,7 @@ Message = UserMessage | AssistantMessage | SystemMessage | ToolResult
 The return type of `run()` and `run.sync()`:
 
 ```python
-from orbiter.types import RunResult
+from exo.types import RunResult
 ```
 
 | Field | Type | Description |
@@ -438,7 +438,7 @@ from orbiter.types import RunResult
 Token usage statistics:
 
 ```python
-from orbiter.types import Usage
+from exo.types import Usage
 
 usage = Usage(input_tokens=150, output_tokens=50, total_tokens=200)
 ```
@@ -460,7 +460,7 @@ usage = Usage(input_tokens=150, output_tokens=50, total_tokens=200)
 A chunk of text from the LLM:
 
 ```python
-from orbiter.types import TextEvent
+from exo.types import TextEvent
 
 # event.type == "text"
 # event.text -- the text chunk
@@ -472,7 +472,7 @@ from orbiter.types import TextEvent
 Notification that a tool is being invoked:
 
 ```python
-from orbiter.types import ToolCallEvent
+from exo.types import ToolCallEvent
 
 # event.type == "tool_call"
 # event.tool_name -- name of the tool
@@ -493,7 +493,7 @@ StreamEvent = TextEvent | ToolCallEvent
 Hooks let you intercept the agent lifecycle at specific points. They are async functions registered as `(HookPoint, Hook)` tuples:
 
 ```python
-from orbiter.hooks import HookPoint
+from exo.hooks import HookPoint
 
 async def log_llm_call(**data):
     print(f"LLM call on agent: {data['agent'].name}")
@@ -525,7 +525,7 @@ Hooks are called sequentially in registration order. Unlike the EventBus, hook e
 The `EventBus` provides decoupled async pub-sub communication:
 
 ```python
-from orbiter.events import EventBus
+from exo.events import EventBus
 
 bus = EventBus()
 

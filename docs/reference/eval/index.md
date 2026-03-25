@@ -1,17 +1,17 @@
-# orbiter.eval
+# exo.eval
 
 Evaluation and scoring framework with rule-based scorers, LLM-as-Judge assessment, trajectory validation, reflection, and iterative refinement.
 
 ## Installation
 
 ```bash
-uv add orbiter-eval
+uv add exo-eval
 ```
 
 ## Module Path
 
 ```python
-import orbiter.eval
+import exo.eval
 ```
 
 ## Public Exports (31)
@@ -56,10 +56,10 @@ import orbiter.eval
 
 ```python
 # Core evaluation
-from orbiter.eval import Evaluator, Scorer, ScorerResult, EvalCriteria
+from exo.eval import Evaluator, Scorer, ScorerResult, EvalCriteria
 
 # Rule-based scorers
-from orbiter.eval import (
+from exo.eval import (
     FormatValidationScorer,
     SchemaValidationScorer,
     OutputCorrectnessScorer,
@@ -69,7 +69,7 @@ from orbiter.eval import (
 )
 
 # LLM-as-Judge scorers
-from orbiter.eval import (
+from exo.eval import (
     LLMAsJudgeScorer,
     OutputQualityScorer,
     LogicConsistencyScorer,
@@ -78,7 +78,7 @@ from orbiter.eval import (
 )
 
 # Trajectory scorers + registry
-from orbiter.eval import (
+from exo.eval import (
     TrajectoryValidator,
     TimeCostScorer,
     AnswerAccuracyLLMScorer,
@@ -89,7 +89,7 @@ from orbiter.eval import (
 )
 
 # Reflection
-from orbiter.eval import (
+from exo.eval import (
     Reflector,
     GeneralReflector,
     ReflectionHistory,
@@ -99,15 +99,15 @@ from orbiter.eval import (
 )
 
 # Ralph iterative refinement (sub-package)
-from orbiter.eval.ralph.runner import RalphRunner, RalphResult
-from orbiter.eval.ralph.config import RalphConfig, LoopState, StopType
-from orbiter.eval.ralph.detectors import StopDetector, CompositeDetector
+from exo.eval.ralph.runner import RalphRunner, RalphResult
+from exo.eval.ralph.config import RalphConfig, LoopState, StopType
+from exo.eval.ralph.detectors import StopDetector, CompositeDetector
 ```
 
 ## Architecture
 
 ```
-orbiter.eval
+exo.eval
   base.py              Evaluator, Scorer ABC, result types, criteria
   scorers.py           6 rule-based scorers
   llm_scorer.py        LLMAsJudgeScorer + 4 specialized subclasses
@@ -123,7 +123,7 @@ orbiter.eval
 
 ```python
 import asyncio
-from orbiter.eval import (
+from exo.eval import (
     Evaluator,
     EvalTarget,
     EvalCriteria,

@@ -5,7 +5,7 @@ The `PromptBuilder` assembles structured prompts from composable sections called
 ## Basic Usage
 
 ```python
-from orbiter.context import Context, ContextConfig, PromptBuilder
+from exo.context import Context, ContextConfig, PromptBuilder
 
 ctx = Context(task_id="task-1", config=ContextConfig())
 builder = PromptBuilder(ctx)
@@ -29,7 +29,7 @@ A `Neuron` is an abstract base class with three attributes:
 - **format(ctx)** -- method that returns the neuron's text contribution.
 
 ```python
-from orbiter.context import Neuron
+from exo.context import Neuron
 
 class CustomNeuron(Neuron):
     name = "custom"
@@ -42,7 +42,7 @@ class CustomNeuron(Neuron):
 
 ### Built-in Neurons
 
-Orbiter ships with nine built-in neurons, all pre-registered in the `neuron_registry`:
+Exo ships with nine built-in neurons, all pre-registered in the `neuron_registry`:
 
 | Neuron | Priority | Description |
 |--------|----------|-------------|
@@ -73,7 +73,7 @@ TaskNeuron (1)       -->  bottom of prompt
 Register your neuron in the `neuron_registry` so it can be added by name:
 
 ```python
-from orbiter.context import Neuron, neuron_registry
+from exo.context import Neuron, neuron_registry
 
 class ToolListNeuron(Neuron):
     name = "tool_list"
@@ -114,7 +114,7 @@ builder.add_neuron(custom)
 The `PromptBuilder` resolves `${path}` templates in the assembled prompt using the `DynamicVariableRegistry`:
 
 ```python
-from orbiter.context.variables import DynamicVariableRegistry
+from exo.context.variables import DynamicVariableRegistry
 
 # Register a variable resolver
 registry = DynamicVariableRegistry()
@@ -133,7 +133,7 @@ The variable registry supports dot-separated nested paths. Resolution is done du
 The `ContextConfig` controls which neurons are included:
 
 ```python
-from orbiter.context import ContextConfig
+from exo.context import ContextConfig
 
 config = ContextConfig(
     neuron_names=["system", "history", "task", "knowledge"],
@@ -145,7 +145,7 @@ config = ContextConfig(
 The `make_config()` factory provides presets per automation mode:
 
 ```python
-from orbiter.context import make_config, AutomationMode
+from exo.context import make_config, AutomationMode
 
 # PILOT mode: fewer neurons, shorter history
 pilot = make_config(AutomationMode.PILOT)
@@ -206,16 +206,16 @@ builder._separator = "\n---\n"
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `PromptBuilder` | `orbiter.context` | Assembles prompts from neurons with priority ordering |
+| `PromptBuilder` | `exo.context` | Assembles prompts from neurons with priority ordering |
 | `PromptBuilder.add(name)` | | Add a neuron by registry name |
 | `PromptBuilder.add_neuron(neuron)` | | Add a neuron instance directly |
 | `PromptBuilder.build()` | | Sort, format, join, and resolve variables |
 | `PromptBuilder.clear()` | | Remove all added neurons |
-| `Neuron` | `orbiter.context` | ABC with `name`, `priority`, `format(ctx)` |
-| `neuron_registry` | `orbiter.context` | Global registry of neuron classes |
-| `SystemNeuron` | `orbiter.context.neuron` | System instructions (priority 100) |
-| `TaskNeuron` | `orbiter.context.neuron` | Task description (priority 1) |
-| `HistoryNeuron` | `orbiter.context.neuron` | Conversation history (priority 10) |
-| `KnowledgeNeuron` | `orbiter.context.neuron` | Retrieved knowledge (priority 20) |
-| `WorkspaceNeuron` | `orbiter.context.neuron` | Workspace artifacts (priority 30) |
-| `DynamicVariableRegistry` | `orbiter.context.variables` | Register and resolve `${path}` templates |
+| `Neuron` | `exo.context` | ABC with `name`, `priority`, `format(ctx)` |
+| `neuron_registry` | `exo.context` | Global registry of neuron classes |
+| `SystemNeuron` | `exo.context.neuron` | System instructions (priority 100) |
+| `TaskNeuron` | `exo.context.neuron` | Task description (priority 1) |
+| `HistoryNeuron` | `exo.context.neuron` | Conversation history (priority 10) |
+| `KnowledgeNeuron` | `exo.context.neuron` | Retrieved knowledge (priority 20) |
+| `WorkspaceNeuron` | `exo.context.neuron` | Workspace artifacts (priority 30) |
+| `DynamicVariableRegistry` | `exo.context.variables` | Register and resolve `${path}` templates |

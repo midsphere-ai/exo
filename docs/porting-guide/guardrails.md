@@ -1,10 +1,10 @@
-# Guardrails — agent-core to Orbiter Mapping
+# Guardrails — agent-core to Exo Mapping
 
 **Epic:** 1 — Security Guardrails
 **Date:** 2026-03-10
 
 This document maps agent-core's (openJiuwen) security guardrail system to
-Orbiter's `orbiter-guardrail` package, helping contributors familiar with
+Exo's `exo-guardrail` package, helping contributors familiar with
 either framework navigate both.
 
 ---
@@ -58,22 +58,22 @@ execution.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's guardrail system lives in the `orbiter-guardrail` package
-(`packages/orbiter-guardrail/`) as a separate installable package that
-depends on `orbiter-core`.
+Exo's guardrail system lives in the `exo-guardrail` package
+(`packages/exo-guardrail/`) as a separate installable package that
+depends on `exo-core`.
 
 ### Mapping Summary
 
-| Agent-Core | Orbiter | Notes |
+| Agent-Core | Exo | Notes |
 |------------|---------|-------|
 | `GuardrailBackend` ABC | `GuardrailBackend` ABC | Same abstract interface |
 | `RiskAssessment` model | `RiskAssessment` model | Frozen Pydantic `BaseModel` |
 | `RiskLevel` enum | `RiskLevel` `StrEnum` | Same five levels (SAFE through CRITICAL) |
 | `UserInputGuardrail` | `UserInputGuardrail` | Default `PatternBackend` for regex detection |
 | Event-driven callbacks | `HookManager` integration via `BaseGuardrail` | Uses `HookPoint` enum instead of custom events |
-| Guardrail exception | `GuardrailError(OrbiterError)` | Carries `risk_level`, `risk_type`, `details` |
+| Guardrail exception | `GuardrailError(ExoError)` | Carries `risk_level`, `risk_type`, `details` |
 | — | `GuardrailResult` | New: structured outcome with optional `modified_data` |
 | — | `BaseGuardrail` | New: manages attach/detach lifecycle on agents |
 | — | `PatternBackend` | New: extracted regex engine (was inline in agent-core) |
@@ -81,7 +81,7 @@ depends on `orbiter-core`.
 
 ### How Guardrails Integrate via HookManager
 
-Orbiter guardrails use the existing `HookManager` (from `orbiter-core`)
+Exo guardrails use the existing `HookManager` (from `exo-core`)
 rather than a parallel callback system. This means:
 
 1. **`BaseGuardrail`** wraps a `GuardrailBackend` and manages hook
@@ -138,11 +138,11 @@ class ProfanityBackend(GuardrailBackend):
         return RiskAssessment(has_risk=False, risk_level=RiskLevel.SAFE)
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
 # my_guardrails.py
-from orbiter.guardrail import (
+from exo.guardrail import (
     GuardrailBackend,
     RiskAssessment,
     RiskLevel,
@@ -181,10 +181,10 @@ guard = UserInputGuardrail()
 agent.add_guardrail(guard)  # agent-core's registration API
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.guardrail import UserInputGuardrail, GuardrailError
+from exo.guardrail import UserInputGuardrail, GuardrailError
 
 guard = UserInputGuardrail()  # defaults to PatternBackend + PRE_LLM_CALL
 guard.attach(agent)
@@ -199,7 +199,7 @@ except GuardrailError as e:
 ### Using the LLM Backend for Advanced Detection
 
 ```python
-from orbiter.guardrail import BaseGuardrail, LLMGuardrailBackend
+from exo.guardrail import BaseGuardrail, LLMGuardrailBackend
 
 backend = LLMGuardrailBackend(model="openai:gpt-4o-mini")
 guard = BaseGuardrail(backend=backend, events=["pre_llm_call"])
@@ -209,7 +209,7 @@ guard.attach(agent)
 ### Adding Custom Patterns to UserInputGuardrail
 
 ```python
-from orbiter.guardrail import UserInputGuardrail, RiskLevel
+from exo.guardrail import UserInputGuardrail, RiskLevel
 
 guard = UserInputGuardrail(
     extra_patterns=[
@@ -224,25 +224,25 @@ guard.attach(agent)
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.security.guardrail.GuardrailBackend` | `orbiter.guardrail.types.GuardrailBackend` | ABC with `analyze()` method |
-| `openjiuwen.core.security.guardrail.RiskAssessment` | `orbiter.guardrail.types.RiskAssessment` | Frozen Pydantic model |
-| `openjiuwen.core.security.guardrail.RiskLevel` | `orbiter.guardrail.types.RiskLevel` | `StrEnum`: SAFE, LOW, MEDIUM, HIGH, CRITICAL |
-| `openjiuwen.core.security.guardrail.UserInputGuardrail` | `orbiter.guardrail.user_input.UserInputGuardrail` | Built-in injection detector |
-| *(exception handling)* | `orbiter.guardrail.types.GuardrailError` | `OrbiterError` subclass with risk metadata |
-| *(inline pattern matching)* | `orbiter.guardrail.user_input.PatternBackend` | Extracted regex-based backend |
-| *(no equivalent)* | `orbiter.guardrail.base.BaseGuardrail` | Hook lifecycle manager |
-| *(no equivalent)* | `orbiter.guardrail.types.GuardrailResult` | Structured check outcome with `safe()`/`block()` constructors |
-| *(no equivalent)* | `orbiter.guardrail.llm_backend.LLMGuardrailBackend` | LLM-powered detection backend |
+| `openjiuwen.core.security.guardrail.GuardrailBackend` | `exo.guardrail.types.GuardrailBackend` | ABC with `analyze()` method |
+| `openjiuwen.core.security.guardrail.RiskAssessment` | `exo.guardrail.types.RiskAssessment` | Frozen Pydantic model |
+| `openjiuwen.core.security.guardrail.RiskLevel` | `exo.guardrail.types.RiskLevel` | `StrEnum`: SAFE, LOW, MEDIUM, HIGH, CRITICAL |
+| `openjiuwen.core.security.guardrail.UserInputGuardrail` | `exo.guardrail.user_input.UserInputGuardrail` | Built-in injection detector |
+| *(exception handling)* | `exo.guardrail.types.GuardrailError` | `ExoError` subclass with risk metadata |
+| *(inline pattern matching)* | `exo.guardrail.user_input.PatternBackend` | Extracted regex-based backend |
+| *(no equivalent)* | `exo.guardrail.base.BaseGuardrail` | Hook lifecycle manager |
+| *(no equivalent)* | `exo.guardrail.types.GuardrailResult` | Structured check outcome with `safe()`/`block()` constructors |
+| *(no equivalent)* | `exo.guardrail.llm_backend.LLMGuardrailBackend` | LLM-powered detection backend |
 
-All public symbols are also re-exported from `orbiter.guardrail` (the
-package `__init__.py`), so `from orbiter.guardrail import RiskLevel` works
+All public symbols are also re-exported from `exo.guardrail` (the
+package `__init__.py`), so `from exo.guardrail import RiskLevel` works
 as a convenience import.
 
 ### Event Name Mapping
 
-| Agent-Core Event | Orbiter HookPoint |
+| Agent-Core Event | Exo HookPoint |
 |-----------------|-------------------|
 | `user_input` | `HookPoint.PRE_LLM_CALL` |
 | `llm_input` | `HookPoint.PRE_LLM_CALL` |

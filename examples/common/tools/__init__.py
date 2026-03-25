@@ -1,4 +1,4 @@
-"""Reusable tool implementations for Orbiter examples.
+"""Reusable tool implementations for Exo examples.
 
 Provides ready-made tools for common tasks: web browsing, search APIs,
 and document processing. Import individual tools or the ``ALL_TOOLS``

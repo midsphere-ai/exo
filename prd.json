@@ -1,7 +1,7 @@
 {
-  "project": "Orbiter",
-  "branchName": "ralph/orbiter-integration-tests",
-  "description": "Intensive integration test suite for the Orbiter monorepo — 31 user stories covering all 14 packages using real Vertex AI (gemini-2.0-flash), real Redis (Docker), real Uvicorn, and real stdio MCP subprocesses across four tiers: two-package seams, three-package chains, full-stack scenarios, and marathon multi-feature runs.",
+  "project": "Exo",
+  "branchName": "ralph/exo-integration-tests",
+  "description": "Intensive integration test suite for the Exo monorepo — 31 user stories covering all 14 packages using real Vertex AI (gemini-2.0-flash), real Redis (Docker), real Uvicorn, and real stdio MCP subprocesses across four tiers: two-package seams, three-package chains, full-stack scenarios, and marathon multi-feature runs.",
   "userStories": [
     {
       "id": "US-INT-001",
@@ -305,7 +305,7 @@
       "description": "As a developer, I need a test that verifies vector-stored facts are injected into a new agent's context via KnowledgeNeuron and correctly influence the response.",
       "acceptanceCriteria": [
         "Create tests/integration/test_context_vector_injection.py",
-        "test_knowledge_neuron_enables_correct_answer: save 5 obscure non-general-knowledge facts to ChromaVectorMemoryStore (e.g. 'The Orbiter framework was founded in 2024 in Auckland.'); create new Agent with ContextConfig(mode='copilot') and Chroma store as knowledge source; prompt 'Where was the Orbiter framework founded? Respond with just the city name.'; output_type=CityResponse(city: str); assert result.output.city.lower() == 'auckland'",
+        "test_knowledge_neuron_enables_correct_answer: save 5 obscure non-general-knowledge facts to ChromaVectorMemoryStore (e.g. 'The Exo framework was founded in 2024 in Auckland.'); create new Agent with ContextConfig(mode='copilot') and Chroma store as knowledge source; prompt 'Where was the Exo framework founded? Respond with just the city name.'; output_type=CityResponse(city: str); assert result.output.city.lower() == 'auckland'",
         "@pytest.mark.integration and @pytest.mark.timeout(30) on all tests",
         "Ruff lint passes",
         "Typecheck passes"

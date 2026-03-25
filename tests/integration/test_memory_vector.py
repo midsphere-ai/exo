@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from orbiter.memory.base import HumanMemory  # pyright: ignore[reportMissingImports]
+from exo.memory.base import HumanMemory  # pyright: ignore[reportMissingImports]
 
 
 @pytest.mark.integration

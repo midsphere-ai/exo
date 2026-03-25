@@ -1,9 +1,9 @@
-# orbiter.mcp.tools
+# exo.mcp.tools
 
-MCP tool schema extraction, conversion to Orbiter Tool format, filtering, and namespacing.
+MCP tool schema extraction, conversion to Exo Tool format, filtering, and namespacing.
 
 ```python
-from orbiter.mcp.tools import (
+from exo.mcp.tools import (
     MCPToolError,
     MCPToolFilter,
     MCPToolWrapper,
@@ -24,7 +24,7 @@ from orbiter.mcp.tools import (
 class MCPToolError(ToolError)
 ```
 
-Error raised during MCP tool operations. Inherits from `orbiter.tool.ToolError`.
+Error raised during MCP tool operations. Inherits from `exo.tool.ToolError`.
 
 ---
 
@@ -155,9 +155,9 @@ class MCPToolWrapper(
 )
 ```
 
-An Orbiter `Tool` that wraps an MCP tool for execution. The tool delegates execution to an MCP server connection's `call_tool` method. Schema is extracted from the MCP tool definition.
+An Exo `Tool` that wraps an MCP tool for execution. The tool delegates execution to an MCP server connection's `call_tool` method. Schema is extracted from the MCP tool definition.
 
-Inherits from `orbiter.tool.Tool`.
+Inherits from `exo.tool.Tool`.
 
 ### Constructor parameters
 
@@ -207,7 +207,7 @@ def convert_mcp_tools(
 ) -> list[MCPToolWrapper]
 ```
 
-Convert a list of MCP tools to Orbiter `MCPToolWrapper` instances.
+Convert a list of MCP tools to Exo `MCPToolWrapper` instances.
 
 | Name | Type | Default | Description |
 |---|---|---|---|

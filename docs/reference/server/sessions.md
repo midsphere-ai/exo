@@ -1,9 +1,9 @@
-# orbiter_server.sessions
+# exo_server.sessions
 
 Session management API routes. Provides CRUD endpoints for chat sessions. Each session groups a conversation with a specific agent, storing messages exchanged during the interaction.
 
 ```python
-from orbiter_server.sessions import (
+from exo_server.sessions import (
     AppendMessageRequest,
     CreateSessionRequest,
     Session,

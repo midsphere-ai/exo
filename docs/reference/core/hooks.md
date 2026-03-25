@@ -1,11 +1,11 @@
-# orbiter.hooks
+# exo.hooks
 
 Async hook system for intercepting agent lifecycle events.
 
-**Module:** `orbiter.hooks`
+**Module:** `exo.hooks`
 
 ```python
-from orbiter.hooks import HookPoint, Hook, HookManager, run_hooks
+from exo.hooks import HookPoint, Hook, HookManager, run_hooks
 ```
 
 ---
@@ -43,7 +43,7 @@ Points in the agent lifecycle where hooks can be attached. Each value is a descr
 ### Example
 
 ```python
-from orbiter.hooks import HookPoint
+from exo.hooks import HookPoint
 
 # Iterate over all hook points
 for point in HookPoint:
@@ -155,7 +155,7 @@ Convenience function to run hooks on a manager. Equivalent to `await manager.run
 
 ```python
 import asyncio
-from orbiter.hooks import HookPoint, HookManager, run_hooks
+from exo.hooks import HookPoint, HookManager, run_hooks
 
 manager = HookManager()
 
@@ -177,7 +177,7 @@ asyncio.run(manager.run(HookPoint.PRE_TOOL_CALL, tool_name="get_weather"))
 asyncio.run(run_hooks(manager, HookPoint.PRE_TOOL_CALL, tool_name="get_weather"))
 
 # Pass hooks when creating an Agent
-from orbiter.agent import Agent
+from exo.agent import Agent
 agent = Agent(
     name="my_agent",
     hooks=[

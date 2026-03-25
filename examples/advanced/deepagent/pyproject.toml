@@ -1,17 +1,17 @@
 [project]
 name = "deepagent-example"
 version = "0.1.0"
-description = "DeepAgent — multi-agent ReAct research system built on Orbiter"
+description = "DeepAgent — multi-agent ReAct research system built on Exo"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # --- Orbiter framework packages ---
-    # orbiter-core: Agent, Swarm, Tool, Runner, HookManager — the agent execution backbone
-    "orbiter-core",
-    # orbiter-models: ModelProvider protocol, model registry, streaming — LLM abstraction layer
-    "orbiter-models",
-    # orbiter-mcp: MCPServerConnection, MCPToolWrapper — MCP server client and tool integration
-    "orbiter-mcp",
+    # --- Exo framework packages ---
+    # exo-core: Agent, Swarm, Tool, Runner, HookManager — the agent execution backbone
+    "exo-core",
+    # exo-models: ModelProvider protocol, model registry, streaming — LLM abstraction layer
+    "exo-models",
+    # exo-mcp: MCPServerConnection, MCPToolWrapper — MCP server client and tool integration
+    "exo-mcp",
     # --- Third-party dependencies ---
     "aiohttp==3.11.12",
     "mcp>=1.24.0",

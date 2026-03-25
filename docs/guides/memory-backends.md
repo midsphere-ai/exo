@@ -1,6 +1,6 @@
 # Memory Backends
 
-The `orbiter-memory` package ships with three storage backends that implement the `MemoryStore` protocol: **SQLite** for local development, **Postgres** for production, and **Vector** for semantic search. All backends support soft deletes, version tracking, and async I/O.
+The `exo-memory` package ships with three storage backends that implement the `MemoryStore` protocol: **SQLite** for local development, **Postgres** for production, and **Vector** for semantic search. All backends support soft deletes, version tracking, and async I/O.
 
 ## MemoryStore Protocol
 
@@ -29,7 +29,7 @@ Best for local development, testing, and single-process applications. Uses `aios
 ### Setup
 
 ```python
-from orbiter.memory.backends import SQLiteMemoryStore
+from exo.memory.backends import SQLiteMemoryStore
 
 # In-memory (testing)
 store = SQLiteMemoryStore(":memory:")
@@ -96,18 +96,18 @@ Best for production multi-process applications. Uses `asyncpg` with JSONB indexe
 ### Setup
 
 ```python
-from orbiter.memory.backends import PostgresMemoryStore
+from exo.memory.backends import PostgresMemoryStore
 
-store = PostgresMemoryStore(dsn="postgresql://user:pass@localhost/orbiter")
+store = PostgresMemoryStore(dsn="postgresql://user:pass@localhost/exo")
 
-async with PostgresMemoryStore(dsn="postgresql://localhost/orbiter") as store:
+async with PostgresMemoryStore(dsn="postgresql://localhost/exo") as store:
     await store.add(memory_item)
 ```
 
 ### Manual Lifecycle
 
 ```python
-store = PostgresMemoryStore(dsn="postgresql://localhost/orbiter")
+store = PostgresMemoryStore(dsn="postgresql://localhost/exo")
 await store.init()   # creates connection pool, creates tables
 # ... use store ...
 await store.close()  # closes connection pool
@@ -157,7 +157,7 @@ Best for semantic search over memory content. Uses embeddings for cosine similar
 ### Setup
 
 ```python
-from orbiter.memory.backends import VectorMemoryStore, OpenAIEmbeddings
+from exo.memory.backends import VectorMemoryStore, OpenAIEmbeddings
 
 embeddings = OpenAIEmbeddings(
     model="text-embedding-3-small",
@@ -175,7 +175,7 @@ store = VectorMemoryStore(embeddings=embeddings, dimension=1536)
 The vector store requires an `Embeddings` implementation:
 
 ```python
-from orbiter.memory.backends.vector import Embeddings
+from exo.memory.backends.vector import Embeddings
 
 class CustomEmbeddings(Embeddings):
     @property
@@ -196,7 +196,7 @@ class CustomEmbeddings(Embeddings):
 The built-in `OpenAIEmbeddings` class wraps the OpenAI API:
 
 ```python
-from orbiter.memory.backends import OpenAIEmbeddings
+from exo.memory.backends import OpenAIEmbeddings
 
 embeddings = OpenAIEmbeddings(
     model="text-embedding-3-small",  # or "text-embedding-3-large"
@@ -271,9 +271,9 @@ deleted_count = await store.clear(
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `SQLiteMemoryStore` | `orbiter.memory.backends` | SQLite backend with JSON indexes |
-| `PostgresMemoryStore` | `orbiter.memory.backends` | Postgres backend with JSONB and pooling |
-| `VectorMemoryStore` | `orbiter.memory.backends` | Vector backend with cosine similarity |
-| `Embeddings` | `orbiter.memory.backends.vector` | ABC for embedding providers |
-| `OpenAIEmbeddings` | `orbiter.memory.backends` | OpenAI embedding provider |
-| `MemoryStore` | `orbiter.memory` | Protocol: `add`, `get`, `search`, `clear` |
+| `SQLiteMemoryStore` | `exo.memory.backends` | SQLite backend with JSON indexes |
+| `PostgresMemoryStore` | `exo.memory.backends` | Postgres backend with JSONB and pooling |
+| `VectorMemoryStore` | `exo.memory.backends` | Vector backend with cosine similarity |
+| `Embeddings` | `exo.memory.backends.vector` | ABC for embedding providers |
+| `OpenAIEmbeddings` | `exo.memory.backends` | OpenAI embedding provider |
+| `MemoryStore` | `exo.memory` | Protocol: `add`, `get`, `search`, `clear` |

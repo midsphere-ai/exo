@@ -3,13 +3,13 @@
 **Status:** Proposed
 **Epic:** 10 — Operator Pattern with Self-Optimization
 **Date:** 2026-03-10
-**Package:** `orbiter-train` (new `operator/`, `optimizer/`, `updater/` subpackages)
+**Package:** `exo-train` (new `operator/`, `optimizer/`, `updater/` subpackages)
 
 ---
 
 ## 1. Motivation
 
-Orbiter's `orbiter-train` package provides a solid training foundation:
+Exo's `exo-train` package provides a solid training foundation:
 
 - **Trainer ABC** — Lifecycle state machine (CREATED → VALIDATED → TRAINING → COMPLETED)
   with abstract `check_agent`, `check_dataset`, `check_reward`, `check_config`, `train`,
@@ -43,7 +43,7 @@ Agent-core (`openjiuwen/agent_evolving/`) provides a production-grade implementa
 6. **Checkpointing** — `EvolveCheckpoint` with operator state persistence and resume.
 
 This document designs how the operator pattern and self-optimization integrate with
-Orbiter's existing training architecture.
+Exo's existing training architecture.
 
 ---
 
@@ -58,7 +58,7 @@ fine-tuning scenarios.
 
 ### Option B — Add operator pattern as new modules alongside existing abstractions (chosen)
 
-Add `operator/`, `optimizer/`, `updater/` subpackages inside `orbiter-train`. The
+Add `operator/`, `optimizer/`, `updater/` subpackages inside `exo-train`. The
 existing `Trainer` ABC, `EvolutionPipeline`, `EvolutionStrategy`, `SynthesisPipeline`,
 `VeRLTrainer`, and `TrajectoryDataset` remain fully functional and unchanged.
 
@@ -71,7 +71,7 @@ existing `Trainer` ABC, `EvolutionPipeline`, `EvolutionStrategy`, `SynthesisPipe
   for its `train()` phase, or an operator optimizer could use `SynthesisPipeline`
   to augment its training cases.
 - Agent-core's `Trainer` maps cleanly to a new `OperatorTrainer` concrete subclass
-  of Orbiter's `Trainer` ABC — it inherits the lifecycle state machine for free.
+  of Exo's `Trainer` ABC — it inherits the lifecycle state machine for free.
 
 ---
 
@@ -124,10 +124,10 @@ class Operator(ABC):
 - `get_tunables()` declares what the optimizer can modify — analogous to
   `nn.Module.parameters()` in PyTorch.
 - `get_state()`/`load_state()` enables snapshot/rollback for candidate selection
-  and checkpointing, following the same pattern as Orbiter's existing
+  and checkpointing, following the same pattern as Exo's existing
   `EvolutionState` state machine.
 - `invoke()` takes `**kwargs` rather than a typed `Session` to avoid coupling
-  to agent-core's session model. Orbiter agents can pass context as needed.
+  to agent-core's session model. Exo agents can pass context as needed.
 
 ### 3.2 Concrete Operators (`operator/`)
 
@@ -215,9 +215,9 @@ class DefaultTrajectoryExtractor(TrajectoryExtractor):
 ```
 
 **Design note:** Agent-core's `TracerTrajectoryExtractor` relies on its `Session.tracer()`
-spans. Orbiter does not have an identical tracer, so we define `TrajectoryExtractor`
+spans. Exo does not have an identical tracer, so we define `TrajectoryExtractor`
 as an ABC. The `DefaultTrajectoryExtractor` works with dict-based execution records.
-Custom extractors can integrate with Orbiter's hook system.
+Custom extractors can integrate with Exo's hook system.
 
 ### 3.5 Optimizer Framework (`optimizer/`)
 
@@ -457,7 +457,7 @@ class FileCheckpointStore:
 ## 4. File Layout
 
 ```
-packages/orbiter-train/src/orbiter/train/
+packages/exo-train/src/exo/train/
 ├── __init__.py                       # Existing + new exports
 ├── trainer.py                        # Existing — Trainer ABC (unchanged)
 ├── evolution.py                      # Existing — EvolutionPipeline (unchanged)
@@ -573,7 +573,7 @@ class MyAgent:
 
 ### 5.3 Composition with Existing Pipelines
 
-The operator pattern composes with existing orbiter-train features:
+The operator pattern composes with existing exo-train features:
 
 - **EvolutionStrategy + Operators:** A custom `EvolutionStrategy.train()` could
   internally create an `OperatorTrainer` for its training phase, combining
@@ -586,9 +586,9 @@ The operator pattern composes with existing orbiter-train features:
 
 ---
 
-## 6. Mapping: Agent-Core Trainer → Orbiter Trainer ABC
+## 6. Mapping: Agent-Core Trainer → Exo Trainer ABC
 
-| Agent-Core (`Trainer`)               | Orbiter (`OperatorTrainer extends Trainer`)  |
+| Agent-Core (`Trainer`)               | Exo (`OperatorTrainer extends Trainer`)  |
 |--------------------------------------|----------------------------------------------|
 | `train(agent, train_cases, val_cases, num_iterations)` | `check_agent()` + `check_dataset()` + `mark_validated()` + `train()` |
 | `forward(agent, cases)` → score, evaluated, trajectories | `_predict()` + `_evaluate_cases()` + `_extract_trajectories()` |
@@ -599,14 +599,14 @@ The operator pattern composes with existing orbiter-train features:
 | `_restore_operators_state(operators, state)` | `_restore_state(operators, state)` |
 | `_select_best_candidate_on_val(...)` | `_select_best_candidate(...)` |
 | `_save_checkpoint_if_needed(...)` | `_save_checkpoint(...)` via `CheckpointManager` |
-| `Progress` (epoch tracker) | Orbiter's `TrainerState` + internal epoch counter |
+| `Progress` (epoch tracker) | Exo's `TrainerState` + internal epoch counter |
 | `Callbacks` (lifecycle hooks) | Future: HookManager integration |
 
 **Key differences:**
-- Orbiter splits agent-core's monolithic `train()` into validation + training phases.
-- Orbiter uses `Trainer.state` (StrEnum) instead of agent-core's `Progress` class.
-- Orbiter's `TrainMetrics` replaces agent-core's inline score tracking.
-- Orbiter does not require `Session` — trajectory extraction is pluggable.
+- Exo splits agent-core's monolithic `train()` into validation + training phases.
+- Exo uses `Trainer.state` (StrEnum) instead of agent-core's `Progress` class.
+- Exo's `TrainMetrics` replaces agent-core's inline score tracking.
+- Exo does not require `Session` — trajectory extraction is pluggable.
 
 ---
 
@@ -639,7 +639,7 @@ All existing tests (~2,900) remain unaffected.
 
 ## 8. Open Questions
 
-1. **Evaluator reuse:** Should `OperatorTrainer` accept Orbiter's own evaluator
+1. **Evaluator reuse:** Should `OperatorTrainer` accept Exo's own evaluator
    interface, or define a new `BaseEvaluator` ABC matching agent-core's pattern?
    Recommendation: Define a lightweight `CaseEvaluator` protocol in the optimizer
    module, with an adapter for existing evaluation functions.
@@ -660,7 +660,7 @@ All existing tests (~2,900) remain unaffected.
 
 ## 9. Summary
 
-The operator pattern adds a new self-optimization paradigm to `orbiter-train`:
+The operator pattern adds a new self-optimization paradigm to `exo-train`:
 
 - **Operator ABC** decomposes agents into optimizable units with tunable parameters.
 - **BaseOptimizer** framework uses textual gradients (backward/step) to improve
@@ -672,5 +672,5 @@ The operator pattern adds a new self-optimization paradigm to `orbiter-train`:
   the existing `TrajectoryItem`/`TrajectoryDataset`.
 - **Checkpointing** enables save/resume with operator state persistence.
 
-All existing `orbiter-train` functionality — `EvolutionPipeline`, `SynthesisPipeline`,
+All existing `exo-train` functionality — `EvolutionPipeline`, `SynthesisPipeline`,
 `VeRLTrainer`, `TrajectoryDataset` — remains fully functional and unchanged.

@@ -1,12 +1,12 @@
-# orbiter.sandbox.kubernetes
+# exo.sandbox.kubernetes
 
 Kubernetes-based sandbox for remote agent execution.
 
 ```python
-from orbiter.sandbox.kubernetes import KubernetesSandbox
+from exo.sandbox.kubernetes import KubernetesSandbox
 ```
 
-**Requires:** `pip install orbiter-sandbox[kubernetes]`
+**Requires:** `pip install exo-sandbox[kubernetes]`
 
 ---
 
@@ -40,8 +40,8 @@ All parameters from `Sandbox` are inherited, plus:
 | `mcp_config` | `dict[str, Any] \| None` | `None` | MCP server configuration |
 | `agents` | `dict[str, Any] \| None` | `None` | Agent configurations |
 | `timeout` | `float` | `60.0` | Execution timeout in seconds |
-| `namespace` | `str \| None` | `None` | Kubernetes namespace. Falls back to `ORBITER_K8S_NAMESPACE` env var, then `"default"` |
-| `image` | `str \| None` | `None` | Container image. Falls back to `ORBITER_K8S_IMAGE` env var, then `"python:3.11-slim"` |
+| `namespace` | `str \| None` | `None` | Kubernetes namespace. Falls back to `EXO_K8S_NAMESPACE` env var, then `"default"` |
+| `image` | `str \| None` | `None` | Container image. Falls back to `EXO_K8S_IMAGE` env var, then `"python:3.11-slim"` |
 
 ### Properties
 
@@ -60,7 +60,7 @@ All parameters from `Sandbox` are inherited, plus:
 async def start(self) -> None
 ```
 
-Create the pod and service, wait for readiness. Transitions to `RUNNING` status. The pod is named `orbiter-{sandbox_id}` and the service `orbiter-svc-{sandbox_id}`.
+Create the pod and service, wait for readiness. Transitions to `RUNNING` status. The pod is named `exo-{sandbox_id}` and the service `exo-svc-{sandbox_id}`.
 
 **Raises:** `SandboxError` -- If pod creation or readiness polling fails.
 
@@ -112,14 +112,14 @@ async with KubernetesSandbox(namespace="dev", image="python:3.12") as sb:
 
 | Variable | Description | Default |
 |---|---|---|
-| `ORBITER_K8S_NAMESPACE` | Kubernetes namespace | `"default"` |
-| `ORBITER_K8S_IMAGE` | Container image | `"python:3.11-slim"` |
+| `EXO_K8S_NAMESPACE` | Kubernetes namespace | `"default"` |
+| `EXO_K8S_IMAGE` | Container image | `"python:3.11-slim"` |
 | `KUBECONFIG` | Path to kubeconfig file | *(auto-detect)* |
 
 ### Example
 
 ```python
-from orbiter.sandbox import KubernetesSandbox
+from exo.sandbox import KubernetesSandbox
 
 sandbox = KubernetesSandbox(
     namespace="agents",
@@ -129,7 +129,7 @@ sandbox = KubernetesSandbox(
 )
 
 await sandbox.start()
-print(sandbox.pod_name)     # "orbiter-a1b2c3d4e5f6"
+print(sandbox.pod_name)     # "exo-a1b2c3d4e5f6"
 print(sandbox.cluster_ip)   # "10.96.0.42"
 
 result = await sandbox.run_tool("process", {"data": "input"})

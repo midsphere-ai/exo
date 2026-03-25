@@ -1,13 +1,13 @@
 # Tools
 
-Tools give agents the ability to interact with the outside world -- query APIs, read files, perform calculations, and more. Orbiter provides three ways to define tools, ranging from a simple decorator to a full abstract base class.
+Tools give agents the ability to interact with the outside world -- query APIs, read files, perform calculations, and more. Exo provides three ways to define tools, ranging from a simple decorator to a full abstract base class.
 
 ## Basic Usage: The @tool Decorator
 
 The fastest way to create a tool is the `@tool` decorator. It turns a regular Python function into a `FunctionTool` with auto-generated JSON Schema:
 
 ```python
-from orbiter.tool import tool
+from exo.tool import tool
 
 @tool
 def get_weather(city: str, units: str = "celsius") -> str:
@@ -67,7 +67,7 @@ def tool(
 `FunctionTool` is the class that `@tool` creates. You can also construct it directly:
 
 ```python
-from orbiter.tool import FunctionTool
+from exo.tool import FunctionTool
 
 def calculate(expression: str) -> str:
     """Evaluate a math expression.
@@ -120,7 +120,7 @@ async def async_lookup(key: str) -> str:
 
 ## Schema Generation from Type Hints
 
-Orbiter automatically converts Python type annotations to JSON Schema:
+Exo automatically converts Python type annotations to JSON Schema:
 
 | Python Type | JSON Schema |
 |-------------|-------------|
@@ -173,7 +173,7 @@ Produces the schema:
 For full control, subclass the `Tool` abstract base class:
 
 ```python
-from orbiter.tool import Tool
+from exo.tool import Tool
 from typing import Any
 
 class DatabaseQuery(Tool):
@@ -239,7 +239,7 @@ The `to_schema()` method returns:
 Raise `ToolError` to signal a tool failure that the LLM should see and potentially recover from:
 
 ```python
-from orbiter.tool import tool, ToolError
+from exo.tool import tool, ToolError
 
 @tool
 def divide(a: float, b: float) -> str:
@@ -276,9 +276,9 @@ Each tool call runs independently -- if one fails, others still complete, and th
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Tool` | `orbiter.tool` | Abstract base class for tools |
-| `FunctionTool` | `orbiter.tool` | Wraps a sync or async function as a tool |
-| `tool` | `orbiter.tool` | Decorator to create a `FunctionTool` |
-| `ToolError` | `orbiter.tool` | Error raised during tool execution |
-| `ToolResult` | `orbiter.types` | Result of a tool execution (sent back to LLM) |
-| `ToolCall` | `orbiter.types` | LLM request to invoke a tool |
+| `Tool` | `exo.tool` | Abstract base class for tools |
+| `FunctionTool` | `exo.tool` | Wraps a sync or async function as a tool |
+| `tool` | `exo.tool` | Decorator to create a `FunctionTool` |
+| `ToolError` | `exo.tool` | Error raised during tool execution |
+| `ToolResult` | `exo.types` | Result of a tool execution (sent back to LLM) |
+| `ToolCall` | `exo.types` | LLM request to invoke a tool |

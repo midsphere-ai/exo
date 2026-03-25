@@ -1,11 +1,11 @@
-# orbiter.context.tools
+# exo.context.tools
 
 Context tools for agent self-management: planning checklists, knowledge retrieval, and file reading.
 
 ## Module Path
 
 ```python
-from orbiter.context.tools import (
+from exo.context.tools import (
     get_context_tools,
     get_planning_tools,
     get_knowledge_tools,
@@ -165,8 +165,8 @@ Read a file from the working directory.
 
 ```python
 import asyncio
-from orbiter.context import Context
-from orbiter.context.tools import get_planning_tools
+from exo.context import Context
+from exo.context.tools import get_planning_tools
 
 async def main():
     ctx = Context("task-1")

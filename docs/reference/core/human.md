@@ -1,11 +1,11 @@
-# orbiter.human
+# exo.human
 
 Human-in-the-loop tool for agent execution with human oversight.
 
-**Module:** `orbiter.human`
+**Module:** `exo.human`
 
 ```python
-from orbiter.human import HumanInputHandler, ConsoleHandler, HumanInputTool
+from exo.human import HumanInputHandler, ConsoleHandler, HumanInputTool
 ```
 
 ---
@@ -39,7 +39,7 @@ Request input from a human.
 ### Example: Custom Handler
 
 ```python
-from orbiter.human import HumanInputHandler
+from exo.human import HumanInputHandler
 
 class SlackHandler(HumanInputHandler):
     async def get_input(self, prompt: str, choices: list[str] | None = None) -> str:
@@ -78,7 +78,7 @@ Read input from the console.
 ### Example
 
 ```python
-from orbiter.human import ConsoleHandler
+from exo.human import ConsoleHandler
 
 handler = ConsoleHandler()
 # When run, this prints to stderr and reads from stdin
@@ -146,8 +146,8 @@ Execute the human input request.
 ### Example
 
 ```python
-from orbiter.agent import Agent
-from orbiter.human import HumanInputTool, ConsoleHandler
+from exo.agent import Agent
+from exo.human import HumanInputTool, ConsoleHandler
 
 # Default console handler
 hitl = HumanInputTool()
@@ -169,8 +169,8 @@ agent = Agent(
 ### Full Example: Agent with Human Oversight
 
 ```python
-from orbiter import Agent, tool, run
-from orbiter.human import HumanInputTool
+from exo import Agent, tool, run
+from exo.human import HumanInputTool
 
 @tool
 def delete_file(path: str) -> str:

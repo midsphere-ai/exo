@@ -1,6 +1,6 @@
 # Testing Guide
 
-Orbiter uses pytest with pytest-asyncio for all testing. This guide covers conventions, patterns, and common pitfalls.
+Exo uses pytest with pytest-asyncio for all testing. This guide covers conventions, patterns, and common pitfalls.
 
 ## Running Tests
 
@@ -9,14 +9,14 @@ Orbiter uses pytest with pytest-asyncio for all testing. This guide covers conve
 uv run pytest
 
 # Run a specific package's tests
-uv run pytest packages/orbiter-core/tests/
-uv run pytest packages/orbiter-models/tests/
+uv run pytest packages/exo-core/tests/
+uv run pytest packages/exo-models/tests/
 
 # Run a specific test file
-uv run pytest packages/orbiter-core/tests/test_agent.py
+uv run pytest packages/exo-core/tests/test_agent.py
 
 # Run a specific test function
-uv run pytest packages/orbiter-core/tests/test_agent.py::test_agent_calls_tool_and_returns_result
+uv run pytest packages/exo-core/tests/test_agent.py::test_agent_calls_tool_and_returns_result
 
 # Run with verbose output
 uv run pytest -v
@@ -52,14 +52,14 @@ Test file names must be **unique across all packages**. Pytest collects tests fr
 
 ```
 # GOOD — unique names
-packages/orbiter-core/tests/test_types.py
-packages/orbiter-models/tests/test_model_types.py     # prefixed!
-packages/orbiter-core/tests/test_config.py
-packages/orbiter-models/tests/test_model_provider.py   # prefixed!
+packages/exo-core/tests/test_types.py
+packages/exo-models/tests/test_model_types.py     # prefixed!
+packages/exo-core/tests/test_config.py
+packages/exo-models/tests/test_model_provider.py   # prefixed!
 
 # BAD — collisions
-packages/orbiter-core/tests/test_types.py
-packages/orbiter-models/tests/test_types.py            # COLLISION!
+packages/exo-core/tests/test_types.py
+packages/exo-models/tests/test_types.py            # COLLISION!
 ```
 
 Convention: prefix test files with the package's sub-namespace when there is potential for collision.
@@ -86,7 +86,7 @@ async def test_stream_yields_text_events(mock_provider): ...
 
 ```python
 import pytest
-from orbiter.types import AssistantMessage, ToolCall, Usage
+from exo.types import AssistantMessage, ToolCall, Usage
 
 class MockProvider:
     """A provider that returns canned responses."""
@@ -140,7 +140,7 @@ def tool_calling_provider():
 ### Using in Tests
 
 ```python
-from orbiter import Agent, tool, run
+from exo import Agent, tool, run
 
 @tool
 def add(a: int, b: int) -> int:
@@ -209,8 +209,8 @@ async def test_tool_error_returned_as_tool_result(error_provider):
 Pyright cannot resolve cross-namespace-package imports from editable installs. In test files that import across packages, use the `pyright: ignore` directive:
 
 ```python
-# In packages/orbiter-core/tests/test_integration.py
-from orbiter.models.types import ModelError  # pyright: ignore[reportMissingImports]
+# In packages/exo-core/tests/test_integration.py
+from exo.models.types import ModelError  # pyright: ignore[reportMissingImports]
 ```
 
 **Only use this in test files** that genuinely need cross-package imports. Source files should not need this directive because their dependencies are declared in `pyproject.toml`.
@@ -222,10 +222,10 @@ from orbiter.models.types import ModelError  # pyright: ignore[reportMissingImpo
 Put shared fixtures in `conftest.py` at the `tests/` directory level:
 
 ```python
-# packages/orbiter-core/tests/conftest.py
+# packages/exo-core/tests/conftest.py
 
 import pytest
-from orbiter import Agent
+from exo import Agent
 
 @pytest.fixture
 def basic_agent():

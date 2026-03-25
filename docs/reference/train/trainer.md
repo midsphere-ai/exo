@@ -1,9 +1,9 @@
-# orbiter.train.trainer
+# exo.train.trainer
 
 Base Trainer ABC for agent fine-tuning with multi-phase lifecycle.
 
 ```python
-from orbiter.train.trainer import (
+from exo.train.trainer import (
     TrainConfig,
     Trainer,
     TrainerError,
@@ -198,7 +198,7 @@ Transition to `VALIDATED` state after all checks pass.
 ### Example
 
 ```python
-from orbiter.train import TrainConfig
+from exo.train import TrainConfig
 
 # See VeRLTrainer for a concrete implementation
 config = TrainConfig(epochs=3, batch_size=16, learning_rate=2e-5)

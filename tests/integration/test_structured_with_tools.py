@@ -29,12 +29,12 @@ async def test_structured_output_after_two_tool_calls(vertex_model: str) -> None
     TravelReport JSON object.  We assert all 4 fields are populated and that
     exactly 2 ToolCall objects are present.
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     @tool
     def get_distance(city1: str, city2: str) -> str:

@@ -1,6 +1,6 @@
-# Architecture Decision Records — Orbiter Web
+# Architecture Decision Records — Exo Web
 
-This document records the key architectural decisions made for Orbiter Web and the reasoning behind each choice.
+This document records the key architectural decisions made for Exo Web and the reasoning behind each choice.
 
 ---
 
@@ -8,13 +8,13 @@ This document records the key architectural decisions made for Orbiter Web and t
 
 **Status:** Accepted
 
-**Context:** Orbiter Web needs a database for storing agent configurations, workflow state, conversation history, audit logs, and more. Options considered: PostgreSQL, MySQL, SQLite.
+**Context:** Exo Web needs a database for storing agent configurations, workflow state, conversation history, audit logs, and more. Options considered: PostgreSQL, MySQL, SQLite.
 
 **Decision:** Use SQLite with WAL (Write-Ahead Logging) mode via aiosqlite.
 
 **Rationale:**
-- **Zero-ops deployment** — No separate database process to install, configure, or maintain. The database is a single file (`orbiter.db`).
-- **Single-unit architecture** — Orbiter Web is designed as a single deployable unit (frontend + backend + database). SQLite aligns perfectly with this goal.
+- **Zero-ops deployment** — No separate database process to install, configure, or maintain. The database is a single file (`exo.db`).
+- **Single-unit architecture** — Exo Web is designed as a single deployable unit (frontend + backend + database). SQLite aligns perfectly with this goal.
 - **WAL mode** enables concurrent reads while a write is in progress, providing sufficient concurrency for the expected workload (single-user or small-team usage).
 - **Foreign keys** are enabled at connection time (`PRAGMA foreign_keys=ON`) for referential integrity.
 - **Performance** — SQLite is faster than network databases for the read-heavy, low-write workload typical of an AI agent platform.
@@ -48,7 +48,7 @@ This document records the key architectural decisions made for Orbiter Web and t
 
 **Status:** Accepted
 
-**Context:** Orbiter Web has multiple real-time features: agent chat streaming, workflow execution monitoring, log tailing, sandbox output, and notifications. Each could use a separate WebSocket connection.
+**Context:** Exo Web has multiple real-time features: agent chat streaming, workflow execution monitoring, log tailing, sandbox output, and notifications. Each could use a separate WebSocket connection.
 
 **Decision:** Use a single multiplexed WebSocket at `/api/v1/ws` with channel-based routing.
 
@@ -73,7 +73,7 @@ This document records the key architectural decisions made for Orbiter Web and t
 
 **Status:** Accepted
 
-**Context:** The platform needs both a rich frontend (visual workflow canvas, agent playground) and a Python backend (LLM orchestration via Orbiter framework).
+**Context:** The platform needs both a rich frontend (visual workflow canvas, agent playground) and a Python backend (LLM orchestration via Exo framework).
 
 **Decision:** Bundle Astro 5.x (Node.js SSG) and FastAPI (Python) as a single deployable package. In development, Vite proxies API requests to the FastAPI server. In production, Astro builds static files served alongside the API.
 
@@ -81,11 +81,11 @@ This document records the key architectural decisions made for Orbiter Web and t
 - **Unified deployment** — One `docker run` or process manager command starts everything. No separate frontend and backend deployments to coordinate.
 - **Astro's strengths** — Static site generation for fast page loads, React islands for interactive components (workflow canvas), minimal JavaScript shipped to the client.
 - **FastAPI's strengths** — Native async Python for LLM provider calls, WebSocket support, Pydantic validation, automatic OpenAPI docs.
-- **Orbiter framework integration** — The backend directly imports `orbiter-core` and `orbiter-models` as workspace dependencies, enabling native Python agent execution.
+- **Exo framework integration** — The backend directly imports `exo-core` and `exo-models` as workspace dependencies, enabling native Python agent execution.
 
 **Trade-offs:**
 - Dual toolchain (Node.js + Python) increases build complexity.
-- The `orbiter-web` package has both `package.json` and `pyproject.toml`.
+- The `exo-web` package has both `package.json` and `pyproject.toml`.
 
 ---
 
@@ -194,11 +194,11 @@ def require_role(min_role: str):
 
 **Context:** LLM provider API keys (OpenAI, Anthropic, etc.) must be stored securely. Users configure these via the UI.
 
-**Decision:** Encrypt API keys with `ORBITER_SECRET_KEY` before storing in the database. Never expose encrypted or plaintext keys in API responses.
+**Decision:** Encrypt API keys with `EXO_SECRET_KEY` before storing in the database. Never expose encrypted or plaintext keys in API responses.
 
 **Rationale:**
 - **At-rest encryption** — If the database file is compromised, API keys are not readable without the secret key.
 - **API safety** — Response models use `api_key_set: bool` instead of returning the actual key.
 - **Key rotation** — Provider keys table supports multiple keys per provider with load balancing.
 
-**Implementation:** `encrypt_api_key()` / `decrypt_api_key()` in `orbiter_web/crypto.py`.
+**Implementation:** `encrypt_api_key()` / `decrypt_api_key()` in `exo_web/crypto.py`.

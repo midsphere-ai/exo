@@ -1,10 +1,10 @@
 # Plugin Development
 
-Orbiter Web supports a plugin system that lets you extend the platform with custom model providers, tools, agent strategies, and more. Plugins are managed through the dashboard's marketplace UI and executed in isolated subprocesses for safety. This guide walks you through creating, testing, and publishing plugins.
+Exo Web supports a plugin system that lets you extend the platform with custom model providers, tools, agent strategies, and more. Plugins are managed through the dashboard's marketplace UI and executed in isolated subprocesses for safety. This guide walks you through creating, testing, and publishing plugins.
 
 ## Plugin Types
 
-Every plugin declares a `type` in its manifest. Orbiter Web supports five types:
+Every plugin declares a `type` in its manifest. Exo Web supports five types:
 
 | Type | Purpose | Example |
 |---|---|---|
@@ -16,7 +16,7 @@ Every plugin declares a `type` in its manifest. Orbiter Web supports five types:
 
 ## The `plugin.json` Manifest
 
-Every plugin needs a `plugin.json` file in its root directory. This manifest tells Orbiter how to load and display the plugin.
+Every plugin needs a `plugin.json` file in its root directory. This manifest tells Exo how to load and display the plugin.
 
 ```json
 {
@@ -109,7 +109,7 @@ curl -X DELETE /api/v1/plugins/{plugin_id}
 
 ## Plugin Isolation Model
 
-Plugins run in **isolated subprocesses**, not in the main Orbiter process. This provides safety guarantees:
+Plugins run in **isolated subprocesses**, not in the main Exo process. This provides safety guarantees:
 
 - **Process isolation**: Each plugin executes in its own `asyncio.create_subprocess_exec()` call
 - **Timeout enforcement**: Plugins have a 10-second execution timeout — exceeded processes are killed
@@ -200,7 +200,7 @@ Or use the dashboard: navigate to **Plugins → Load from Directory** and enter 
 
 ### What Happens on Load
 
-1. Orbiter reads `plugin.json` from the specified directory
+1. Exo reads `plugin.json` from the specified directory
 2. Validates required manifest fields and plugin type
 3. Checks that the entry point file exists
 4. Runs the entry point with `--validate` in an isolated subprocess (10s timeout)
@@ -215,7 +215,7 @@ This tutorial builds a web search tool plugin step by step.
 ### Directory Structure
 
 ```
-orbiter-web-search/
+exo-web-search/
 ├── plugin.json
 ├── main.py
 └── search.py
@@ -250,7 +250,7 @@ def search_web(query: str, max_results: int = 5) -> list[dict]:
     params = urllib.parse.urlencode({"q": query, "format": "json"})
     url = f"https://api.duckduckgo.com/?{params}"
 
-    req = urllib.request.Request(url, headers={"User-Agent": "OrbiterPlugin/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ExoPlugin/1.0"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.loads(resp.read().decode())
 
@@ -288,7 +288,7 @@ def run() -> int:
     """Execute a search (reads query from stdin or args)."""
     from search import search_web
 
-    query = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else "orbiter ai framework"
+    query = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else "exo ai framework"
     try:
         results = search_web(query)
         print(json.dumps({"status": "ok", "results": results}))
@@ -316,12 +316,12 @@ python main.py --run "python async patterns"
 # {"status": "ok", "results": [...]}
 ```
 
-### Load Into Orbiter
+### Load Into Exo
 
 ```bash
 curl -X POST http://localhost:4321/api/v1/plugins/load-directory \
   -H "Content-Type: application/json" \
-  -d '{"directory": "/home/you/orbiter-web-search"}'
+  -d '{"directory": "/home/you/exo-web-search"}'
 ```
 
 ## Tutorial: Creating a Model Provider Plugin
@@ -331,7 +331,7 @@ This tutorial builds a custom model provider plugin that wraps a local API.
 ### Directory Structure
 
 ```
-orbiter-local-llm/
+exo-local-llm/
 ├── plugin.json
 ├── main.py
 └── provider.py
@@ -472,7 +472,7 @@ print("Manifest OK")
 
 ### 2. Run Validation Mode
 
-Every plugin must pass validation — this is what Orbiter runs during installation:
+Every plugin must pass validation — this is what Exo runs during installation:
 
 ```bash
 python main.py --validate
@@ -513,7 +513,7 @@ curl -X PUT http://localhost:4321/api/v1/plugins/{id}/status \
 
 ### 6. Write Unit Tests
 
-Test your plugin logic independently of Orbiter:
+Test your plugin logic independently of Exo:
 
 ```python
 # test_search.py

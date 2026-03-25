@@ -5,7 +5,7 @@
 ## Basic Usage
 
 ```python
-from orbiter.context import ContextState
+from exo.context import ContextState
 
 state = ContextState()
 
@@ -51,7 +51,7 @@ print(child.get("org_id"))  # "org-1" (inherited two levels up)
 The `Context` class uses `ContextState` for its state management. Forking creates a child context with an inherited state:
 
 ```python
-from orbiter.context import Context, ContextConfig
+from exo.context import Context, ContextConfig
 
 ctx = Context(task_id="main", config=ContextConfig())
 ctx.state.set("plan", ["step1", "step2"])
@@ -165,7 +165,7 @@ except Exception:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `ContextState` | `orbiter.context` | Hierarchical key-value store with parent inheritance |
+| `ContextState` | `exo.context` | Hierarchical key-value store with parent inheritance |
 | `ContextState.get(key, default)` | | Lookup with parent chain fallback |
 | `ContextState.set(key, value)` | | Set a local key-value pair |
 | `ContextState.update(mapping)` | | Set multiple keys at once |
@@ -176,5 +176,5 @@ except Exception:
 | `ContextState.to_dict()` | | Dict of all keys (local + inherited) |
 | `ContextState.keys()` | | Set of all available keys |
 | `ContextState.parent` | | Parent state or `None` |
-| `Context.fork(task_id)` | `orbiter.context` | Create child context with inherited state |
-| `Context.merge(child)` | `orbiter.context` | Consolidate child's local state into parent |
+| `Context.fork(task_id)` | `exo.context` | Create child context with inherited state |
+| `Context.merge(child)` | `exo.context` | Consolidate child's local state into parent |

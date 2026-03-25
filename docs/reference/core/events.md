@@ -1,11 +1,11 @@
-# orbiter.events
+# exo.events
 
 Async event bus for decoupled communication between components.
 
-**Module:** `orbiter.events`
+**Module:** `exo.events`
 
 ```python
-from orbiter.events import EventBus, EventHandler
+from exo.events import EventBus, EventHandler
 ```
 
 ---
@@ -103,7 +103,7 @@ Remove all handlers for all events.
 
 ```python
 import asyncio
-from orbiter.events import EventBus
+from exo.events import EventBus
 
 bus = EventBus()
 

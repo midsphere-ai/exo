@@ -1,13 +1,13 @@
-# orbiter._internal.handlers
+# exo._internal.handlers
 
 Handler abstractions for composable agent execution. Provides `Handler[IN, OUT]` as the base abstraction for processing units that transform inputs to outputs via async generators, and concrete handlers for agent routing, tool execution, and group orchestration in multi-agent swarms.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.handlers`
+**Module:** `exo._internal.handlers`
 
 ```python
-from orbiter._internal.handlers import (
+from exo._internal.handlers import (
     Handler,
     HandlerError,
     SwarmMode,
@@ -22,10 +22,10 @@ from orbiter._internal.handlers import (
 ## HandlerError
 
 ```python
-class HandlerError(OrbiterError)
+class HandlerError(ExoError)
 ```
 
-Raised for handler-level errors (routing, dispatch, stop checks). Inherits from `OrbiterError`.
+Raised for handler-level errors (routing, dispatch, stop checks). Inherits from `ExoError`.
 
 ---
 
@@ -267,7 +267,7 @@ Execute agent group in parallel or serial mode.
 ### Example
 
 ```python
-from orbiter._internal.handlers import ToolHandler, GroupHandler, SwarmMode
+from exo._internal.handlers import ToolHandler, GroupHandler, SwarmMode
 
 # ToolHandler example
 tool_handler = ToolHandler()

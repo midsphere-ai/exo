@@ -1,4 +1,4 @@
-"""BFCL benchmark runner for Orbiter agents.
+"""BFCL benchmark runner for Exo agents.
 
 Berkeley Function Calling Leaderboard (BFCL) evaluates how well LLM agents
 select and invoke the correct function with the right arguments from a set
@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +273,7 @@ def _extract_tool_calls(result: Any) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run BFCL benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run BFCL benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("BFCL_DATASET_PATH", ""),

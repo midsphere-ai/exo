@@ -1,42 +1,42 @@
-# orbiter-core
+# exo-core
 
-The `orbiter-core` package is the foundation of the Orbiter framework. It provides all the building blocks for creating and running LLM-powered agents: the type system, configuration, tool abstractions, the agent class, execution runners, multi-agent swarms, lifecycle hooks, events, and more.
+The `exo-core` package is the foundation of the Exo framework. It provides all the building blocks for creating and running LLM-powered agents: the type system, configuration, tool abstractions, the agent class, execution runners, multi-agent swarms, lifecycle hooks, events, and more.
 
 ## Installation
 
 ```bash
-pip install orbiter-core
+pip install exo-core
 ```
 
 ## Import Patterns
 
-The top-level `orbiter` namespace re-exports the most commonly used classes:
+The top-level `exo` namespace re-exports the most commonly used classes:
 
 ```python
-from orbiter import Agent, Tool, FunctionTool, tool, run, Swarm
-from orbiter import ParallelGroup, SerialGroup, SwarmNode
+from exo import Agent, Tool, FunctionTool, tool, run, Swarm
+from exo import ParallelGroup, SerialGroup, SwarmNode
 ```
 
 For more specific imports, use the individual modules:
 
 ```python
-from orbiter.types import UserMessage, AssistantMessage, RunResult, StreamEvent
-from orbiter.config import ModelConfig, AgentConfig, RunConfig, parse_model_string
-from orbiter.registry import Registry, RegistryError, agent_registry, tool_registry
-from orbiter.events import EventBus, EventHandler
-from orbiter.hooks import HookPoint, HookManager, Hook, run_hooks
-from orbiter.tool import Tool, FunctionTool, tool, ToolError
-from orbiter.agent import Agent, AgentError
-from orbiter.runner import run
-from orbiter.swarm import Swarm, SwarmError
-from orbiter.human import HumanInputTool, HumanInputHandler, ConsoleHandler
-from orbiter.loader import load_agents, load_swarm, register_agent_class, LoaderError
-from orbiter.skills import Skill, SkillRegistry, ConflictStrategy, SkillError
+from exo.types import UserMessage, AssistantMessage, RunResult, StreamEvent
+from exo.config import ModelConfig, AgentConfig, RunConfig, parse_model_string
+from exo.registry import Registry, RegistryError, agent_registry, tool_registry
+from exo.events import EventBus, EventHandler
+from exo.hooks import HookPoint, HookManager, Hook, run_hooks
+from exo.tool import Tool, FunctionTool, tool, ToolError
+from exo.agent import Agent, AgentError
+from exo.runner import run
+from exo.swarm import Swarm, SwarmError
+from exo.human import HumanInputTool, HumanInputHandler, ConsoleHandler
+from exo.loader import load_agents, load_swarm, register_agent_class, LoaderError
+from exo.skills import Skill, SkillRegistry, ConflictStrategy, SkillError
 ```
 
 ## Namespace Package Architecture
 
-`orbiter-core` uses `pkgutil.extend_path()` to create a namespace package. This allows other Orbiter packages (such as `orbiter-models`, `orbiter-context`) to add modules to the `orbiter` namespace without conflicts.
+`exo-core` uses `pkgutil.extend_path()` to create a namespace package. This allows other Exo packages (such as `exo-models`, `exo-context`) to add modules to the `exo` namespace without conflicts.
 
 ## Modules
 
@@ -59,7 +59,7 @@ from orbiter.skills import Skill, SkillRegistry, ConflictStrategy, SkillError
 
 ```python
 import asyncio
-from orbiter import Agent, tool, run
+from exo import Agent, tool, run
 
 @tool
 def get_weather(city: str) -> str:

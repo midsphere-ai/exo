@@ -1,10 +1,10 @@
 # Async Patterns
 
-Orbiter is async-first. This document describes the async design patterns used throughout the framework, how sync functions are bridged, and how parallel execution works.
+Exo is async-first. This document describes the async design patterns used throughout the framework, how sync functions are bridged, and how parallel execution works.
 
 ## Async-First Design
 
-All internal functions in Orbiter are `async def`. This is a deliberate choice:
+All internal functions in Exo are `async def`. This is a deliberate choice:
 
 ```python
 # runner.py -- the primary API
@@ -31,7 +31,7 @@ There is **no** parallel sync implementation. Every component has exactly one im
 The only sync entry point is `run.sync()`, which bridges to async via `asyncio.run()`:
 
 ```python
-# In orbiter/runner.py
+# In exo/runner.py
 
 async def run(agent, input, **kwargs) -> RunResult:
     """Primary async API."""
@@ -66,7 +66,7 @@ result = run.sync(agent, "Hello!")
 When a sync function is registered as a tool via `@tool`, it is automatically wrapped with `asyncio.to_thread()`:
 
 ```python
-from orbiter import tool
+from exo import tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -106,7 +106,7 @@ class FunctionTool(Tool):
 
 ## Parallel Tool Execution
 
-When an LLM requests multiple tool calls in a single response, Orbiter executes them in parallel using `asyncio.TaskGroup` (Python 3.11+):
+When an LLM requests multiple tool calls in a single response, Exo executes them in parallel using `asyncio.TaskGroup` (Python 3.11+):
 
 ```python
 # In agent.py

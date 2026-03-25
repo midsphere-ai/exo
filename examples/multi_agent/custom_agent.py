@@ -8,7 +8,7 @@ Usage:
     uv run python examples/multi_agent/custom_agent.py
 """
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool

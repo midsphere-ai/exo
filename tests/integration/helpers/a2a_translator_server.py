@@ -36,8 +36,8 @@ async def agent_card() -> dict:
 @app.post("/")
 async def execute_task(payload: dict) -> JSONResponse:
     """Execute a translation task via the A2A protocol."""
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     text = payload.get("text", "")
     task_id = payload.get("task_id") or str(uuid.uuid4())

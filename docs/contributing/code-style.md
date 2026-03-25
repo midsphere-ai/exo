@@ -1,6 +1,6 @@
 # Code Style
 
-Orbiter enforces a consistent code style across all packages. This document describes the rules and conventions.
+Exo enforces a consistent code style across all packages. This document describes the rules and conventions.
 
 ## Formatting
 
@@ -70,7 +70,7 @@ def build_messages(
 class Agent:
     """An autonomous LLM-powered agent with tools and lifecycle hooks.
 
-    Agents are the core building block in Orbiter. Each agent wraps an LLM
+    Agents are the core building block in Exo. Each agent wraps an LLM
     model, a set of tools, optional handoff targets, and lifecycle hooks.
 
     Args:
@@ -124,7 +124,7 @@ class AgentConfig(BaseModel):
 ## Exception Style
 
 ```python
-class ToolExecutionError(OrbiterError):
+class ToolExecutionError(ExoError):
     """Raised when a tool fails during execution."""
 
     def __init__(self, tool_name: str, cause: Exception):
@@ -135,7 +135,7 @@ class ToolExecutionError(OrbiterError):
 
 ### Rules
 
-- All Orbiter exceptions inherit from `OrbiterError`
+- All Exo exceptions inherit from `ExoError`
 - Include the thing that failed (tool name, agent name, provider) in the message
 - Use `from e` for exception chaining
 - Never silently swallow exceptions -- log or re-raise
@@ -163,7 +163,7 @@ Provider and model are specified as a single string: `"provider:model_name"`.
 "anthropic:claude-haiku-3-20240307"
 ```
 
-Parsed by `parse_model_string()` in `orbiter.config`. If no colon prefix, defaults to `"openai"`.
+Parsed by `parse_model_string()` in `exo.config`. If no colon prefix, defaults to `"openai"`.
 
 ## File Size Guidelines
 
@@ -189,8 +189,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 # 3. Local imports
-from orbiter.types import Message, OrbiterError, ToolCall
-from orbiter._internal.message_builder import build_messages
+from exo.types import Message, ExoError, ToolCall
+from exo._internal.message_builder import build_messages
 ```
 
 Within each group, imports are sorted alphabetically.

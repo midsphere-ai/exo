@@ -1,19 +1,19 @@
-# Retrieval Pipeline Design — Modular RAG for Orbiter
+# Retrieval Pipeline Design — Modular RAG for Exo
 
 **Status:** Proposed
 **Epic:** 3 — RAG/Retrieval Pipeline
-**Package:** New `orbiter-retrieval` (depends on `orbiter-core`)
+**Package:** New `exo-retrieval` (depends on `exo-core`)
 **Date:** 2026-03-10
 
 ---
 
 ## 1. Motivation
 
-Orbiter currently has two partial retrieval-related capabilities:
+Exo currently has two partial retrieval-related capabilities:
 
-- **orbiter-memory** — `Embeddings` ABC, `OpenAIEmbeddings`, and `VectorMemoryStore`
+- **exo-memory** — `Embeddings` ABC, `OpenAIEmbeddings`, and `VectorMemoryStore`
   providing cosine-similarity search over memory items.
-- **orbiter-context** — `KnowledgeStore` with character-level chunking and TF-IDF
+- **exo-context** — `KnowledgeStore` with character-level chunking and TF-IDF
   keyword search over workspace artifacts.
 
 Neither supports document ingestion pipelines, multiple vector store backends,
@@ -21,9 +21,9 @@ hybrid (dense + sparse) search, query rewriting, reranking, or knowledge graph
 retrieval. Agent-core (`openjiuwen/core/retrieval/`) provides a comprehensive
 RAG system with all of these capabilities.
 
-This document designs `orbiter-retrieval`, a new package that ports agent-core's
-retrieval architecture to Orbiter while maintaining clean boundaries with the
-existing `orbiter-memory` and `orbiter-context` packages.
+This document designs `exo-retrieval`, a new package that ports agent-core's
+retrieval architecture to Exo while maintaining clean boundaries with the
+existing `exo-memory` and `exo-context` packages.
 
 ---
 
@@ -57,22 +57,22 @@ Key design choices:
 
 ## 3. Key Decision: Independent Embeddings ABC (Protocol-Compatible)
 
-### Option A — Re-export orbiter-memory's Embeddings (rejected)
+### Option A — Re-export exo-memory's Embeddings (rejected)
 
-Re-using `orbiter.memory.backends.vector.Embeddings` directly would create a
-dependency from `orbiter-retrieval` → `orbiter-memory`. This violates the no
+Re-using `exo.memory.backends.vector.Embeddings` directly would create a
+dependency from `exo-retrieval` → `exo-memory`. This violates the no
 lateral dependencies rule (both are same-level packages).
 
-### Option B — Move Embeddings to orbiter-core (rejected)
+### Option B — Move Embeddings to exo-core (rejected)
 
-Moving the `Embeddings` ABC into `orbiter-core` would add embedding concerns to
+Moving the `Embeddings` ABC into `exo-core` would add embedding concerns to
 the core package, which should remain focused on Agent, Tool, and Hook primitives
 with zero heavy dependencies.
 
-### Option C — Independent Embeddings ABC in orbiter-retrieval (chosen)
+### Option C — Independent Embeddings ABC in exo-retrieval (chosen)
 
-Create a new `Embeddings` ABC in `orbiter-retrieval` that is **structurally
-compatible** (duck-type / protocol-compatible) with `orbiter-memory`'s
+Create a new `Embeddings` ABC in `exo-retrieval` that is **structurally
+compatible** (duck-type / protocol-compatible) with `exo-memory`'s
 `Embeddings` class. Both define:
 
 - `embed(text: str) -> list[float]`
@@ -94,10 +94,10 @@ either ABC instance can use the shared method signatures interchangeably.
 ## 4. Package Layout
 
 ```
-packages/orbiter-retrieval/
+packages/exo-retrieval/
 ├── pyproject.toml
 ├── src/
-│   └── orbiter/
+│   └── exo/
 │       ├── __init__.py              # extend_path
 │       └── retrieval/
 │           ├── __init__.py          # public API re-exports
@@ -463,7 +463,7 @@ Handles:
 
 ## 13. Agent Tool Integration
 
-Retrieval capabilities are exposed as Orbiter tools:
+Retrieval capabilities are exposed as Exo tools:
 
 ```python
 def retrieval_tool(retriever: Retriever) -> Tool:
@@ -473,7 +473,7 @@ def index_tool(chunker: Chunker, embeddings: Embeddings, store: VectorStore) -> 
     """Create an Agent-compatible tool for document indexing."""
 ```
 
-These tools follow the `orbiter.tool` pattern, allowing agents to use retrieval
+These tools follow the `exo.tool` pattern, allowing agents to use retrieval
 as part of their tool loop. The tools bridge the gap between the retrieval pipeline
 and the agent execution model.
 
@@ -493,30 +493,30 @@ all = ["openai>=1.0", "tiktoken>=0.5", "chromadb>=0.4", "asyncpg>=0.29", "pgvect
 ```
 
 Core types, ABCs, `InMemoryVectorStore`, and `CharacterChunker` work with
-zero optional dependencies — only `pydantic` and `orbiter-core` are required.
+zero optional dependencies — only `pydantic` and `exo-core` are required.
 
 ---
 
 ## 15. Relationship to Existing Packages
 
-### orbiter-memory (no changes)
+### exo-memory (no changes)
 
-- `orbiter.memory.backends.vector.Embeddings` remains unchanged.
+- `exo.memory.backends.vector.Embeddings` remains unchanged.
 - `VectorMemoryStore` continues to serve memory-specific use cases.
 - Users who want to use memory embeddings with retrieval can pass them via
   structural compatibility (both share `embed()` + `dimension`).
 
-### orbiter-context (no changes)
+### exo-context (no changes)
 
 - `KnowledgeStore` continues to provide workspace artifact indexing.
-- `orbiter-retrieval` does not replace `KnowledgeStore` — they serve different
+- `exo-retrieval` does not replace `KnowledgeStore` — they serve different
   purposes (document retrieval vs. workspace artifact search).
-- Future integration: orbiter-context could use an `orbiter-retrieval` retriever
+- Future integration: exo-context could use an `exo-retrieval` retriever
   as a backend, but this is not part of Epic 3.
 
-### orbiter-core (no changes)
+### exo-core (no changes)
 
-- `orbiter-retrieval` depends on `orbiter-core` for the `Tool` type.
+- `exo-retrieval` depends on `exo-core` for the `Tool` type.
 - No changes to Agent, HookManager, or any core types.
 
 ---

@@ -9,7 +9,7 @@ Usage:
     uv run python examples/quickstart/workflow.py
 """
 
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 # Three-stage pipeline: research -> draft -> review
 researcher = Agent(

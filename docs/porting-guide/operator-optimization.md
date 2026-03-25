@@ -1,10 +1,10 @@
-# Operator Pattern & Self-Optimization — agent-core to Orbiter Mapping
+# Operator Pattern & Self-Optimization — agent-core to Exo Mapping
 
 **Epic:** 10 — Operator Pattern with Self-Optimization
 **Date:** 2026-03-11
 
 This document maps agent-core's (openJiuwen) `agent_evolving/` system to
-Orbiter's operator pattern in the `orbiter-train` package, helping contributors
+Exo's operator pattern in the `exo-train` package, helping contributors
 familiar with either framework navigate both.
 
 ---
@@ -79,16 +79,16 @@ checkpoint, restoring all operator parameters and optimizer gradient history.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's operator pattern lives in `orbiter-train` (`packages/orbiter-train/`)
+Exo's operator pattern lives in `exo-train` (`packages/exo-train/`)
 and was added **alongside** the existing `EvolutionPipeline`/`SynthesisPipeline`
 rather than replacing them — the two paradigms serve different purposes.
 
 ### Architecture Difference
 
 Where agent-core uses a monolithic `Trainer` that owns the entire optimization
-loop, Orbiter separates concerns into composable pieces that integrate with
+loop, Exo separates concerns into composable pieces that integrate with
 the existing `Trainer` ABC lifecycle:
 
 ```python
@@ -96,7 +96,7 @@ the existing `Trainer` ABC lifecycle:
 trainer = AgentEvolvingTrainer(agent, dataset, optimizer)
 trainer.train(epochs=5)
 
-# Orbiter: composable trainer + updater + optimizer
+# Exo: composable trainer + updater + optimizer
 optimizer = InstructionOptimizer(operators, llm_fn=my_llm)
 updater = SingleDimUpdater(optimizer)
 trainer = OperatorTrainer(updater=updater, evaluator=my_eval_fn)
@@ -107,13 +107,13 @@ trainer.mark_validated()
 metrics = await trainer.train()
 ```
 
-The key difference: Orbiter's `OperatorTrainer` inherits from the `Trainer` ABC,
+The key difference: Exo's `OperatorTrainer` inherits from the `Trainer` ABC,
 gaining the lifecycle state machine (CREATED → VALIDATED → TRAINING → COMPLETED)
 and validation guards for free.
 
 ### Component Mapping
 
-| Agent-Core Component | Orbiter Equivalent | Notes |
+| Agent-Core Component | Exo Equivalent | Notes |
 |---------------------|-------------------|-------|
 | `Operator` ABC | `Operator` ABC (`operator/base.py`) | Same interface: `get_tunables()`, `get_state()`/`load_state()`, `invoke()` |
 | `LLMCallOperator` | `LLMCallOperator` (`operator/llm_call.py`) | Adds `LLMCallTrace` recording |
@@ -126,15 +126,15 @@ and validation guards for free.
 | `MemoryOptimizerBase` | *(handled by MemoryCallOperator tunables)* | Memory optimization via operator tunables rather than separate optimizer |
 | `SingleDimUpdater` | `SingleDimUpdater` (`updater/`) | Wraps single `BaseOptimizer` |
 | `MultiDimUpdater` | `MultiDimUpdater` (`updater/`) | Domain-specific composition with attribution |
-| `Trainer` (agent_evolving) | `OperatorTrainer` (`operator_trainer.py`) | Extends Orbiter's `Trainer` ABC with operator lifecycle |
+| `Trainer` (agent_evolving) | `OperatorTrainer` (`operator_trainer.py`) | Extends Exo's `Trainer` ABC with operator lifecycle |
 | `TracerTrajectoryExtractor` | `DefaultTrajectoryExtractor` (`trajectory/extractor.py`) | Dict-based instead of tracer-span-based; `TrajectoryExtractor` ABC for custom implementations |
 | `TrajectoryStep` | `TrajectoryStep` (`trajectory/types.py`) | Adds `StepKind` enum, `ExecutionSpec`, `Trajectory` container |
 | `EvolveCheckpoint` | `OperatorCheckpoint` + `CheckpointManager` | Protocol-based; `FileCheckpointStore` for JSON persistence |
 
-### Key Orbiter Additions Beyond Agent-Core
+### Key Exo Additions Beyond Agent-Core
 
 **`BaseOptimizer` ABC** — Agent-core's optimizers are standalone classes.
-Orbiter introduces a formal `BaseOptimizer` ABC with `bind()`, `backward()`,
+Exo introduces a formal `BaseOptimizer` ABC with `bind()`, `backward()`,
 `step()`, `add_trajectory()`, and `requires_forward_data()` — giving all
 optimizers a uniform interface.
 
@@ -149,7 +149,7 @@ Supports both single-domain and multi-domain optimization with the same interfac
 `build`, `restore`) with `DefaultCheckpointManager` implementation supporting
 periodic and improvement-triggered saves.
 
-**Lifecycle State Machine** — `OperatorTrainer` inherits Orbiter's `Trainer`
+**Lifecycle State Machine** — `OperatorTrainer` inherits Exo's `Trainer`
 validation phase (`check_agent`, `check_dataset`, `check_reward`, `check_config`,
 `mark_validated`), preventing training on invalid configurations.
 
@@ -169,8 +169,8 @@ op = LLMCallOperator(
 )
 tunables = op.get_tunables()  # dict of TunableSpec
 
-# Orbiter
-from orbiter.train.operator import LLMCallOperator
+# Exo
+from exo.train.operator import LLMCallOperator
 
 op = LLMCallOperator(
     name="summarizer",
@@ -194,9 +194,9 @@ trainer = Trainer(agent, train_data, updater)
 trainer.train(epochs=3)
 # Checkpoint saved implicitly
 
-# Orbiter
-from orbiter.train.operator_trainer import OperatorTrainer, OperatorTrainConfig
-from orbiter.train.optimizer import InstructionOptimizer
+# Exo
+from exo.train.operator_trainer import OperatorTrainer, OperatorTrainConfig
+from exo.train.optimizer import InstructionOptimizer
 
 optimizer = InstructionOptimizer(operators=agent.operators, llm_fn=meta_llm)
 updater = SingleDimUpdater(optimizer)
@@ -221,7 +221,7 @@ optimizer.backward(failing_cases)  # writes gradients internally
 updates = optimizer.step()         # returns new parameter values
 agent.apply_updates(updates)
 
-# Orbiter: explicit TextualParameter gradients
+# Exo: explicit TextualParameter gradients
 optimizer.backward(evaluated_cases)  # writes TextualParameter.gradients
 updates = optimizer.step()           # Updates = dict[(op_id, target), value]
 for (op_id, target), value in updates.items():
@@ -239,8 +239,8 @@ multi = MultiDimUpdater({
 })
 updates = multi.update(trajectories, cases)
 
-# Orbiter — same pattern
-from orbiter.train.optimizer import InstructionOptimizer, ToolOptimizer
+# Exo — same pattern
+from exo.train.optimizer import InstructionOptimizer, ToolOptimizer
 
 multi = MultiDimUpdater({
     "llm": InstructionOptimizer(operators, llm_fn=meta_llm),
@@ -296,31 +296,31 @@ class OperatorEvolutionStrategy(EvolutionStrategy):
 
 ## 5. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.agent_evolving.Operator` | `orbiter.train.operator.Operator` | ABC with `get_tunables()`, `invoke()`, `get_state()`/`load_state()` |
-| `openjiuwen.agent_evolving.LLMCallOperator` | `orbiter.train.operator.LLMCallOperator` | Wraps LLM calls; tunables: `system_prompt`, `user_prompt` |
-| `openjiuwen.agent_evolving.ToolCallOperator` | `orbiter.train.operator.ToolCallOperator` | Wraps tool invocations; tunables: `tool_description` |
-| `openjiuwen.agent_evolving.MemoryCallOperator` | `orbiter.train.operator.MemoryCallOperator` | Wraps memory retrieval; tunables: `enabled`, `max_retries` |
-| `openjiuwen.agent_evolving.TunableSpec` | `orbiter.train.operator.TunableSpec` | Frozen dataclass declaring tunable parameters |
-| `openjiuwen.agent_evolving.TunableKind` | `orbiter.train.operator.TunableKind` | StrEnum: `PROMPT`, `CONTINUOUS`, `DISCRETE`, `TOOL_SELECTOR`, `MEMORY_SELECTOR` |
-| `openjiuwen.agent_evolving.InstructionOptimizer` | `orbiter.train.optimizer.InstructionOptimizer` | Textual gradient prompt optimization (backward/step) |
-| `openjiuwen.agent_evolving.ToolOptimizerBase` | `orbiter.train.optimizer.ToolOptimizer` | Beam search tool description optimization |
+| `openjiuwen.agent_evolving.Operator` | `exo.train.operator.Operator` | ABC with `get_tunables()`, `invoke()`, `get_state()`/`load_state()` |
+| `openjiuwen.agent_evolving.LLMCallOperator` | `exo.train.operator.LLMCallOperator` | Wraps LLM calls; tunables: `system_prompt`, `user_prompt` |
+| `openjiuwen.agent_evolving.ToolCallOperator` | `exo.train.operator.ToolCallOperator` | Wraps tool invocations; tunables: `tool_description` |
+| `openjiuwen.agent_evolving.MemoryCallOperator` | `exo.train.operator.MemoryCallOperator` | Wraps memory retrieval; tunables: `enabled`, `max_retries` |
+| `openjiuwen.agent_evolving.TunableSpec` | `exo.train.operator.TunableSpec` | Frozen dataclass declaring tunable parameters |
+| `openjiuwen.agent_evolving.TunableKind` | `exo.train.operator.TunableKind` | StrEnum: `PROMPT`, `CONTINUOUS`, `DISCRETE`, `TOOL_SELECTOR`, `MEMORY_SELECTOR` |
+| `openjiuwen.agent_evolving.InstructionOptimizer` | `exo.train.optimizer.InstructionOptimizer` | Textual gradient prompt optimization (backward/step) |
+| `openjiuwen.agent_evolving.ToolOptimizerBase` | `exo.train.optimizer.ToolOptimizer` | Beam search tool description optimization |
 | `openjiuwen.agent_evolving.MemoryOptimizerBase` | *(via MemoryCallOperator tunables)* | Memory config optimization through operator tunables |
-| `openjiuwen.agent_evolving.SingleDimUpdater` | `orbiter.train.updater.SingleDimUpdater` | Single-optimizer wrapper |
-| `openjiuwen.agent_evolving.MultiDimUpdater` | `orbiter.train.updater.MultiDimUpdater` | Multi-domain composition with attribution |
-| `openjiuwen.agent_evolving.Trainer` | `orbiter.train.operator_trainer.OperatorTrainer` | Extends Orbiter `Trainer` ABC with operator optimization loop |
-| `openjiuwen.agent_evolving.TracerTrajectoryExtractor` | `orbiter.train.trajectory.DefaultTrajectoryExtractor` | Dict-based extraction (replaces tracer-span-based) |
-| `openjiuwen.agent_evolving.TrajectoryStep` | `orbiter.train.trajectory.TrajectoryStep` | Frozen dataclass with `StepKind`, `operator_id`, `timing` |
-| `openjiuwen.agent_evolving.EvolveCheckpoint` | `orbiter.train.checkpointing.OperatorCheckpoint` | Checkpoint with `operators_state`, `updater_state`, `best_score` |
-| *(no equivalent)* | `orbiter.train.operator.base.TunableKind.TOOL_SELECTOR` | New kind for tool selection parameters |
-| *(no equivalent)* | `orbiter.train.operator.base.TunableKind.MEMORY_SELECTOR` | New kind for memory selection parameters |
-| *(no equivalent)* | `orbiter.train.optimizer.BaseOptimizer` | Formal ABC for all optimizers |
-| *(no equivalent)* | `orbiter.train.optimizer.TextualParameter` | Explicit gradient container per operator |
-| *(no equivalent)* | `orbiter.train.updater.Updater` | Protocol for update strategies |
-| *(no equivalent)* | `orbiter.train.checkpointing.CheckpointManager` | Protocol for checkpoint policy |
-| *(no equivalent)* | `orbiter.train.checkpointing.DefaultCheckpointManager` | Periodic + improvement-triggered saves |
-| *(no equivalent)* | `orbiter.train.checkpointing.FileCheckpointStore` | JSON file persistence for checkpoints |
-| *(no equivalent)* | `orbiter.train.trajectory.StepKind` | StrEnum: `LLM`, `TOOL`, `MEMORY`, `WORKFLOW`, `AGENT` |
-| *(no equivalent)* | `orbiter.train.trajectory.ExecutionSpec` | Execution metadata (case_id, execution_id, seed, tags) |
-| *(no equivalent)* | `orbiter.train.trajectory.Trajectory` | Container with steps + optional DAG edges |
+| `openjiuwen.agent_evolving.SingleDimUpdater` | `exo.train.updater.SingleDimUpdater` | Single-optimizer wrapper |
+| `openjiuwen.agent_evolving.MultiDimUpdater` | `exo.train.updater.MultiDimUpdater` | Multi-domain composition with attribution |
+| `openjiuwen.agent_evolving.Trainer` | `exo.train.operator_trainer.OperatorTrainer` | Extends Exo `Trainer` ABC with operator optimization loop |
+| `openjiuwen.agent_evolving.TracerTrajectoryExtractor` | `exo.train.trajectory.DefaultTrajectoryExtractor` | Dict-based extraction (replaces tracer-span-based) |
+| `openjiuwen.agent_evolving.TrajectoryStep` | `exo.train.trajectory.TrajectoryStep` | Frozen dataclass with `StepKind`, `operator_id`, `timing` |
+| `openjiuwen.agent_evolving.EvolveCheckpoint` | `exo.train.checkpointing.OperatorCheckpoint` | Checkpoint with `operators_state`, `updater_state`, `best_score` |
+| *(no equivalent)* | `exo.train.operator.base.TunableKind.TOOL_SELECTOR` | New kind for tool selection parameters |
+| *(no equivalent)* | `exo.train.operator.base.TunableKind.MEMORY_SELECTOR` | New kind for memory selection parameters |
+| *(no equivalent)* | `exo.train.optimizer.BaseOptimizer` | Formal ABC for all optimizers |
+| *(no equivalent)* | `exo.train.optimizer.TextualParameter` | Explicit gradient container per operator |
+| *(no equivalent)* | `exo.train.updater.Updater` | Protocol for update strategies |
+| *(no equivalent)* | `exo.train.checkpointing.CheckpointManager` | Protocol for checkpoint policy |
+| *(no equivalent)* | `exo.train.checkpointing.DefaultCheckpointManager` | Periodic + improvement-triggered saves |
+| *(no equivalent)* | `exo.train.checkpointing.FileCheckpointStore` | JSON file persistence for checkpoints |
+| *(no equivalent)* | `exo.train.trajectory.StepKind` | StrEnum: `LLM`, `TOOL`, `MEMORY`, `WORKFLOW`, `AGENT` |
+| *(no equivalent)* | `exo.train.trajectory.ExecutionSpec` | Execution metadata (case_id, execution_id, seed, tags) |
+| *(no equivalent)* | `exo.train.trajectory.Trajectory` | Container with steps + optional DAG edges |

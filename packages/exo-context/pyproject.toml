@@ -1,0 +1,18 @@
+[project]
+name = "exo-context"
+version = "0.1.0"
+description = "Context engine: hierarchical state, prompt building, processors, workspace"
+requires-python = ">=3.11"
+dependencies = [
+    "exo-core",
+]
+
+[tool.uv.sources]
+exo-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exo"]

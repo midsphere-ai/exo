@@ -5,7 +5,7 @@ The Ralph Loop is an iterative refinement framework that implements a five-phase
 ## Basic Usage
 
 ```python
-from orbiter.eval.ralph import RalphRunner, RalphConfig, RalphResult
+from exo.eval.ralph import RalphRunner, RalphConfig, RalphResult
 
 async def execute_fn(input: str, iteration: int) -> dict:
     """Run the agent and return results."""
@@ -106,7 +106,7 @@ The runner automatically checks stop conditions after each iteration. If any con
 ### RalphConfig
 
 ```python
-from orbiter.eval.ralph import RalphConfig, ValidationConfig, ReflectionConfig, StopConditionConfig
+from exo.eval.ralph import RalphConfig, ValidationConfig, ReflectionConfig, StopConditionConfig
 
 config = RalphConfig(
     max_iterations=20,
@@ -133,7 +133,7 @@ config = RalphConfig(
 The `LoopState` tracks iteration progress:
 
 ```python
-from orbiter.eval.ralph import LoopState
+from exo.eval.ralph import LoopState
 
 state = LoopState(
     iteration=0,
@@ -151,7 +151,7 @@ Stop detectors decide when the loop should terminate. Each detector checks one c
 ### MaxIterationDetector
 
 ```python
-from orbiter.eval.ralph import MaxIterationDetector
+from exo.eval.ralph import MaxIterationDetector
 
 detector = MaxIterationDetector(max_iterations=20)
 decision = detector.check(state)
@@ -162,7 +162,7 @@ if decision.should_stop:
 ### TimeoutDetector
 
 ```python
-from orbiter.eval.ralph import TimeoutDetector
+from exo.eval.ralph import TimeoutDetector
 
 detector = TimeoutDetector(timeout_seconds=300)  # 5 minutes
 ```
@@ -170,7 +170,7 @@ detector = TimeoutDetector(timeout_seconds=300)  # 5 minutes
 ### CostLimitDetector
 
 ```python
-from orbiter.eval.ralph import CostLimitDetector
+from exo.eval.ralph import CostLimitDetector
 
 detector = CostLimitDetector(cost_limit=10.0)  # $10 budget
 ```
@@ -178,7 +178,7 @@ detector = CostLimitDetector(cost_limit=10.0)  # $10 budget
 ### ConsecutiveFailureDetector
 
 ```python
-from orbiter.eval.ralph import ConsecutiveFailureDetector
+from exo.eval.ralph import ConsecutiveFailureDetector
 
 detector = ConsecutiveFailureDetector(max_failures=3)
 ```
@@ -186,7 +186,7 @@ detector = ConsecutiveFailureDetector(max_failures=3)
 ### ScoreThresholdDetector
 
 ```python
-from orbiter.eval.ralph import ScoreThresholdDetector
+from exo.eval.ralph import ScoreThresholdDetector
 
 detector = ScoreThresholdDetector(threshold=0.95)
 ```
@@ -196,7 +196,7 @@ detector = ScoreThresholdDetector(threshold=0.95)
 Combine multiple detectors -- stops when **any** detector triggers:
 
 ```python
-from orbiter.eval.ralph import CompositeDetector
+from exo.eval.ralph import CompositeDetector
 
 detector = CompositeDetector(detectors=[
     MaxIterationDetector(max_iterations=20),
@@ -213,7 +213,7 @@ decision = detector.check(state)
 Subclass `StopDetector` for custom stop conditions:
 
 ```python
-from orbiter.eval.ralph import StopDetector, StopDecision
+from exo.eval.ralph import StopDetector, StopDecision
 
 class ConvergenceDetector(StopDetector):
     """Stop when scores stop improving."""
@@ -243,7 +243,7 @@ class ConvergenceDetector(StopDetector):
 Use evaluation scorers in the analyze phase:
 
 ```python
-from orbiter.eval import OutputQualityScorer
+from exo.eval import OutputQualityScorer
 
 quality_scorer = OutputQualityScorer(judge=llm_judge)
 
@@ -264,7 +264,7 @@ async def analyze_fn(result: dict, iteration: int) -> dict:
 Use reflectors in the learn phase:
 
 ```python
-from orbiter.eval import GeneralReflector
+from exo.eval import GeneralReflector
 
 reflector = GeneralReflector(judge=llm_judge)
 
@@ -320,18 +320,18 @@ config = RalphConfig(
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `RalphRunner` | `orbiter.eval.ralph` | Main loop runner with 5-phase cycle |
-| `RalphResult` | `orbiter.eval.ralph` | Result: iterations, final_score, stop_reason |
-| `RalphConfig` | `orbiter.eval.ralph` | Configuration: iterations, validation, reflection, stop conditions |
-| `LoopState` | `orbiter.eval.ralph` | Tracks iteration progress, scores, cost |
-| `ValidationConfig` | `orbiter.eval.ralph` | Target score and required validators |
-| `ReflectionConfig` | `orbiter.eval.ralph` | Reflection enablement and depth |
-| `StopConditionConfig` | `orbiter.eval.ralph` | Stop condition parameters |
-| `StopDetector` | `orbiter.eval.ralph` | ABC for stop condition detectors |
-| `StopDecision` | `orbiter.eval.ralph` | Result of a stop check: `should_stop`, `reason` |
-| `MaxIterationDetector` | `orbiter.eval.ralph` | Stop after N iterations |
-| `TimeoutDetector` | `orbiter.eval.ralph` | Stop after timeout |
-| `CostLimitDetector` | `orbiter.eval.ralph` | Stop when cost exceeds budget |
-| `ConsecutiveFailureDetector` | `orbiter.eval.ralph` | Stop after N consecutive failures |
-| `ScoreThresholdDetector` | `orbiter.eval.ralph` | Stop when score exceeds threshold |
-| `CompositeDetector` | `orbiter.eval.ralph` | Combine multiple detectors (any triggers stop) |
+| `RalphRunner` | `exo.eval.ralph` | Main loop runner with 5-phase cycle |
+| `RalphResult` | `exo.eval.ralph` | Result: iterations, final_score, stop_reason |
+| `RalphConfig` | `exo.eval.ralph` | Configuration: iterations, validation, reflection, stop conditions |
+| `LoopState` | `exo.eval.ralph` | Tracks iteration progress, scores, cost |
+| `ValidationConfig` | `exo.eval.ralph` | Target score and required validators |
+| `ReflectionConfig` | `exo.eval.ralph` | Reflection enablement and depth |
+| `StopConditionConfig` | `exo.eval.ralph` | Stop condition parameters |
+| `StopDetector` | `exo.eval.ralph` | ABC for stop condition detectors |
+| `StopDecision` | `exo.eval.ralph` | Result of a stop check: `should_stop`, `reason` |
+| `MaxIterationDetector` | `exo.eval.ralph` | Stop after N iterations |
+| `TimeoutDetector` | `exo.eval.ralph` | Stop after timeout |
+| `CostLimitDetector` | `exo.eval.ralph` | Stop when cost exceeds budget |
+| `ConsecutiveFailureDetector` | `exo.eval.ralph` | Stop after N consecutive failures |
+| `ScoreThresholdDetector` | `exo.eval.ralph` | Stop when score exceeds threshold |
+| `CompositeDetector` | `exo.eval.ralph` | Combine multiple detectors (any triggers stop) |

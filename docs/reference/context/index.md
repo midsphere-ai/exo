@@ -1,22 +1,22 @@
-# orbiter-context
+# exo-context
 
-Hierarchical state, prompt building, processors, and workspace for the Orbiter framework.
+Hierarchical state, prompt building, processors, and workspace for the Exo framework.
 
 ## Module Path
 
 ```
-orbiter.context
+exo.context
 ```
 
 ## Installation
 
 ```bash
-pip install orbiter-context
+pip install exo-context
 ```
 
 ## Overview
 
-The `orbiter-context` package provides the context engine that manages per-task state, prompt composition, context processing, artifact storage, and checkpointing. It implements a hierarchical state model where child contexts inherit from parents, a composable neuron-based prompt builder, an event-driven processor pipeline, and a versioned workspace for artifact management.
+The `exo-context` package provides the context engine that manages per-task state, prompt composition, context processing, artifact storage, and checkpointing. It implements a hierarchical state model where child contexts inherit from parents, a composable neuron-based prompt builder, an event-driven processor pipeline, and a versioned workspace for artifact management.
 
 ## Exports
 
@@ -49,7 +49,7 @@ The `orbiter-context` package provides the context engine that manages per-task 
 
 ```python
 # Import from package root
-from orbiter.context import (
+from exo.context import (
     Context, ContextConfig, ContextState,
     PromptBuilder, Neuron, neuron_registry,
     Workspace, ArtifactType,
@@ -58,21 +58,21 @@ from orbiter.context import (
 )
 
 # Import specific modules
-from orbiter.context.context import Context, ContextError
-from orbiter.context.config import ContextConfig, AutomationMode, make_config
-from orbiter.context.state import ContextState
-from orbiter.context.neuron import Neuron, neuron_registry
-from orbiter.context.prompt_builder import PromptBuilder
-from orbiter.context.processor import ContextProcessor, ProcessorPipeline
-from orbiter.context.workspace import Workspace, ArtifactType
-from orbiter.context.tools import get_context_tools
+from exo.context.context import Context, ContextError
+from exo.context.config import ContextConfig, AutomationMode, make_config
+from exo.context.state import ContextState
+from exo.context.neuron import Neuron, neuron_registry
+from exo.context.prompt_builder import PromptBuilder
+from exo.context.processor import ContextProcessor, ProcessorPipeline
+from exo.context.workspace import Workspace, ArtifactType
+from exo.context.tools import get_context_tools
 ```
 
 ## Quick Example
 
 ```python
 import asyncio
-from orbiter.context import (
+from exo.context import (
     Context, ContextConfig, AutomationMode,
     PromptBuilder, Workspace,
 )

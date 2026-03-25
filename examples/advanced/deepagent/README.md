@@ -1,7 +1,7 @@
 
-# DeepAgent — Multi-Agent ReAct System (Orbiter)
+# DeepAgent — Multi-Agent ReAct System (Exo)
 
-DeepAgent is a multi-agent ReAct research system built on the **Orbiter** framework. It uses `orbiter-core` for agent orchestration, `orbiter-models` for LLM abstraction, and `orbiter-mcp` for MCP server integration.
+DeepAgent is a multi-agent ReAct research system built on the **Exo** framework. It uses `exo-core` for agent orchestration, `exo-models` for LLM abstraction, and `exo-mcp` for MCP server integration.
 
 
 ## 1. Data Preparation
@@ -11,9 +11,9 @@ Two sample entries have already been provided in `test.jsonl` for your reference
 
 
 ## 2. Environment Setup
-Our project requires **two** Python environments: one for running the Orbiter framework, and another for running the MCP services.
+Our project requires **two** Python environments: one for running the Exo framework, and another for running the MCP services.
 
-### 2.1 Prepare Orbiter framework
+### 2.1 Prepare Exo framework
 ```
 
 1. Install [uv](https://docs.astral.sh/uv/) if it is not already on your PATH.

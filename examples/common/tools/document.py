@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from orbiter import tool
+from exo import tool
 
 
 @tool

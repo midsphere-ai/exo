@@ -5,7 +5,7 @@ The `EventBus` provides decoupled async communication between components. Unlike
 ## Basic Usage
 
 ```python
-from orbiter.events import EventBus
+from exo.events import EventBus
 
 bus = EventBus()
 
@@ -102,7 +102,7 @@ Remove all handlers for all events.
 An event handler is any async callable that accepts keyword arguments:
 
 ```python
-from orbiter.events import EventHandler
+from exo.events import EventHandler
 # EventHandler = Callable[..., Coroutine[Any, Any, None]]
 
 async def my_handler(**data):
@@ -199,5 +199,5 @@ The key difference: **hooks abort on failure**, events do not.
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `EventBus` | `orbiter.events` | Async event bus for decoupled communication |
-| `EventHandler` | `orbiter.events` | Type alias for async event handler functions |
+| `EventBus` | `exo.events` | Async event bus for decoupled communication |
+| `EventHandler` | `exo.events` | Type alias for async event handler functions |

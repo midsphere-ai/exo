@@ -1,6 +1,6 @@
 # Migration Guide
 
-This section covers migrating from AWorld to Orbiter. Orbiter is a ground-up rewrite of AWorld that simplifies the API surface while preserving the framework's capabilities.
+This section covers migrating from AWorld to Exo. Exo is a ground-up rewrite of AWorld that simplifies the API surface while preserving the framework's capabilities.
 
 ## Why Migrate?
 
@@ -12,7 +12,7 @@ AWorld grew to 96,500 lines of code with accumulated complexity:
 - **Stringly-typed message routing** (`category="tool"`, `topic="GROUP_RESULTS"`)
 - **Deep factory chains** (`Factory[T]` + `AgentManager` + `ToolsManager`)
 
-Orbiter addresses all of these with:
+Exo addresses all of these with:
 
 - **1 Agent class** with composable behavior via Swarm modes
 - **1 config system** (Pydantic v2 models)
@@ -24,20 +24,20 @@ Orbiter addresses all of these with:
 
 The migration is broken into these areas:
 
-| Area | AWorld Package | Orbiter Package | Difficulty |
+| Area | AWorld Package | Exo Package | Difficulty |
 |------|---------------|-----------------|------------|
-| Agent definition | `aworld.agents` | `orbiter.agent` | Low |
-| Tool registration | `aworld.core.tool`, `aworld.tools` | `orbiter.tool` | Low |
-| Running agents | `aworld.runner`, `aworld.runners` | `orbiter.runner` | Low |
-| Configuration | `aworld.config.conf` | `orbiter.config` | Medium |
-| Multi-agent | `aworld.agents.swarm_composer_agent` | `orbiter.swarm` | Medium |
-| Context engine | `aworld.core.context.amni` | `orbiter.context` | High |
-| Memory | `aworld.memory` | `orbiter.memory` | Medium |
-| Models/LLM | `aworld.models` | `orbiter.models` | Low |
-| Tracing | `aworld.trace` | `orbiter.trace` | Medium |
-| Evaluation | `aworld.evaluations` | `orbiter.eval` | Medium |
-| MCP | `aworld.mcp_client` | `orbiter.mcp` | Low |
-| Sandbox | `aworld.sandbox` | `orbiter.sandbox` | Medium |
+| Agent definition | `aworld.agents` | `exo.agent` | Low |
+| Tool registration | `aworld.core.tool`, `aworld.tools` | `exo.tool` | Low |
+| Running agents | `aworld.runner`, `aworld.runners` | `exo.runner` | Low |
+| Configuration | `aworld.config.conf` | `exo.config` | Medium |
+| Multi-agent | `aworld.agents.swarm_composer_agent` | `exo.swarm` | Medium |
+| Context engine | `aworld.core.context.amni` | `exo.context` | High |
+| Memory | `aworld.memory` | `exo.memory` | Medium |
+| Models/LLM | `aworld.models` | `exo.models` | Low |
+| Tracing | `aworld.trace` | `exo.trace` | Medium |
+| Evaluation | `aworld.evaluations` | `exo.eval` | Medium |
+| MCP | `aworld.mcp_client` | `exo.mcp` | Low |
+| Sandbox | `aworld.sandbox` | `exo.sandbox` | Medium |
 
 ## Getting Started
 
@@ -47,16 +47,16 @@ The migration is broken into these areas:
 
 ## Package Installation
 
-AWorld was a monolith. Orbiter is modular -- install only what you need:
+AWorld was a monolith. Exo is modular -- install only what you need:
 
 ```bash
 # Minimal -- core + models
-pip install orbiter-core orbiter-models
+pip install exo-core exo-models
 
 # Or the meta-package for everything
-pip install orbiter
+pip install exo
 
 # With specific extras
-pip install orbiter-memory[qdrant]
-pip install orbiter-sandbox[kubernetes]
+pip install exo-memory[qdrant]
+pip install exo-sandbox[kubernetes]
 ```

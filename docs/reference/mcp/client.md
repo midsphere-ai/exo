@@ -1,9 +1,9 @@
-# orbiter.mcp.client
+# exo.mcp.client
 
 MCP client with multiple transport support and server instance caching.
 
 ```python
-from orbiter.mcp.client import (
+from exo.mcp.client import (
     MCPClient,
     MCPClientError,
     MCPServerConfig,

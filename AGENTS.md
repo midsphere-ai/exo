@@ -1,11 +1,11 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is a UV workspace monorepo. The root `pyproject.toml` defines shared tooling and includes all packages under `packages/` (for example, `orbiter-core`, `orbiter-models`, `orbiter-web`).
+This repository is a UV workspace monorepo. The root `pyproject.toml` defines shared tooling and includes all packages under `packages/` (for example, `exo-core`, `exo-models`, `exo-web`).
 
 Python package layout follows:
-- `packages/orbiter-<name>/src/orbiter/...` (or `src/orbiter_web/...` for web backend code)
-- `packages/orbiter-<name>/tests/` for package tests
+- `packages/exo-<name>/src/exo/...` (or `src/exo_web/...` for web backend code)
+- `packages/exo-<name>/tests/` for package tests
 - `tests/integration/` for cross-package integration and marathon tests
 
 Documentation lives in `docs/`, runnable samples in `examples/`, and static assets in `assets/`.
@@ -13,12 +13,12 @@ Documentation lives in `docs/`, runnable samples in `examples/`, and static asse
 ## Build, Test, and Development Commands
 - `uv sync`: install all workspace packages and dev dependencies in editable mode.
 - `uv run pytest`: run full test suite.
-- `uv run pytest packages/orbiter-core/tests/`: run one package’s tests.
+- `uv run pytest packages/exo-core/tests/`: run one package’s tests.
 - `uv run ruff check packages/`: lint Python code.
 - `uv run ruff format --check packages/`: formatting check.
-- `uv run pyright packages/orbiter-core/`: type-check core package.
+- `uv run pyright packages/exo-core/`: type-check core package.
 
-For Orbiter Web (`packages/orbiter-web`):
+For Exo Web (`packages/exo-web`):
 - `npm install`
 - `npm run dev` (Astro frontend + FastAPI backend)
 - `npm run build`
@@ -43,7 +43,7 @@ For Orbiter Web (`packages/orbiter-web`):
 - Open PRs against `main` with linked issue/context.
 - Include a short summary of affected packages/paths.
 - List verification commands you ran (`pytest`, `ruff`, `pyright`).
-- Add screenshots for UI changes in `orbiter-web`.
+- Add screenshots for UI changes in `exo-web`.
 
 ## Security & Configuration Tips
 Use environment variables for secrets (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`). Never commit API keys, tokens, or generated `.env` secrets.

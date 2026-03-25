@@ -24,9 +24,9 @@ async def test_agent_calls_correct_tool_of_three(vertex_model: str) -> None:
     assert exactly one ToolCall with name=='get_weather' and 'Dublin'
     somewhere in its arguments string.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     @tool
     def get_weather(city: str) -> str:
@@ -97,9 +97,9 @@ async def test_agent_chains_two_tools(vertex_model: str) -> None:
     result.tool_calls contains exactly two ToolCall objects and that
     get_capital appears before get_population.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     @tool
     def get_capital(country: str) -> str:

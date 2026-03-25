@@ -15,7 +15,7 @@ import pytest
 @pytest.mark.timeout(30)
 async def test_sqlite_write_then_read_by_session(memory_store) -> None:
     """Write 5 HumanMemory items with a session_id and read all back."""
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         HumanMemory,
         MemoryMetadata,
     )
@@ -44,7 +44,7 @@ async def test_sqlite_write_then_read_by_session(memory_store) -> None:
 @pytest.mark.timeout(30)
 async def test_sqlite_keyword_search(memory_store) -> None:
     """Keyword search returns matching items and excludes non-matching ones."""
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         HumanMemory,
     )
 
@@ -81,7 +81,7 @@ async def test_sqlite_keyword_search(memory_store) -> None:
 @pytest.mark.timeout(30)
 async def test_sqlite_metadata_isolation(memory_store) -> None:
     """Items stored with user_id='user-A' are invisible to user_id='user-B' queries."""
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         HumanMemory,
         MemoryMetadata,
     )

@@ -1,9 +1,9 @@
-# orbiter.sandbox.base
+# exo.sandbox.base
 
 Sandbox interface and local implementation for safe agent execution.
 
 ```python
-from orbiter.sandbox.base import (
+from exo.sandbox.base import (
     LocalSandbox,
     Sandbox,
     SandboxError,
@@ -165,7 +165,7 @@ async with LocalSandbox(workspace=["/tmp/ws"]) as sb:
 ### Example
 
 ```python
-from orbiter.sandbox import LocalSandbox
+from exo.sandbox import LocalSandbox
 
 sandbox = LocalSandbox(
     workspace=["/tmp/workspace"],

@@ -1,4 +1,4 @@
-"""VisualWebArena benchmark runner for Orbiter agents.
+"""VisualWebArena benchmark runner for Exo agents.
 
 VisualWebArena evaluates multimodal web agents on visually-grounded tasks
 that require understanding web page screenshots, interpreting visual elements,
@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ async def run_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run VisualWebArena benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run VisualWebArena benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("VISUALWEBARENA_DATASET_PATH", ""),

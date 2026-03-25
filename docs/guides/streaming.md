@@ -1,12 +1,12 @@
 # Streaming
 
-Orbiter provides first-class streaming support via `run.stream()`, an async generator that yields events in real time as the agent processes a request. This enables responsive UIs, progress indicators, and incremental output.
+Exo provides first-class streaming support via `run.stream()`, an async generator that yields events in real time as the agent processes a request. This enables responsive UIs, progress indicators, and incremental output.
 
 ## Basic Usage
 
 ```python
 import asyncio
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 
 @tool
@@ -48,7 +48,7 @@ asyncio.run(main())
 A chunk of text from the LLM. These arrive incrementally as the model generates tokens.
 
 ```python
-from orbiter.types import TextEvent
+from exo.types import TextEvent
 
 # event.type == "text"
 # event.text -- the text delta (a few words or a partial sentence)
@@ -60,7 +60,7 @@ from orbiter.types import TextEvent
 Notification that the agent is invoking a tool.
 
 ```python
-from orbiter.types import ToolCallEvent
+from exo.types import ToolCallEvent
 
 # event.type == "tool_call"
 # event.tool_name -- name of the tool being called
@@ -71,7 +71,7 @@ from orbiter.types import ToolCallEvent
 ### The StreamEvent Union
 
 ```python
-from orbiter.types import StreamEvent
+from exo.types import StreamEvent
 
 # StreamEvent = TextEvent | ToolCallEvent
 ```
@@ -105,7 +105,7 @@ async for event in run.stream(agent, "Search for Python and summarize"):
 Streaming works with swarms. When a swarm is in workflow mode, each agent streams its output in sequence. The `agent_name` field on events tells you which agent is currently producing output:
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", model="openai:gpt-4o-mini", ...)
 writer = Agent(name="writer", model="openai:gpt-4o-mini", ...)
@@ -151,11 +151,11 @@ print(f"\n\nFull output: {full_output}")
 
 ## Server-Sent Events (SSE)
 
-When using `orbiter-server`, streaming is exposed as Server-Sent Events over HTTP. The server converts `StreamEvent` objects to SSE format automatically:
+When using `exo-server`, streaming is exposed as Server-Sent Events over HTTP. The server converts `StreamEvent` objects to SSE format automatically:
 
 ```python
-# Server side (using orbiter-server)
-from orbiter_server import create_app
+# Server side (using exo-server)
+from exo_server import create_app
 
 app = create_app(agents=[agent])
 # Clients can POST to /chat/stream for SSE responses
@@ -172,7 +172,7 @@ Each SSE event has a `data` field containing JSON with the event type and payloa
 
 ## WebSocket Streaming
 
-For bidirectional communication, `orbiter-server` also supports WebSocket connections:
+For bidirectional communication, `exo-server` also supports WebSocket connections:
 
 ```python
 import websockets

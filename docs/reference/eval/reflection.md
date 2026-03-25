@@ -1,11 +1,11 @@
-# orbiter.eval.reflection
+# exo.eval.reflection
 
 Reflection framework with LLM-powered analysis, insight extraction, and suggestion generation. Provides a three-step pipeline: analyze, insight, suggest.
 
 ## Module Path
 
 ```python
-from orbiter.eval.reflection import (
+from exo.eval.reflection import (
     ReflectionType,
     ReflectionLevel,
     ReflectionResult,
@@ -304,7 +304,7 @@ Passes through suggestions from the LLM analysis result (already extracted in `a
 
 ```python
 import asyncio
-from orbiter.eval import (
+from exo.eval import (
     GeneralReflector,
     ReflectionHistory,
     ReflectionType,

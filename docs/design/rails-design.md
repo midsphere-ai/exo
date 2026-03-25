@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter's `HookManager` provides lifecycle interception via async callables
+Exo's `HookManager` provides lifecycle interception via async callables
 registered at `HookPoint` enum values. While functional, it lacks:
 
 - **Typed event inputs** — hooks receive untyped `**kwargs`, making it easy
@@ -23,7 +23,7 @@ Agent-core's rail system (`openjiuwen/core/single_agent/rail/`) addresses all
 four gaps with 10 lifecycle events, typed input models, `RetryRequest`,
 priority-based execution, and a shared `extra` dict.
 
-This document proposes porting the rail concept into Orbiter as an **extension
+This document proposes porting the rail concept into Exo as an **extension
 of the existing hook system**, not a replacement.
 
 ---
@@ -128,7 +128,7 @@ class RetryRequest:
     max_retries: int = 1
     reason: str = ""
 
-class RailAbortError(OrbiterError):
+class RailAbortError(ExoError):
     """Raised when a rail returns ABORT."""
 
 class Rail(ABC):
@@ -290,14 +290,14 @@ Agent.run(input)
 
 ## 8. File Layout
 
-All new files live in `packages/orbiter-core/src/orbiter/`:
+All new files live in `packages/exo-core/src/exo/`:
 
 | File | Contents |
 |------|----------|
 | `rail_types.py` | `InvokeInputs`, `ModelCallInputs`, `ToolCallInputs`, `RailContext` |
 | `rail.py` | `Rail`, `RailAction`, `RetryRequest`, `RailAbortError`, `RailManager` |
 
-Tests in `packages/orbiter-core/tests/`:
+Tests in `packages/exo-core/tests/`:
 
 | File | Contents |
 |------|----------|
@@ -319,7 +319,7 @@ Tests in `packages/orbiter-core/tests/`:
    loop will terminate since there are no tool calls.
 
 3. **Exception events.** Agent-core has `ON_MODEL_EXCEPTION` and
-   `ON_TOOL_EXCEPTION`. Orbiter has `ERROR` but it is not currently fired.
+   `ON_TOOL_EXCEPTION`. Exo has `ERROR` but it is not currently fired.
    **Recommendation:** Defer exception-specific events to a follow-up story;
    wire up `ERROR` as a general exception hook first.
 

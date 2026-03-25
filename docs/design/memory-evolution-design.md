@@ -3,13 +3,13 @@
 **Status:** Proposed
 **Epic:** 9 — Memory Evolution Algorithms
 **Date:** 2026-03-10
-**Package:** `orbiter-memory` (new `evolution/` subpackage)
+**Package:** `exo-memory` (new `evolution/` subpackage)
 
 ---
 
 ## 1. Motivation
 
-Orbiter's `orbiter-memory` package provides a comprehensive memory foundation:
+Exo's `exo-memory` package provides a comprehensive memory foundation:
 
 - **MemoryStore protocol** — async `add`, `get`, `search`, `clear` with pluggable backends.
 - **MemoryItem hierarchy** — `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`
@@ -36,36 +36,36 @@ provides three research-grade evolution algorithms:
 
 All three share a **composable pipeline** pattern: `strategy_a >> strategy_b` (sequential)
 and `strategy_a | strategy_b` (parallel). This document designs how these evolution
-algorithms integrate with Orbiter's existing memory architecture.
+algorithms integrate with Exo's existing memory architecture.
 
 ---
 
-## 2. Key Decision: Evolution Strategies as New Module in orbiter-memory
+## 2. Key Decision: Evolution Strategies as New Module in exo-memory
 
-### Option A — Separate `orbiter-evolution` package (rejected)
+### Option A — Separate `exo-evolution` package (rejected)
 
 Create a new top-level package for memory evolution. This adds workspace complexity
 (new pyproject.toml, UV sources entry, separate test suite) for what is fundamentally
 a memory concern. Evolution strategies operate on `MemoryItem` objects and depend on
 `MemoryStore` — they belong in the memory package.
 
-### Option B — New `evolution/` subpackage inside orbiter-memory (chosen)
+### Option B — New `evolution/` subpackage inside exo-memory (chosen)
 
-Add `packages/orbiter-memory/src/orbiter/memory/evolution/` containing the base class,
+Add `packages/exo-memory/src/exo/memory/evolution/` containing the base class,
 pipeline, and strategy implementations. This keeps evolution algorithms co-located
 with the types they transform.
 
 **Why Option B:**
 
 - Evolution strategies consume and produce `MemoryItem` objects — they are a memory
-  concern, not a training concern (orbiter-train's `EvolutionStrategy` is about model
+  concern, not a training concern (exo-train's `EvolutionStrategy` is about model
   parameter evolution, not memory content evolution).
-- Named `MemoryEvolutionStrategy` to avoid conflict with orbiter-train's `EvolutionStrategy`.
+- Named `MemoryEvolutionStrategy` to avoid conflict with exo-train's `EvolutionStrategy`.
 - Co-location means evolution code can use relative imports to access `base.py`,
   `long_term.py`, and `dedup.py` without cross-package dependencies.
-- Tests integrate naturally into orbiter-memory's existing test suite.
+- Tests integrate naturally into exo-memory's existing test suite.
 - The `evolution/` subpackage provides a clean namespace without polluting the
-  top-level `orbiter.memory` module.
+  top-level `exo.memory` module.
 
 ---
 
@@ -338,8 +338,8 @@ class ReasoningBankStrategy(MemoryEvolutionStrategy):
 ### Embeddings Integration
 
 The `embeddings` parameter is duck-typed — any object with an `async embed(text: str) -> list[float]`
-method works. This avoids importing from orbiter-retrieval (which provides `Embeddings` ABC)
-and keeps orbiter-memory dependency-free.
+method works. This avoids importing from exo-retrieval (which provides `Embeddings` ABC)
+and keeps exo-memory dependency-free.
 
 When `embeddings` is `None`, `recall()` uses keyword matching (case-insensitive substring
 search across title, description, and content). Deduplication in `evolve()` falls back
@@ -459,7 +459,7 @@ written back via `add()` trigger `memory:added` events as usual.
 
 ### ExtractionType Mapping
 
-Orbiter's existing `ExtractionType` maps to evolution strategies:
+Exo's existing `ExtractionType` maps to evolution strategies:
 
 | ExtractionType | Evolution Strategy | Memory Category |
 |---|---|---|
@@ -474,7 +474,7 @@ memory items regardless of extraction type or category.
 
 ## 8. File Layout
 
-All additions are within `packages/orbiter-memory/`:
+All additions are within `packages/exo-memory/`:
 
 | Addition | Location |
 |----------|----------|
@@ -491,7 +491,7 @@ Estimated total new code: ~460 lines across 5 new files.
 Directory structure:
 
 ```
-packages/orbiter-memory/src/orbiter/memory/
+packages/exo-memory/src/exo/memory/
 ├── evolution/
 │   ├── __init__.py          # MemoryEvolutionStrategy ABC, exports
 │   ├── pipeline.py          # MemoryEvolutionPipeline, _merge_results
@@ -543,11 +543,11 @@ imports, function signatures, or behaviors are modified.
 ## 10. Dependencies
 
 - **No new dependencies** — all evolution strategies use stdlib and existing
-  orbiter-memory types.
+  exo-memory types.
 - LLM calls use duck-typed callables (`async (prompt: str) -> str`) — no dependency
   on specific model providers.
 - Embeddings use duck-typed objects (`async embed(text: str) -> list[float]`) — no
-  dependency on orbiter-retrieval.
+  dependency on exo-retrieval.
 - File persistence for ACE counters uses stdlib `json` and `pathlib`.
 
 ---

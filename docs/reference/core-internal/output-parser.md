@@ -1,13 +1,13 @@
-# orbiter._internal.output_parser
+# exo._internal.output_parser
 
 Parse LLM responses into agent-level output types. The output parser bridges the model layer (`ModelResponse`) to the agent layer (`AgentOutput`, `ActionModel`). It extracts text and tool calls, parses JSON-encoded tool arguments, and optionally validates structured output against a Pydantic model.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.output_parser`
+**Module:** `exo._internal.output_parser`
 
 ```python
-from orbiter._internal.output_parser import (
+from exo._internal.output_parser import (
     OutputParseError,
     parse_response,
     parse_tool_arguments,
@@ -20,10 +20,10 @@ from orbiter._internal.output_parser import (
 ## OutputParseError
 
 ```python
-class OutputParseError(OrbiterError)
+class OutputParseError(ExoError)
 ```
 
-Raised when LLM output cannot be parsed as expected (invalid JSON, failed validation, non-object arguments). Inherits from `OrbiterError`.
+Raised when LLM output cannot be parsed as expected (invalid JSON, failed validation, non-object arguments). Inherits from `ExoError`.
 
 ---
 
@@ -55,8 +55,8 @@ An `AgentOutput` with the same data.
 ### Example
 
 ```python
-from orbiter._internal.output_parser import parse_response
-from orbiter.types import ToolCall, Usage
+from exo._internal.output_parser import parse_response
+from exo.types import ToolCall, Usage
 
 output = parse_response(
     content="Here is the answer.",
@@ -93,8 +93,8 @@ A list of `ActionModel` objects with parsed arguments.
 ### Example
 
 ```python
-from orbiter._internal.output_parser import parse_tool_arguments
-from orbiter.types import ToolCall
+from exo._internal.output_parser import parse_tool_arguments
+from exo.types import ToolCall
 
 tool_calls = [
     ToolCall(id="call_1", name="search", arguments='{"query": "AI safety"}'),
@@ -154,7 +154,7 @@ A validated instance of `output_type`.
 
 ```python
 from pydantic import BaseModel
-from orbiter._internal.output_parser import parse_structured_output
+from exo._internal.output_parser import parse_structured_output
 
 class WeatherReport(BaseModel):
     city: str

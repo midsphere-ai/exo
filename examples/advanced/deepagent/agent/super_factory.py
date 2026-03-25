@@ -1,17 +1,17 @@
 """Factory functions for creating Super agents.
 
-Constructs ``orbiter.agent.Agent`` instances.
+Constructs ``exo.agent.Agent`` instances.
 Follows the ``deepsearch/agents.py`` pattern — tools are passed as instances,
-multi-agent orchestration uses ``orbiter.swarm.Swarm(mode="team")``.
+multi-agent orchestration uses ``exo.swarm.Swarm(mode="team")``.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from orbiter.agent import Agent
-from orbiter.swarm import Swarm
-from orbiter.tool import Tool
+from exo.agent import Agent
+from exo.swarm import Swarm
+from exo.tool import Tool
 
 from .super_config import (
     ModelInfo,
@@ -39,7 +39,7 @@ def create_super_main_agent(
     task_guidance: str = "",
     enable_todo_plan: bool = True,
 ) -> Agent:
-    """Create a Super main agent backed by Orbiter's Agent.
+    """Create a Super main agent backed by Exo's Agent.
 
     Args:
         agent_id: Agent identifier.
@@ -108,7 +108,7 @@ def create_super_sub_agent(
     tools: list[Tool] | None = None,
     enable_todo_plan: bool = True,
 ) -> Agent:
-    """Create a Super sub-agent backed by Orbiter's Agent.
+    """Create a Super sub-agent backed by Exo's Agent.
 
     Args:
         agent_id: Agent identifier (also used as agent type).
@@ -157,7 +157,7 @@ def create_agent_system_with_sub_agents(
     main_agent_params: dict[str, Any],
     sub_agent_configs: dict[str, dict[str, Any]],
 ) -> Swarm:
-    """Create a multi-agent system using Orbiter's Swarm.
+    """Create a multi-agent system using Exo's Swarm.
 
     Builds sub-agents and a main agent, then returns a ``Swarm(mode="team")``
     where the main agent leads and sub-agents are workers.  The Swarm
@@ -228,7 +228,7 @@ def _build_agent(config: SuperAgentConfig, tools: list[Tool] | None) -> Agent:
 
 
 def _resolve_model_string(config: SuperAgentConfig) -> str:
-    """Build an Orbiter ``"provider:model"`` string from config.
+    """Build an Exo ``"provider:model"`` string from config.
 
     Args:
         config: Agent configuration.

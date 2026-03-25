@@ -1,9 +1,9 @@
-# orbiter_cli.loader
+# exo_cli.loader
 
-Agent discovery and loading for the Orbiter CLI. Scans directories for agent definitions in three formats: Python files, YAML files, and Markdown files.
+Agent discovery and loading for the Exo CLI. Scans directories for agent definitions in three formats: Python files, YAML files, and Markdown files.
 
 ```python
-from orbiter_cli.loader import (
+from exo_cli.loader import (
     AgentLoadError,
     discover_agent_files,
     load_markdown_agent,
@@ -46,7 +46,7 @@ Load agents from a Python file. The module must define a `create_agent()` callab
 
 ```python
 from pathlib import Path
-from orbiter_cli import load_python_agent
+from exo_cli import load_python_agent
 
 # my_agent.py must have: def create_agent() -> Agent
 agents = load_python_agent(Path("my_agent.py"))
@@ -61,7 +61,7 @@ print(list(agents.keys()))  # ["my_agent"]
 def load_yaml_agents(path: Path) -> dict[str, Any]
 ```
 
-Load agents from a YAML config file. Delegates to `orbiter.loader.load_agents`.
+Load agents from a YAML config file. Delegates to `exo.loader.load_agents`.
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -75,7 +75,7 @@ Load agents from a YAML config file. Delegates to `orbiter.loader.load_agents`.
 
 ```python
 from pathlib import Path
-from orbiter_cli import load_yaml_agents
+from exo_cli import load_yaml_agents
 
 agents = load_yaml_agents(Path("agents.yaml"))
 ```
@@ -125,7 +125,7 @@ You are a helpful assistant that answers questions concisely.
 
 ```python
 from pathlib import Path
-from orbiter_cli import load_markdown_agent
+from exo_cli import load_markdown_agent
 
 agents = load_markdown_agent(Path("helper.md"))
 agent = agents["helper"]
@@ -194,7 +194,7 @@ Discover and load all agents from *directory*. Scans for `.py`, `.yaml`, and `.m
 ### Example
 
 ```python
-from orbiter_cli import scan_directory
+from exo_cli import scan_directory
 
 # Load all agents from a directory
 agents = scan_directory("/path/to/agents")

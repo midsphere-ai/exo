@@ -1,4 +1,4 @@
-"""Integration test fixtures for the Orbiter monorepo.
+"""Integration test fixtures for the Exo monorepo.
 
 All fixtures work against real external dependencies:
 - Vertex AI (gemini-2.0-flash) via GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION
@@ -95,7 +95,7 @@ def vertex_model() -> str:
 @pytest.fixture
 def tmp_sqlite_db() -> str:  # type: ignore[return]
     """Create a temporary SQLite database file and clean it up after the test."""
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="orbiter_test_")
+    fd, path = tempfile.mkstemp(suffix=".db", prefix="exo_test_")
     os.close(fd)
     try:
         yield path  # type: ignore[misc]
@@ -112,7 +112,7 @@ def tmp_sqlite_db() -> str:  # type: ignore[return]
 @pytest.fixture
 async def memory_store(tmp_sqlite_db: str):  # type: ignore[return]
     """Yield a fresh, initialised SQLiteMemoryStore backed by a temp file."""
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
 
@@ -132,12 +132,12 @@ async def memory_store(tmp_sqlite_db: str):  # type: ignore[return]
 @pytest.fixture
 async def vector_store():  # type: ignore[return]
     """Yield a fresh ChromaVectorMemoryStore backed by a temp directory."""
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
 
-    tmp_dir = tempfile.mkdtemp(prefix="orbiter_chroma_")
+    tmp_dir = tempfile.mkdtemp(prefix="exo_chroma_")
     embedding_provider = SentenceTransformerEmbeddingProvider()
     store = ChromaVectorMemoryStore(
         embedding_provider,
@@ -163,7 +163,7 @@ def mcp_server_process():  # type: ignore[return]
     on each connection.  No long-running process is needed here — the
     config describes *how* to launch the subprocess.
     """
-    from orbiter.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
+    from exo.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
 
     config = MCPServerConfig(
         name="test-server",
@@ -242,7 +242,7 @@ def redis_container():  # type: ignore[return]
     if docker_check.returncode != 0:
         pytest.skip("Docker is not available on this host.")
 
-    container_name = "orbiter_test_redis"
+    container_name = "exo_test_redis"
 
     # Ensure no leftover container from a previous run
     subprocess.run(

@@ -1,9 +1,9 @@
-# orbiter_cli.console
+# exo_cli.console
 
-Interactive REPL console for Orbiter CLI. Provides a read-eval-print loop for chatting with agents, with slash-command support, streaming output, and Rich formatting.
+Interactive REPL console for Exo CLI. Provides a read-eval-print loop for chatting with agents, with slash-command support, streaming output, and Rich formatting.
 
 ```python
-from orbiter_cli.console import InteractiveConsole, format_agents_table, parse_command
+from exo_cli.console import InteractiveConsole, format_agents_table, parse_command
 ```
 
 ---
@@ -25,7 +25,7 @@ Parse a slash command from *text*.
 ### Example
 
 ```python
-from orbiter_cli import parse_command
+from exo_cli import parse_command
 
 cmd, arg = parse_command("/switch helper")
 # cmd = "switch", arg = "helper"
@@ -56,7 +56,7 @@ Build a Rich `Table` listing available agents with columns: Name, Model, and Des
 ### Example
 
 ```python
-from orbiter_cli import format_agents_table
+from exo_cli import format_agents_table
 from rich.console import Console
 
 table = format_agents_table({"helper": agent, "coder": code_agent})
@@ -78,7 +78,7 @@ class InteractiveConsole(
 )
 ```
 
-Interactive REPL for chatting with Orbiter agents. Supports slash commands for switching agents, listing agents, clearing the screen, and getting agent info.
+Interactive REPL for chatting with Exo agents. Supports slash commands for switching agents, listing agents, clearing the screen, and getting agent info.
 
 ### Constructor parameters
 
@@ -131,8 +131,8 @@ Run the interactive REPL until exit. Reads lines from stdin, dispatches slash co
 ### Example
 
 ```python
-from orbiter_cli import InteractiveConsole
-from orbiter.runner import run
+from exo_cli import InteractiveConsole
+from exo.runner import run
 
 console = InteractiveConsole(
     agents={"helper": my_agent, "coder": code_agent},

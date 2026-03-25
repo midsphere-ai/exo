@@ -1,9 +1,9 @@
-# orbiter.sandbox.tools
+# exo.sandbox.tools
 
 Built-in sandbox tools: filesystem access and terminal execution.
 
 ```python
-from orbiter.sandbox.tools import FilesystemTool, TerminalTool
+from exo.sandbox.tools import FilesystemTool, TerminalTool
 ```
 
 ---
@@ -18,7 +18,7 @@ class FilesystemTool(Tool)(
 
 Sandboxed filesystem tool with allowed-directory restrictions. Only paths that resolve within one of `allowed_directories` are permitted. This prevents agents from reading or writing files outside the designated workspace.
 
-Inherits from `orbiter.tool.Tool`.
+Inherits from `exo.tool.Tool`.
 
 ### Constructor parameters
 
@@ -83,7 +83,7 @@ Execute a filesystem action.
 ### Example
 
 ```python
-from orbiter.sandbox.tools import FilesystemTool
+from exo.sandbox.tools import FilesystemTool
 
 fs = FilesystemTool(allowed_directories=["/tmp/workspace"])
 
@@ -119,7 +119,7 @@ class TerminalTool(Tool)(
 
 Sandboxed terminal tool with command filtering and timeout. Dangerous commands (`rm`, `shutdown`, etc.) are blocked by default. Custom blacklists can be provided. All commands run with a configurable timeout to prevent runaway processes.
 
-Inherits from `orbiter.tool.Tool`.
+Inherits from `exo.tool.Tool`.
 
 ### Constructor parameters
 
@@ -187,7 +187,7 @@ Execute a shell command.
 ### Example
 
 ```python
-from orbiter.sandbox.tools import TerminalTool
+from exo.sandbox.tools import TerminalTool
 
 term = TerminalTool(timeout=10.0)
 

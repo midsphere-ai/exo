@@ -34,11 +34,11 @@ async def test_structured_output_all_fields_populated(vertex_model: str) -> None
     The agent is instructed to reply with a JSON object matching CountryInfo.
     We assert that all four fields are present with correct types and values.
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
     agent = Agent(
@@ -84,12 +84,12 @@ async def test_structured_output_with_tool_call(vertex_model: str) -> None:
     The agent must call the get_raw_weather tool first, then use its
     result to populate all three fields of the WeatherReport JSON output.
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     @tool
     def get_raw_weather(city: str) -> str:

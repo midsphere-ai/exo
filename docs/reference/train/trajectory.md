@@ -1,9 +1,9 @@
-# orbiter.train.trajectory
+# exo.train.trajectory
 
 Trajectory capture with strategy patterns and export to JSON/CSV.
 
 ```python
-from orbiter.train.trajectory import (
+from exo.train.trajectory import (
     DefaultStrategy,
     TrajectoryDataset,
     TrajectoryError,
@@ -230,7 +230,7 @@ Remove all items and reset step counters.
 ### Example
 
 ```python
-from orbiter.train import TrajectoryDataset
+from exo.train import TrajectoryDataset
 
 dataset = TrajectoryDataset()
 

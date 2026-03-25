@@ -29,12 +29,12 @@ async def test_child_agents_have_isolated_memory(
     Querying with task_id='child-b-session' must yield no items containing
     the token.  Querying with task_id='child-a-session' must yield the fact.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
     store = SQLiteMemoryStore(db_path=tmp_sqlite_db)

@@ -5,7 +5,7 @@ Context tools are `Tool` subclasses that agents can call to interact with the co
 ## Basic Usage
 
 ```python
-from orbiter.context import get_context_tools, Context, ContextConfig
+from exo.context import get_context_tools, Context, ContextConfig
 
 ctx = Context(task_id="task-1", config=ContextConfig())
 
@@ -17,7 +17,7 @@ for tool in tools:
     tool.bind(ctx)
 
 # Pass tools to an agent
-from orbiter.agent import Agent
+from exo.agent import Agent
 
 agent = Agent(
     name="assistant",
@@ -33,7 +33,7 @@ Context tools are organized into three groups, each with its own factory functio
 ### Planning Tools
 
 ```python
-from orbiter.context import get_planning_tools
+from exo.context import get_planning_tools
 
 planning_tools = get_planning_tools()
 ```
@@ -49,7 +49,7 @@ Planning tools store TODO items in the context state, allowing agents to maintai
 ### Knowledge Tools
 
 ```python
-from orbiter.context import get_knowledge_tools
+from exo.context import get_knowledge_tools
 
 knowledge_tools = get_knowledge_tools()
 ```
@@ -65,7 +65,7 @@ Knowledge tools query the `KnowledgeStore` attached to the context, giving agent
 ### File Tools
 
 ```python
-from orbiter.context import get_file_tools
+from exo.context import get_file_tools
 
 file_tools = get_file_tools()
 ```
@@ -79,7 +79,7 @@ File tools provide read access to workspace artifacts.
 ### All Context Tools
 
 ```python
-from orbiter.context import get_context_tools
+from exo.context import get_context_tools
 
 # Returns all planning + knowledge + file tools
 all_tools = get_context_tools()
@@ -90,7 +90,7 @@ all_tools = get_context_tools()
 Context tools extend the base `Tool` class with a `bind(ctx)` method. This method must be called before the tool can execute:
 
 ```python
-from orbiter.context import get_planning_tools, Context, ContextConfig
+from exo.context import get_planning_tools, Context, ContextConfig
 
 ctx = Context(task_id="task-1", config=ContextConfig())
 tools = get_planning_tools()
@@ -170,7 +170,7 @@ TF-IDF ranked search returning the most relevant documents:
 Only give agents the tools they need:
 
 ```python
-from orbiter.context import get_planning_tools, get_knowledge_tools
+from exo.context import get_planning_tools, get_knowledge_tools
 
 # Research agent gets knowledge tools
 research_agent = Agent(
@@ -190,8 +190,8 @@ planner_agent = Agent(
 Mix context tools with regular function tools:
 
 ```python
-from orbiter.tool import tool
-from orbiter.context import get_context_tools
+from exo.tool import tool
+from exo.context import get_context_tools
 
 @tool
 def web_search(query: str) -> str:
@@ -207,7 +207,7 @@ agent = Agent(name="assistant", tools=all_tools)
 Ingest documents before the agent starts so knowledge tools have content to search:
 
 ```python
-from orbiter.context._internal.knowledge import KnowledgeStore, chunk_text
+from exo.context._internal.knowledge import KnowledgeStore, chunk_text
 
 knowledge = KnowledgeStore()
 
@@ -232,7 +232,7 @@ for t in tools:
 Add tools conditionally based on the automation mode:
 
 ```python
-from orbiter.context import make_config, AutomationMode, get_planning_tools, get_knowledge_tools
+from exo.context import make_config, AutomationMode, get_planning_tools, get_knowledge_tools
 
 config = make_config(AutomationMode.PILOT)
 tools = []
@@ -248,9 +248,9 @@ if config.enable_retrieval:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `get_context_tools()` | `orbiter.context` | Returns all context tools (planning + knowledge + file) |
-| `get_planning_tools()` | `orbiter.context` | Returns `[add_todo, complete_todo, get_todo]` |
-| `get_knowledge_tools()` | `orbiter.context` | Returns `[get_knowledge, grep_knowledge, search_knowledge]` |
-| `get_file_tools()` | `orbiter.context` | Returns `[read_file]` |
-| `_ContextTool` | `orbiter.context.tools` | Base class with `bind(ctx)` method |
+| `get_context_tools()` | `exo.context` | Returns all context tools (planning + knowledge + file) |
+| `get_planning_tools()` | `exo.context` | Returns `[add_todo, complete_todo, get_todo]` |
+| `get_knowledge_tools()` | `exo.context` | Returns `[get_knowledge, grep_knowledge, search_knowledge]` |
+| `get_file_tools()` | `exo.context` | Returns `[read_file]` |
+| `_ContextTool` | `exo.context.tools` | Base class with `bind(ctx)` method |
 | `_ContextTool.bind(ctx)` | | Bind the tool to a `Context` instance |

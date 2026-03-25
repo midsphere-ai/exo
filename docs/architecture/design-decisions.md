@@ -1,12 +1,12 @@
 # Design Decisions
 
-This document explains the key architectural choices in Orbiter and why they differ from AWorld and other frameworks.
+This document explains the key architectural choices in Exo and why they differ from AWorld and other frameworks.
 
 ## Key Simplifications from AWorld
 
-Orbiter is a ground-up rewrite that simplifies AWorld's patterns while preserving its capabilities. The table below summarizes the major changes:
+Exo is a ground-up rewrite that simplifies AWorld's patterns while preserving its capabilities. The table below summarizes the major changes:
 
-| AWorld Pattern | Orbiter Pattern | Rationale |
+| AWorld Pattern | Exo Pattern | Rationale |
 |---|---|---|
 | `Message[DataType]` with 15 fields, stringly-typed `category`/`topic` routing | Typed message classes (`UserMessage`, `AssistantMessage`, `ToolResult`, etc.) as simple Pydantic models | Type safety eliminates routing bugs at compile time |
 | `ConfigDict(dict)` + `BaseConfig` + Pydantic models mixed | Pydantic v2 models only (`AgentConfig`, `ModelConfig`, etc.) | One config system instead of three |
@@ -25,7 +25,7 @@ Orbiter is a ground-up rewrite that simplifies AWorld's patterns while preservin
 
 ## Why a Single Agent Class
 
-AWorld had five agent types: `LLMAgent`, `TaskLLMAgent`, `LoopLLMAgent`, `ParallelLLMAgent`, and `SerialLLMAgent`. Orbiter collapses these into one `Agent` class because:
+AWorld had five agent types: `LLMAgent`, `TaskLLMAgent`, `LoopLLMAgent`, `ParallelLLMAgent`, and `SerialLLMAgent`. Exo collapses these into one `Agent` class because:
 
 1. **The differences were in orchestration, not capability.** A "parallel" agent is really two agents run in parallel -- that is orchestration (Swarm), not an agent property.
 
@@ -37,8 +37,8 @@ AWorld had five agent types: `LLMAgent`, `TaskLLMAgent`, `LoopLLMAgent`, `Parall
 # AWorld: choose the right subclass
 from aworld.agents import LLMAgent, TaskLLMAgent, ParallelLLMAgent
 
-# Orbiter: one class, compose behavior
-from orbiter import Agent, Swarm
+# Exo: one class, compose behavior
+from exo import Agent, Swarm
 
 agent = Agent(name="a", ...)
 pipeline = Swarm(agents=[a, b, c], flow="a >> b >> c")
@@ -46,7 +46,7 @@ pipeline = Swarm(agents=[a, b, c], flow="a >> b >> c")
 
 ## Why Flow DSL Instead of Builder Pattern
 
-AWorld used builder classes (`SwarmBuilder`, `AgentBuilder`, `SandboxBuilder`) totaling ~400 lines. Orbiter uses a string-based flow DSL:
+AWorld used builder classes (`SwarmBuilder`, `AgentBuilder`, `SandboxBuilder`) totaling ~400 lines. Exo uses a string-based flow DSL:
 
 ```python
 # Builder pattern (AWorld)
@@ -56,7 +56,7 @@ builder.add_agent(b)
 builder.add_edge(a, b)
 swarm = builder.build()
 
-# Flow DSL (Orbiter)
+# Flow DSL (Exo)
 swarm = Swarm(agents=[a, b, c], flow="a >> b >> c")
 ```
 
@@ -79,13 +79,13 @@ run.sync = _sync
 ```
 
 This choice:
-- **Eliminates sync/async duplication** -- AWorld had `BaseTool` and `AsyncBaseTool`, `run()` and `sync_run()`, etc. Orbiter has one of each.
+- **Eliminates sync/async duplication** -- AWorld had `BaseTool` and `AsyncBaseTool`, `run()` and `sync_run()`, etc. Exo has one of each.
 - **Enables parallel tool execution** -- `asyncio.TaskGroup` runs multiple tool calls concurrently with zero threading complexity.
 - **Wraps sync functions automatically** -- `@tool` detects sync functions and wraps them via `asyncio.to_thread()` so users do not need to think about it.
 
 ## Why Typed Messages Instead of Generic Message
 
-AWorld's `Message[DataType]` had 15 fields and used string-based `category`/`topic` routing. This made it easy to route messages to the wrong handler. Orbiter uses a discriminated union:
+AWorld's `Message[DataType]` had 15 fields and used string-based `category`/`topic` routing. This made it easy to route messages to the wrong handler. Exo uses a discriminated union:
 
 ```python
 Message = UserMessage | AssistantMessage | SystemMessage | ToolResult
@@ -115,9 +115,9 @@ Benefits:
 
 ## Anti-Patterns Avoided
 
-These are patterns Orbiter explicitly rejects:
+These are patterns Exo explicitly rejects:
 
-| Anti-Pattern | What Orbiter Does Instead |
+| Anti-Pattern | What Exo Does Instead |
 |---|---|
 | God classes (>200 lines) | Split into composable functions; max ~200 lines per source file |
 | Stringly-typed dispatch (`category="tool"`) | Enums (`HookPoint`), typed unions (`Message`), protocols |
@@ -131,7 +131,7 @@ These are patterns Orbiter explicitly rejects:
 
 ## Influences from Other Frameworks
 
-| Framework | What Orbiter Borrowed | What Orbiter Rejected |
+| Framework | What Exo Borrowed | What Exo Rejected |
 |-----------|----------------------|----------------------|
 | **OpenAI Agents SDK** | Clean Runner pattern, first-class handoffs, `@tool` decorator | -- |
 | **Google ADK** | Explicit workflow primitives (`SequentialAgent` -> `Swarm(mode="workflow")`) | -- |

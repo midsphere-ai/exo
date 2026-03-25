@@ -1,11 +1,11 @@
-# orbiter.memory.short_term
+# exo.memory.short_term
 
 Short-term memory: conversation context with scope filtering and windowing.
 
 ## Module Path
 
 ```python
-from orbiter.memory.short_term import ShortTermMemory
+from exo.memory.short_term import ShortTermMemory
 ```
 
 ---
@@ -122,7 +122,7 @@ The search method removes trailing incomplete tool call pairs:
 
 ```python
 import asyncio
-from orbiter.memory import (
+from exo.memory import (
     ShortTermMemory, HumanMemory, AIMemory,
     SystemMemory, MemoryMetadata,
 )

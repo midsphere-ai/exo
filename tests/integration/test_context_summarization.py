@@ -33,13 +33,13 @@ async def test_token_budget_triggers_summarization(
     - All 6 turns complete without error (>= 12 items in store).
     - The agent produces a non-empty response after multiple summarizations.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     conv_id = "sum-trigger-001"
 
@@ -124,12 +124,12 @@ async def test_summarization_shortens_context(
     Note: PRD specifies len(result.messages) comparison. AgentOutput has no
     messages field; usage.input_tokens is used as a proxy for context length.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     store = SQLiteMemoryStore(db_path=tmp_sqlite_db)
     await store.init()

@@ -9,7 +9,7 @@ Usage:
     uv run python examples/multi_agent/master_worker.py
 """
 
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 worker_summary = Agent(
     name="summariser",
@@ -41,7 +41,7 @@ team = Swarm(
 if __name__ == "__main__":
     result = run.sync(
         team,
-        "The Orbiter framework provides a modern approach to building "
+        "The Exo framework provides a modern approach to building "
         "multi-agent systems with tools, handoffs, and swarm orchestration.",
     )
     print(result.output)

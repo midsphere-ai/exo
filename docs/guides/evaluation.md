@@ -1,11 +1,11 @@
 # Evaluation
 
-The `orbiter-eval` package provides a framework for evaluating agent outputs with pluggable scorers, parallel execution, pass@k computation, and both rule-based and LLM-as-Judge scoring. It also includes a reflection system for structured analysis of agent behavior.
+The `exo-eval` package provides a framework for evaluating agent outputs with pluggable scorers, parallel execution, pass@k computation, and both rule-based and LLM-as-Judge scoring. It also includes a reflection system for structured analysis of agent behavior.
 
 ## Basic Usage
 
 ```python
-from orbiter.eval import Evaluator, EvalTarget, Scorer, ScorerResult
+from exo.eval import Evaluator, EvalTarget, Scorer, ScorerResult
 
 # Define an evaluation target
 class MyTarget(EvalTarget):
@@ -14,7 +14,7 @@ class MyTarget(EvalTarget):
         return await my_agent.execute(input)
 
 # Create scorers
-from orbiter.eval import OutputCorrectnessScorer, FormatValidationScorer
+from exo.eval import OutputCorrectnessScorer, FormatValidationScorer
 
 scorers = [
     OutputCorrectnessScorer(expected_outputs={"q1": "42", "q2": "yes"}),
@@ -40,7 +40,7 @@ print(f"Avg score: {result.avg_score:.3f}")
 Subclass `EvalTarget` to define what is being evaluated:
 
 ```python
-from orbiter.eval import EvalTarget
+from exo.eval import EvalTarget
 
 class AgentTarget(EvalTarget):
     def __init__(self, agent):
@@ -58,7 +58,7 @@ class AgentTarget(EvalTarget):
 Validates output format (JSON, XML, YAML, Markdown, CSV):
 
 ```python
-from orbiter.eval import FormatValidationScorer
+from exo.eval import FormatValidationScorer
 
 scorer = FormatValidationScorer(format_type="json")
 result = await scorer.score("case-1", "input", '{"key": "value"}')
@@ -72,7 +72,7 @@ Supported formats: `"json"`, `"xml"`, `"yaml"`, `"markdown"`, `"csv"`.
 Validates output against a JSON schema:
 
 ```python
-from orbiter.eval import SchemaValidationScorer
+from exo.eval import SchemaValidationScorer
 
 schema = {
     "type": "object",
@@ -87,7 +87,7 @@ scorer = SchemaValidationScorer(schema=schema)
 Compares output against expected values:
 
 ```python
-from orbiter.eval import OutputCorrectnessScorer
+from exo.eval import OutputCorrectnessScorer
 
 scorer = OutputCorrectnessScorer(
     expected_outputs={"case-1": "42", "case-2": "yes"},
@@ -101,7 +101,7 @@ print(result.score)  # 1.0
 Scores based on output length within a target range:
 
 ```python
-from orbiter.eval import OutputLengthScorer
+from exo.eval import OutputLengthScorer
 
 scorer = OutputLengthScorer(min_length=50, max_length=500)
 ```
@@ -111,7 +111,7 @@ scorer = OutputLengthScorer(min_length=50, max_length=500)
 Checks if the output addresses the input topic:
 
 ```python
-from orbiter.eval import OutputRelevanceScorer
+from exo.eval import OutputRelevanceScorer
 
 scorer = OutputRelevanceScorer()
 ```
@@ -121,7 +121,7 @@ scorer = OutputRelevanceScorer()
 Evaluates whether the output covers all required aspects:
 
 ```python
-from orbiter.eval import OutputCompletenessScorer
+from exo.eval import OutputCompletenessScorer
 
 scorer = OutputCompletenessScorer()
 ```
@@ -133,7 +133,7 @@ scorer = OutputCompletenessScorer()
 Evaluates output quality across five dimensions: accuracy, clarity, completeness, relevance, and coherence:
 
 ```python
-from orbiter.eval import OutputQualityScorer
+from exo.eval import OutputQualityScorer
 
 scorer = OutputQualityScorer(
     judge=my_llm_callable,  # async (prompt: str) -> str
@@ -148,7 +148,7 @@ print(result.details)         # per-dimension scores
 Checks for internal logical consistency:
 
 ```python
-from orbiter.eval import LogicConsistencyScorer
+from exo.eval import LogicConsistencyScorer
 
 scorer = LogicConsistencyScorer(judge=my_llm_callable)
 ```
@@ -158,7 +158,7 @@ scorer = LogicConsistencyScorer(judge=my_llm_callable)
 Evaluates the validity of reasoning chains:
 
 ```python
-from orbiter.eval import ReasoningValidityScorer
+from exo.eval import ReasoningValidityScorer
 
 scorer = ReasoningValidityScorer(judge=my_llm_callable)
 ```
@@ -168,7 +168,7 @@ scorer = ReasoningValidityScorer(judge=my_llm_callable)
 Checks if output satisfies specified constraints:
 
 ```python
-from orbiter.eval import ConstraintSatisfactionScorer
+from exo.eval import ConstraintSatisfactionScorer
 
 scorer = ConstraintSatisfactionScorer(judge=my_llm_callable)
 ```
@@ -178,7 +178,7 @@ scorer = ConstraintSatisfactionScorer(judge=my_llm_callable)
 Subclass `LLMAsJudgeScorer` for custom evaluation criteria:
 
 ```python
-from orbiter.eval import LLMAsJudgeScorer
+from exo.eval import LLMAsJudgeScorer
 
 class ToneScorer(LLMAsJudgeScorer):
     def build_prompt(self, case_id: str, input: str, output: str) -> str:
@@ -199,7 +199,7 @@ scorer = ToneScorer(judge=my_llm_callable, name="tone")
 Validates structural integrity of agent execution trajectories:
 
 ```python
-from orbiter.eval import TrajectoryValidator
+from exo.eval import TrajectoryValidator
 
 scorer = TrajectoryValidator(required_keys=["action"])
 result = await scorer.score("case-1", "input", [
@@ -214,7 +214,7 @@ print(result.score)  # 1.0 (all steps valid)
 Scores based on execution time relative to a budget:
 
 ```python
-from orbiter.eval import TimeCostScorer
+from exo.eval import TimeCostScorer
 
 scorer = TimeCostScorer(max_ms=30_000)
 result = await scorer.score("case-1", "input", {"_time_cost_ms": 15000})
@@ -226,7 +226,7 @@ print(result.score)  # 0.5 (used half the budget)
 LLM-judged comparison of agent output to a reference answer:
 
 ```python
-from orbiter.eval import AnswerAccuracyLLMScorer
+from exo.eval import AnswerAccuracyLLMScorer
 
 scorer = AnswerAccuracyLLMScorer(judge=my_llm_callable)
 result = await scorer.score(
@@ -241,7 +241,7 @@ result = await scorer.score(
 Scorers decorated with `@scorer_register` can be looked up by name:
 
 ```python
-from orbiter.eval import get_scorer, list_scorers
+from exo.eval import get_scorer, list_scorers
 
 # List all registered scorers
 print(list_scorers())  # ["answer_accuracy", "label_distribution", "time_cost", "trajectory"]
@@ -256,7 +256,7 @@ scorer = ScorerClass()
 Set pass/fail thresholds:
 
 ```python
-from orbiter.eval import EvalCriteria
+from exo.eval import EvalCriteria
 
 criteria = EvalCriteria(
     min_score=0.8,      # minimum average score to pass
@@ -284,7 +284,7 @@ print(result.pass_at_k)  # pass@3 metric
 The reflection framework provides structured analysis of agent execution:
 
 ```python
-from orbiter.eval import GeneralReflector, ReflectionType, ReflectionLevel
+from exo.eval import GeneralReflector, ReflectionType, ReflectionLevel
 
 reflector = GeneralReflector(
     judge=my_llm_callable,
@@ -309,7 +309,7 @@ print(result.suggestions)
 Track reflections over time:
 
 ```python
-from orbiter.eval import ReflectionHistory
+from exo.eval import ReflectionHistory
 
 history = ReflectionHistory()
 history.add(reflection_result)
@@ -324,7 +324,7 @@ print(stats)  # {"total": 10, "success": 7, "failure": 3, "types": {...}}
 Subclass `Reflector` for domain-specific analysis:
 
 ```python
-from orbiter.eval import Reflector
+from exo.eval import Reflector
 
 class CodeReflector(Reflector):
     async def analyze(self, context: dict) -> dict:
@@ -344,22 +344,22 @@ class CodeReflector(Reflector):
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Evaluator` | `orbiter.eval` | Parallel evaluation runner with pass@k |
-| `EvalTarget` | `orbiter.eval` | ABC for evaluation targets |
-| `Scorer` | `orbiter.eval` | ABC for scoring functions |
-| `ScorerResult` | `orbiter.eval` | Score result with details |
-| `EvalCriteria` | `orbiter.eval` | Pass/fail thresholds |
-| `EvalResult` | `orbiter.eval` | Aggregate evaluation result |
-| `FormatValidationScorer` | `orbiter.eval` | Validate output format |
-| `SchemaValidationScorer` | `orbiter.eval` | Validate against JSON schema |
-| `OutputCorrectnessScorer` | `orbiter.eval` | Compare to expected outputs |
-| `OutputQualityScorer` | `orbiter.eval` | LLM-judged 5-dimension quality |
-| `LogicConsistencyScorer` | `orbiter.eval` | LLM-judged logical consistency |
-| `TrajectoryValidator` | `orbiter.eval` | Validate trajectory structure |
-| `TimeCostScorer` | `orbiter.eval` | Score by execution time |
-| `AnswerAccuracyLLMScorer` | `orbiter.eval` | LLM-judged answer accuracy |
-| `GeneralReflector` | `orbiter.eval` | LLM-powered execution reflection |
-| `ReflectionHistory` | `orbiter.eval` | Track reflection results over time |
-| `scorer_register` | `orbiter.eval` | Decorator for scorer registry |
-| `get_scorer` | `orbiter.eval` | Look up scorer by name |
-| `list_scorers` | `orbiter.eval` | List all registered scorer names |
+| `Evaluator` | `exo.eval` | Parallel evaluation runner with pass@k |
+| `EvalTarget` | `exo.eval` | ABC for evaluation targets |
+| `Scorer` | `exo.eval` | ABC for scoring functions |
+| `ScorerResult` | `exo.eval` | Score result with details |
+| `EvalCriteria` | `exo.eval` | Pass/fail thresholds |
+| `EvalResult` | `exo.eval` | Aggregate evaluation result |
+| `FormatValidationScorer` | `exo.eval` | Validate output format |
+| `SchemaValidationScorer` | `exo.eval` | Validate against JSON schema |
+| `OutputCorrectnessScorer` | `exo.eval` | Compare to expected outputs |
+| `OutputQualityScorer` | `exo.eval` | LLM-judged 5-dimension quality |
+| `LogicConsistencyScorer` | `exo.eval` | LLM-judged logical consistency |
+| `TrajectoryValidator` | `exo.eval` | Validate trajectory structure |
+| `TimeCostScorer` | `exo.eval` | Score by execution time |
+| `AnswerAccuracyLLMScorer` | `exo.eval` | LLM-judged answer accuracy |
+| `GeneralReflector` | `exo.eval` | LLM-powered execution reflection |
+| `ReflectionHistory` | `exo.eval` | Track reflection results over time |
+| `scorer_register` | `exo.eval` | Decorator for scorer registry |
+| `get_scorer` | `exo.eval` | Look up scorer by name |
+| `list_scorers` | `exo.eval` | List all registered scorer names |

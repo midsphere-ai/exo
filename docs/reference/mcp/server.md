@@ -1,9 +1,9 @@
-# orbiter.mcp.server
+# exo.mcp.server
 
 `@mcp_server()` class decorator and `MCPServerRegistry` for exposing tools as MCP servers.
 
 ```python
-from orbiter.mcp.server import (
+from exo.mcp.server import (
     MCPServerError,
     MCPServerRegistry,
     mcp_server,
@@ -54,7 +54,7 @@ The class is also registered in the module-level `server_registry`.
 ### Example
 
 ```python
-from orbiter.mcp.server import mcp_server
+from exo.mcp.server import mcp_server
 
 @mcp_server(name="calculator")
 class Calculator:
@@ -174,7 +174,7 @@ Module-level global registry instance. All `@mcp_server`-decorated classes are a
 ### Example
 
 ```python
-from orbiter.mcp.server import server_registry
+from exo.mcp.server import server_registry
 
 # After decorating classes with @mcp_server
 print(server_registry.names)        # ['calculator']

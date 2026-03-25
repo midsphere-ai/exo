@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter agents can invoke arbitrary tools via the `Tool` ABC, but there is
+Exo agents can invoke arbitrary tools via the `Tool` ABC, but there is
 no curated toolkit for **autonomous task execution** — the pattern where an
 agent independently reads files, runs commands, executes code, and tracks
 progress without human intervention.
@@ -23,57 +23,57 @@ purpose:
 | `ShellTool`       | Shell command execution                       |
 | `CodeTool`        | Python code execution in isolated environment |
 
-Orbiter already has equivalents for three of these, spread across two
+Exo already has equivalents for three of these, spread across two
 packages:
 
-| Capability     | Orbiter Package      | Module                        |
+| Capability     | Exo Package      | Module                        |
 |----------------|----------------------|-------------------------------|
-| Todo / Planning| `orbiter-context`    | `context/tools.py` — `get_planning_tools()` |
-| File I/O       | `orbiter-sandbox`    | `sandbox/tools.py` — `FilesystemTool`       |
-| Shell          | `orbiter-sandbox`    | `sandbox/tools.py` — `TerminalTool`         |
+| Todo / Planning| `exo-context`    | `context/tools.py` — `get_planning_tools()` |
+| File I/O       | `exo-sandbox`    | `sandbox/tools.py` — `FilesystemTool`       |
+| Shell          | `exo-sandbox`    | `sandbox/tools.py` — `TerminalTool`         |
 | Code execution | —                    | Not yet implemented                          |
 
 The gap is a **CodeExecutionTool** for sandboxed Python execution, plus a
 **convenience API** that bundles all four tool categories into a single
 `get_deep_agent_tools()` call. Additionally, the existing `FilesystemTool`
 lacks agent-core's `edit`, `glob`, and `grep` operations, and the
-`orbiter-context` planning tools lack status tracking (PENDING /
+`exo-context` planning tools lack status tracking (PENDING /
 IN_PROGRESS / COMPLETED).
 
 ---
 
 ## 2. Key Decision: Extend Existing Packages, No New Package
 
-### Option A — New package `orbiter-toolkit` (rejected)
+### Option A — New package `exo-toolkit` (rejected)
 
 A separate package adds dependency overhead and forces a third import for
 what is fundamentally a composition of existing tools. The tools themselves
 belong logically to their current packages.
 
-### Option B — All tools in `orbiter-core` (rejected)
+### Option B — All tools in `exo-core` (rejected)
 
 Moving sandbox tools into core would create a circular dependency (core
 depends on sandbox's `Sandbox` for execution context). It also collapses
 the separation of concerns between core abstractions and execution
 environments.
 
-### Option C — Extend `orbiter-sandbox` + `orbiter-context`, aggregate in core (chosen)
+### Option C — Extend `exo-sandbox` + `exo-context`, aggregate in core (chosen)
 
-1. **Code execution** → new `CodeExecutionTool` in `orbiter-sandbox/tools.py`
+1. **Code execution** → new `CodeExecutionTool` in `exo-sandbox/tools.py`
    (alongside `FilesystemTool` and `TerminalTool`), backed by `LocalSandbox`.
 2. **File tool extensions** (edit, glob, grep) → extend `FilesystemTool` in
-   `orbiter-sandbox/tools.py`.
+   `exo-sandbox/tools.py`.
 3. **Todo status tracking** → extend planning tools in
-   `orbiter-context/tools.py` with status field.
+   `exo-context/tools.py` with status field.
 4. **Aggregator** → `get_deep_agent_tools()` function in
-   `orbiter-core/src/orbiter/toolkit.py` that imports and bundles all four
+   `exo-core/src/exo/toolkit.py` that imports and bundles all four
    tool categories.
 
 **Why Option C:**
 
 - Keeps tools co-located with their execution environments (sandbox tools
   with sandbox, context tools with context).
-- `orbiter-core` already depends on both packages, so the aggregator
+- `exo-core` already depends on both packages, so the aggregator
   introduces no new dependency edges.
 - Follows the established pattern: `get_planning_tools()`,
   `get_context_tools()`, `get_file_tools()` are already per-package
@@ -133,7 +133,7 @@ existing action-dispatch pattern in `FilesystemTool.execute()`.
 
 ### 3.3 Planning Tool Status Extension
 
-Extend the todo state model in `orbiter-context/tools.py`:
+Extend the todo state model in `exo-context/tools.py`:
 
 ```python
 # Current: {"item": str, "done": bool}
@@ -151,7 +151,7 @@ Extend the todo state model in `orbiter-context/tools.py`:
 ### 3.4 Toolkit Aggregator
 
 ```python
-# orbiter-core/src/orbiter/toolkit.py
+# exo-core/src/exo/toolkit.py
 
 def get_deep_agent_tools(
     *,
@@ -228,27 +228,27 @@ agent = Agent(
 ## 5. File Layout
 
 ```
-packages/orbiter-sandbox/src/orbiter/sandbox/
+packages/exo-sandbox/src/exo/sandbox/
 ├── tools.py              # + CodeExecutionTool, FilesystemTool extensions
 └── ...
 
-packages/orbiter-context/src/orbiter/context/
+packages/exo-context/src/exo/context/
 ├── tools.py              # + update_todo_status, status field
 └── ...
 
-packages/orbiter-core/src/orbiter/
+packages/exo-core/src/exo/
 ├── toolkit.py            # NEW — get_deep_agent_tools() aggregator
 └── ...
 
-packages/orbiter-sandbox/tests/
+packages/exo-sandbox/tests/
 ├── test_sandbox_tools.py # + tests for CodeExecutionTool, edit/glob/grep
 └── ...
 
-packages/orbiter-context/tests/
+packages/exo-context/tests/
 ├── test_context_tools.py # + tests for todo status tracking
 └── ...
 
-packages/orbiter-core/tests/
+packages/exo-core/tests/
 ├── test_toolkit.py       # NEW — aggregator tests
 └── ...
 ```
@@ -305,15 +305,15 @@ packages/orbiter-core/tests/
 
 ## 9. Summary
 
-The deep agent toolkit extends Orbiter's existing tool infrastructure
+The deep agent toolkit extends Exo's existing tool infrastructure
 rather than introducing a parallel system:
 
 - **CodeExecutionTool** joins `FilesystemTool` and `TerminalTool` in
-  `orbiter-sandbox`, providing sandboxed Python execution.
+  `exo-sandbox`, providing sandboxed Python execution.
 - **FilesystemTool** gains `edit`, `glob`, and `grep` actions to match
   agent-core's file tool capabilities.
 - **Planning tools** gain status tracking for autonomous task management.
-- **`get_deep_agent_tools()`** in `orbiter-core` aggregates all tools
+- **`get_deep_agent_tools()`** in `exo-core` aggregates all tools
   behind a single convenience function.
 
 Security is enforced at every layer: path validation for files, command

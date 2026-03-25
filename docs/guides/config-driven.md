@@ -1,6 +1,6 @@
 # Config-Driven Agents
 
-Orbiter supports loading agents and swarms from YAML configuration files. This enables defining agent configurations declaratively, separating configuration from code, and using environment variables for secrets.
+Exo supports loading agents and swarms from YAML configuration files. This enables defining agent configurations declaratively, separating configuration from code, and using environment variables for secrets.
 
 ## Basic Usage
 
@@ -27,7 +27,7 @@ agents:
 Load and use them in Python:
 
 ```python
-from orbiter.loader import load_agents, load_swarm
+from exo.loader import load_agents, load_swarm
 
 # Load individual agents
 agents = load_agents("agents.yaml")
@@ -154,7 +154,7 @@ def load_agents(path: str | Path) -> dict[str, Any]: ...
 Load agents from a YAML file. Returns a dict mapping agent name to `Agent` instance.
 
 ```python
-from orbiter.loader import load_agents
+from exo.loader import load_agents
 
 agents = load_agents("agents.yaml")
 for name, agent in agents.items():
@@ -172,8 +172,8 @@ def load_swarm(path: str | Path) -> Swarm: ...
 Load a swarm (with agents) from a YAML file. If the YAML has no `swarm` section, creates a workflow-mode swarm with agents in declaration order.
 
 ```python
-from orbiter.loader import load_swarm
-from orbiter.runner import run
+from exo.loader import load_swarm
+from exo.runner import run
 
 swarm = load_swarm("agents.yaml")
 result = await run(swarm, "Write an article about AI")
@@ -188,7 +188,7 @@ def load_yaml(path: str | Path) -> dict[str, Any]: ...
 Low-level function that loads a YAML file, processes the `vars` section, performs all variable substitution, and returns the raw dict.
 
 ```python
-from orbiter.loader import load_yaml
+from exo.loader import load_yaml
 
 data = load_yaml("config.yaml")
 print(data["agents"])
@@ -207,8 +207,8 @@ Register a custom agent class for YAML `type:` dispatch.
 You can register custom agent classes so the YAML loader creates instances of your class instead of the builtin `Agent`:
 
 ```python
-from orbiter.agent import Agent
-from orbiter.loader import register_agent_class, load_agents
+from exo.agent import Agent
+from exo.loader import register_agent_class, load_agents
 
 class RAGAgent(Agent):
     """An agent with built-in retrieval-augmented generation."""
@@ -268,8 +268,8 @@ swarm:
 ```
 
 ```python
-from orbiter.loader import load_swarm
-from orbiter.runner import run
+from exo.loader import load_swarm
+from exo.runner import run
 
 swarm = load_swarm("production.yaml")
 result = await run(swarm, "I was charged twice for my subscription")
@@ -278,7 +278,7 @@ result = await run(swarm, "I was charged twice for my subscription")
 ## Error Handling
 
 ```python
-from orbiter.loader import LoaderError
+from exo.loader import LoaderError
 
 try:
     agents = load_agents("missing.yaml")
@@ -295,8 +295,8 @@ except LoaderError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `load_agents()` | `orbiter.loader` | Load agents from YAML |
-| `load_swarm()` | `orbiter.loader` | Load a swarm from YAML |
-| `load_yaml()` | `orbiter.loader` | Load and substitute a YAML file |
-| `register_agent_class()` | `orbiter.loader` | Register a custom agent class for YAML dispatch |
-| `LoaderError` | `orbiter.loader` | YAML loading/validation error |
+| `load_agents()` | `exo.loader` | Load agents from YAML |
+| `load_swarm()` | `exo.loader` | Load a swarm from YAML |
+| `load_yaml()` | `exo.loader` | Load and substitute a YAML file |
+| `register_agent_class()` | `exo.loader` | Register a custom agent class for YAML dispatch |
+| `LoaderError` | `exo.loader` | YAML loading/validation error |

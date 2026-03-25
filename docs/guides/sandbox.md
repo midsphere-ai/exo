@@ -1,11 +1,11 @@
 # Sandbox
 
-The `orbiter-sandbox` package provides isolated execution environments for agents. Sandboxes wrap code execution, filesystem access, and terminal operations behind a safe abstraction with status management, resource cleanup, and security controls.
+The `exo-sandbox` package provides isolated execution environments for agents. Sandboxes wrap code execution, filesystem access, and terminal operations behind a safe abstraction with status management, resource cleanup, and security controls.
 
 ## Basic Usage
 
 ```python
-from orbiter.sandbox import LocalSandbox, FilesystemTool, TerminalTool
+from exo.sandbox import LocalSandbox, FilesystemTool, TerminalTool
 
 # Create a local sandbox
 sandbox = LocalSandbox(work_dir="/tmp/sandbox_work")
@@ -41,7 +41,7 @@ CREATED -> RUNNING -> IDLE -> RUNNING -> ... -> CLOSED
 | `CLOSED` | Stopped and cleaned up |
 
 ```python
-from orbiter.sandbox import SandboxStatus
+from exo.sandbox import SandboxStatus
 
 sandbox = LocalSandbox()
 print(sandbox.status)  # SandboxStatus.CREATED
@@ -58,7 +58,7 @@ print(sandbox.status)  # SandboxStatus.CLOSED
 Runs code in a local subprocess environment:
 
 ```python
-from orbiter.sandbox import LocalSandbox
+from exo.sandbox import LocalSandbox
 
 sandbox = LocalSandbox(
     work_dir="/tmp/sandbox",  # working directory
@@ -76,10 +76,10 @@ async with sandbox:  # auto start/stop
 Runs code in an isolated Kubernetes pod:
 
 ```python
-from orbiter.sandbox import KubernetesSandbox
+from exo.sandbox import KubernetesSandbox
 
 sandbox = KubernetesSandbox(
-    namespace="orbiter-sandboxes",
+    namespace="exo-sandboxes",
     image="python:3.12-slim",
     cpu="500m",
     memory="512Mi",
@@ -105,7 +105,7 @@ The Kubernetes sandbox:
 The `SandboxBuilder` provides a fluent API for constructing sandboxes:
 
 ```python
-from orbiter.sandbox import SandboxBuilder
+from exo.sandbox import SandboxBuilder
 
 sandbox = (
     SandboxBuilder()
@@ -137,7 +137,7 @@ sandbox = builder.build()
 Provides safe read/write/list operations within allowed directories:
 
 ```python
-from orbiter.sandbox import FilesystemTool
+from exo.sandbox import FilesystemTool
 
 fs = FilesystemTool(
     allowed_directories=["/tmp/sandbox", "/tmp/shared"],
@@ -160,7 +160,7 @@ Security: any path outside `allowed_directories` is rejected.
 Executes shell commands with timeout and command blacklisting:
 
 ```python
-from orbiter.sandbox import TerminalTool
+from exo.sandbox import TerminalTool
 
 terminal = TerminalTool(
     timeout=30,  # seconds
@@ -184,8 +184,8 @@ Blocked commands are checked by substring match against the blacklist.
 Give an agent filesystem and terminal access within a sandbox:
 
 ```python
-from orbiter.agent import Agent
-from orbiter.sandbox import LocalSandbox, FilesystemTool, TerminalTool
+from exo.agent import Agent
+from exo.sandbox import LocalSandbox, FilesystemTool, TerminalTool
 
 sandbox = LocalSandbox(work_dir="/tmp/project")
 await sandbox.start()
@@ -206,7 +206,7 @@ agent = Agent(
 Use Kubernetes sandboxes for running user-provided code safely:
 
 ```python
-from orbiter.sandbox import KubernetesSandbox
+from exo.sandbox import KubernetesSandbox
 
 async def run_user_code(code: str) -> str:
     sandbox = KubernetesSandbox(
@@ -255,11 +255,11 @@ def create_sandbox_for_task(task_type: str) -> Any:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Sandbox` | `orbiter.sandbox` | ABC for execution environments |
-| `SandboxStatus` | `orbiter.sandbox` | Enum: `CREATED`, `RUNNING`, `IDLE`, `ERROR`, `CLOSED` |
-| `SandboxError` | `orbiter.sandbox` | Error raised during sandbox operations |
-| `LocalSandbox` | `orbiter.sandbox` | Local subprocess sandbox |
-| `KubernetesSandbox` | `orbiter.sandbox` | Kubernetes pod-based sandbox |
-| `SandboxBuilder` | `orbiter.sandbox` | Fluent builder for sandbox construction |
-| `FilesystemTool` | `orbiter.sandbox` | Safe file read/write/list within allowed directories |
-| `TerminalTool` | `orbiter.sandbox` | Shell command execution with timeout and blacklist |
+| `Sandbox` | `exo.sandbox` | ABC for execution environments |
+| `SandboxStatus` | `exo.sandbox` | Enum: `CREATED`, `RUNNING`, `IDLE`, `ERROR`, `CLOSED` |
+| `SandboxError` | `exo.sandbox` | Error raised during sandbox operations |
+| `LocalSandbox` | `exo.sandbox` | Local subprocess sandbox |
+| `KubernetesSandbox` | `exo.sandbox` | Kubernetes pod-based sandbox |
+| `SandboxBuilder` | `exo.sandbox` | Fluent builder for sandbox construction |
+| `FilesystemTool` | `exo.sandbox` | Safe file read/write/list within allowed directories |
+| `TerminalTool` | `exo.sandbox` | Shell command execution with timeout and blacklist |

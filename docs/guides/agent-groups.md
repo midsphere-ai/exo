@@ -7,10 +7,10 @@ Agent groups enable parallel and serial execution patterns within a [Swarm](mult
 A `ParallelGroup` runs multiple agents concurrently using `asyncio.TaskGroup`. All agents receive the same input and their outputs are aggregated.
 
 ```python
-from orbiter.agent import Agent
-from orbiter._internal.agent_group import ParallelGroup
-from orbiter.swarm import Swarm
-from orbiter.runner import run
+from exo.agent import Agent
+from exo._internal.agent_group import ParallelGroup
+from exo.swarm import Swarm
+from exo.runner import run
 
 analyst_a = Agent(name="financial", instructions="Analyze financial aspects.")
 analyst_b = Agent(name="technical", instructions="Analyze technical aspects.")
@@ -57,7 +57,7 @@ class ParallelGroup:
 By default, outputs are joined with the separator string. For more control, provide an aggregation function:
 
 ```python
-from orbiter.types import RunResult
+from exo.types import RunResult
 
 def weighted_aggregate(results: list[RunResult]) -> str:
     """Custom aggregation that labels each output."""
@@ -87,7 +87,7 @@ The `ParallelGroup.run()` method returns a single `RunResult` with:
 A `SerialGroup` runs agents sequentially, chaining each agent's output as the next agent's input. This is similar to workflow mode in a swarm but packaged as a single node.
 
 ```python
-from orbiter._internal.agent_group import SerialGroup
+from exo._internal.agent_group import SerialGroup
 
 drafter = Agent(name="drafter", instructions="Write a first draft.")
 reviewer = Agent(name="reviewer", instructions="Review and improve the draft.")
@@ -166,7 +166,7 @@ swarm = Swarm(
 A `SwarmNode` wraps a `Swarm` so it can be used as a node inside another swarm. This enables hierarchical multi-agent architectures.
 
 ```python
-from orbiter._internal.nested import SwarmNode
+from exo._internal.nested import SwarmNode
 
 # Inner swarm: a workflow pipeline
 inner = Swarm(
@@ -225,8 +225,8 @@ Both types provide the same interface: a `name` attribute and an async `run()` m
 ## Error Handling
 
 ```python
-from orbiter._internal.agent_group import GroupError, ParallelGroup
-from orbiter._internal.nested import NestedSwarmError, SwarmNode
+from exo._internal.agent_group import GroupError, ParallelGroup
+from exo._internal.nested import NestedSwarmError, SwarmNode
 
 # Empty group
 try:
@@ -245,8 +245,8 @@ except NestedSwarmError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `ParallelGroup` | `orbiter._internal.agent_group` | Concurrent agent execution group |
-| `SerialGroup` | `orbiter._internal.agent_group` | Sequential agent execution group |
-| `GroupError` | `orbiter._internal.agent_group` | Group-level error |
-| `SwarmNode` | `orbiter._internal.nested` | Wraps a swarm as a node in another swarm |
-| `NestedSwarmError` | `orbiter._internal.nested` | Nested swarm error |
+| `ParallelGroup` | `exo._internal.agent_group` | Concurrent agent execution group |
+| `SerialGroup` | `exo._internal.agent_group` | Sequential agent execution group |
+| `GroupError` | `exo._internal.agent_group` | Group-level error |
+| `SwarmNode` | `exo._internal.nested` | Wraps a swarm as a node in another swarm |
+| `NestedSwarmError` | `exo._internal.nested` | Nested swarm error |

@@ -1,10 +1,10 @@
-# Context Engine — agent-core to Orbiter Mapping
+# Context Engine — agent-core to Exo Mapping
 
 **Epic:** 4 — Context Engine Enhancements
 **Date:** 2026-03-10
 
-This document maps agent-core's (openJiuwen) context engine to Orbiter's
-enhanced `orbiter-context` package, helping contributors familiar with
+This document maps agent-core's (openJiuwen) context engine to Exo's
+enhanced `exo-context` package, helping contributors familiar with
 either framework navigate both.
 
 ---
@@ -72,24 +72,24 @@ Agent-core applies context management in this sequence before each LLM call:
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's context engine lives in the `orbiter-context` package
-(`packages/orbiter-context/`) and implements the same capabilities as
+Exo's context engine lives in the `exo-context` package
+(`packages/exo-context/`) and implements the same capabilities as
 event-driven `ContextProcessor` subclasses that plug into a
 `ProcessorPipeline` — no monolithic manager needed.
 
 ### Architecture Difference
 
 Where agent-core uses a single `ContextManager` that calls specialized
-managers in sequence, Orbiter uses a **composable processor pipeline**:
+managers in sequence, Exo uses a **composable processor pipeline**:
 
 ```python
 # Agent-core: monolithic manager
 context_manager = ContextManager(config)
 context_manager.process(history)  # calls all managers internally
 
-# Orbiter: composable pipeline
+# Exo: composable pipeline
 pipeline = ProcessorPipeline()
 pipeline.register(MessageOffloader(max_message_size=10_000))
 pipeline.register(DialogueCompressor(summarizer=my_summarizer))
@@ -104,7 +104,7 @@ Each processor is independent, opt-in, and can be registered in any order
 
 ### Component Mapping
 
-| Agent-Core Component | Orbiter Equivalent | Notes |
+| Agent-Core Component | Exo Equivalent | Notes |
 |---------------------|-------------------|-------|
 | `ContextManager` | `ProcessorPipeline` | Pipeline dispatches to registered processors by event |
 | `OffloadManager` | `MessageOffloader` + `ToolResultOffloader` | Split into message-level and tool-result offloading |
@@ -119,9 +119,9 @@ Each processor is independent, opt-in, and can be registered in any order
 | *(no equivalent)* | `TokenTracker` / `TokenStep` | Per-agent, per-step token usage tracking |
 | *(no equivalent)* | Context tools (planning, knowledge, file, reload) | Agent-callable tools for self-managing context |
 
-### Key Orbiter Additions Beyond Agent-Core
+### Key Exo Additions Beyond Agent-Core
 
-**Hierarchical Context (`Context` + `ContextState`)** — Orbiter introduces a
+**Hierarchical Context (`Context` + `ContextState`)** — Exo introduces a
 fork/merge lifecycle for task decomposition. A parent context can `fork()` child
 contexts that inherit state but write in isolation. On `merge()`, the child's
 state changes and net token delta flow back to the parent.
@@ -156,10 +156,10 @@ class ContextConfig:
     encoding: str = "cl100k_base"
 ```
 
-### Orbiter ContextConfig
+### Exo ContextConfig
 
 ```python
-# orbiter-context: config.py
+# exo-context: config.py
 @dataclass(frozen=True)
 class ContextConfig:
     mode: AutomationMode = "copilot"    # pilot / copilot / navigator
@@ -175,7 +175,7 @@ class ContextConfig:
 
 ### Field Mapping
 
-| Agent-Core Field | Orbiter Field | Notes |
+| Agent-Core Field | Exo Field | Notes |
 |-----------------|---------------|-------|
 | `max_history_rounds` | `history_rounds` | Same default (20) |
 | `summary_threshold` | `summary_threshold` | Identical |
@@ -188,11 +188,11 @@ class ContextConfig:
 
 ### Factory Function
 
-Orbiter provides `make_config(mode, **overrides)` to create configs with
+Exo provides `make_config(mode, **overrides)` to create configs with
 sensible defaults per automation level, avoiding manual threshold tuning:
 
 ```python
-from orbiter.context import make_config
+from exo.context import make_config
 
 config = make_config("navigator")  # aggressive compression settings
 config = make_config("pilot")      # minimal processing, large context window
@@ -202,33 +202,33 @@ config = make_config("pilot")      # minimal processing, large context window
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.context_engine.ContextManager` | `orbiter.context.ProcessorPipeline` | Composable processor dispatch (replaces monolithic manager) |
-| `openjiuwen.core.context_engine.OffloadManager` | `orbiter.context.MessageOffloader` | Message-level offloading with `[[OFFLOADED: handle=...]]` markers |
-| *(tool result offloading in OffloadManager)* | `orbiter.context.ToolResultOffloader` | Truncates large tool results, stores full content in state |
-| `openjiuwen.core.context_engine.CompressManager` | `orbiter.context.DialogueCompressor` | LLM-based tool-chain compression via injected summarizer |
-| `openjiuwen.core.context_engine.RoundManager` | `orbiter.context.RoundWindowProcessor` | Round-level history windowing |
-| `openjiuwen.core.context_engine.TokenBudgetManager` | `orbiter.context.TokenBudgetProcessor` | Hard token budget enforcement |
-| `openjiuwen.core.context_engine.ContextConfig` | `orbiter.context.ContextConfig` | Frozen config with `extra` dict for extensibility |
-| *(tiktoken usage inline)* | `orbiter.context.TiktokenCounter` | Standalone token counter with model→encoding mapping |
-| *(no equivalent)* | `orbiter.context.Context` | Per-task context with fork/merge lifecycle |
-| *(no equivalent)* | `orbiter.context.ContextState` | Hierarchical key-value state |
-| *(no equivalent)* | `orbiter.context.ContextProcessor` | ABC for event-driven processors |
-| *(no equivalent)* | `orbiter.context.SummarizeProcessor` | Marks history for summarization at threshold |
-| *(no equivalent)* | `orbiter.context.Checkpoint` | Versioned context state snapshot |
-| *(no equivalent)* | `orbiter.context.CheckpointStore` | Manages checkpoint versions per task |
-| *(no equivalent)* | `orbiter.context.TokenTracker` | Per-agent, per-step token usage tracking |
-| *(no equivalent)* | `orbiter.context.TokenStep` | Single LLM call token record |
+| `openjiuwen.core.context_engine.ContextManager` | `exo.context.ProcessorPipeline` | Composable processor dispatch (replaces monolithic manager) |
+| `openjiuwen.core.context_engine.OffloadManager` | `exo.context.MessageOffloader` | Message-level offloading with `[[OFFLOADED: handle=...]]` markers |
+| *(tool result offloading in OffloadManager)* | `exo.context.ToolResultOffloader` | Truncates large tool results, stores full content in state |
+| `openjiuwen.core.context_engine.CompressManager` | `exo.context.DialogueCompressor` | LLM-based tool-chain compression via injected summarizer |
+| `openjiuwen.core.context_engine.RoundManager` | `exo.context.RoundWindowProcessor` | Round-level history windowing |
+| `openjiuwen.core.context_engine.TokenBudgetManager` | `exo.context.TokenBudgetProcessor` | Hard token budget enforcement |
+| `openjiuwen.core.context_engine.ContextConfig` | `exo.context.ContextConfig` | Frozen config with `extra` dict for extensibility |
+| *(tiktoken usage inline)* | `exo.context.TiktokenCounter` | Standalone token counter with model→encoding mapping |
+| *(no equivalent)* | `exo.context.Context` | Per-task context with fork/merge lifecycle |
+| *(no equivalent)* | `exo.context.ContextState` | Hierarchical key-value state |
+| *(no equivalent)* | `exo.context.ContextProcessor` | ABC for event-driven processors |
+| *(no equivalent)* | `exo.context.SummarizeProcessor` | Marks history for summarization at threshold |
+| *(no equivalent)* | `exo.context.Checkpoint` | Versioned context state snapshot |
+| *(no equivalent)* | `exo.context.CheckpointStore` | Manages checkpoint versions per task |
+| *(no equivalent)* | `exo.context.TokenTracker` | Per-agent, per-step token usage tracking |
+| *(no equivalent)* | `exo.context.TokenStep` | Single LLM call token record |
 | *(no equivalent)* | Context tools (`get_context_tools()`) | Agent-callable tools for reload, planning, knowledge, files |
 
-All public symbols are re-exported from `orbiter.context` (the package
-`__init__.py`), so `from orbiter.context import MessageOffloader` works
+All public symbols are re-exported from `exo.context` (the package
+`__init__.py`), so `from exo.context import MessageOffloader` works
 as a convenience import.
 
 ### Processor Event Mapping
 
-| Agent-Core Processing Step | Orbiter Processor | Event |
+| Agent-Core Processing Step | Exo Processor | Event |
 |---------------------------|-------------------|-------|
 | Offload oversized messages | `MessageOffloader` | `pre_llm_call` |
 | Compress tool chains | `DialogueCompressor` | `pre_llm_call` |

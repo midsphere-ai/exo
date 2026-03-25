@@ -1,13 +1,13 @@
-# orbiter._internal.call_runner
+# exo._internal.call_runner
 
 Core execution loop for running an agent with state tracking. The call runner orchestrates the LLM-to-tool-to-LLM cycle, integrating with `RunState` for message tracking, node lifecycle, and usage accumulation. It also detects endless loops where the agent repeatedly produces the same tool calls without making progress.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.call_runner`
+**Module:** `exo._internal.call_runner`
 
 ```python
-from orbiter._internal.call_runner import call_runner, CallRunnerError
+from exo._internal.call_runner import call_runner, CallRunnerError
 ```
 
 ---
@@ -15,10 +15,10 @@ from orbiter._internal.call_runner import call_runner, CallRunnerError
 ## CallRunnerError
 
 ```python
-class CallRunnerError(OrbiterError)
+class CallRunnerError(ExoError)
 ```
 
-Raised for call runner errors (loop detection, state errors, agent failures). Inherits from `OrbiterError`.
+Raised for call runner errors (loop detection, state errors, agent failures). Inherits from `ExoError`.
 
 ---
 
@@ -78,8 +78,8 @@ The call runner detects endless loops by computing a deterministic signature for
 
 ```python
 import asyncio
-from orbiter._internal.call_runner import call_runner
-from orbiter.agent import Agent
+from exo._internal.call_runner import call_runner
+from exo.agent import Agent
 
 agent = Agent(name="bot", model="openai:gpt-4o")
 

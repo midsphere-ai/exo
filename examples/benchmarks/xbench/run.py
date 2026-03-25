@@ -1,4 +1,4 @@
-"""XBench benchmark runner for Orbiter agents.
+"""XBench benchmark runner for Exo agents.
 
 XBench is a cross-domain benchmark evaluating AI agents across diverse task
 categories: coding, math reasoning, web navigation, knowledge retrieval, and
@@ -24,7 +24,7 @@ import string
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +305,7 @@ async def run_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run XBench benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run XBench benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("XBENCH_DATASET_PATH", ""),

@@ -5,7 +5,7 @@ The `TokenTracker` records prompt and output token usage per agent, per step. It
 ## Basic Usage
 
 ```python
-from orbiter.context import TokenTracker
+from exo.context import TokenTracker
 
 tracker = TokenTracker()
 
@@ -25,7 +25,7 @@ print(f"Total: {total.prompt_tokens} prompt, {total.output_tokens} output")
 Each call to `add_step()` creates an immutable `TokenStep` record:
 
 ```python
-from orbiter.context.token_tracker import TokenStep
+from exo.context.token_tracker import TokenStep
 
 # TokenStep is a frozen dataclass
 step = TokenStep(
@@ -98,7 +98,7 @@ print(agent_ids)  # {"agent-1", "agent-2"}
 The `Context` object holds a `TokenTracker` in its `token_usage` attribute:
 
 ```python
-from orbiter.context import Context, ContextConfig
+from exo.context import Context, ContextConfig
 
 ctx = Context(task_id="task-1", config=ContextConfig())
 
@@ -130,7 +130,7 @@ total = ctx.token_usage.total_usage()
 Use token tracking in a processor to enforce budget limits:
 
 ```python
-from orbiter.context import ContextProcessor
+from exo.context import ContextProcessor
 
 class BudgetGuard(ContextProcessor):
     event = "pre_llm_call"
@@ -194,11 +194,11 @@ ctx.restore(cp)
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `TokenTracker` | `orbiter.context` | Records and queries per-agent per-step token usage |
+| `TokenTracker` | `exo.context` | Records and queries per-agent per-step token usage |
 | `TokenTracker.add_step(agent_id, step, prompt_tokens, output_tokens)` | | Record one step's usage |
 | `TokenTracker.get_trajectory()` | | Get all steps in chronological order |
 | `TokenTracker.total_usage()` | | Aggregate `TokenUsageSummary` across all agents |
 | `TokenTracker.agent_usage(agent_id)` | | `TokenUsageSummary` for one agent |
 | `TokenTracker.agent_ids` | | Set of all agent IDs with recorded steps |
-| `TokenStep` | `orbiter.context.token_tracker` | Frozen dataclass: `agent_id`, `step`, `prompt_tokens`, `output_tokens` |
-| `TokenUsageSummary` | `orbiter.context.token_tracker` | Frozen dataclass: `prompt_tokens`, `output_tokens`, `total_tokens`, `steps` |
+| `TokenStep` | `exo.context.token_tracker` | Frozen dataclass: `agent_id`, `step`, `prompt_tokens`, `output_tokens` |
+| `TokenUsageSummary` | `exo.context.token_tracker` | Frozen dataclass: `prompt_tokens`, `output_tokens`, `total_tokens`, `steps` |

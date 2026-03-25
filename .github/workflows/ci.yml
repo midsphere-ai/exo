@@ -1,4 +1,4 @@
-name: Orbiter CI
+name: Exo CI
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
         run: uv sync
 
       - name: Pyright
-        run: uv run pyright packages/orbiter-core/
+        run: uv run pyright packages/exo-core/
 
   test:
     name: Tests (Python ${{ matrix.python-version }})

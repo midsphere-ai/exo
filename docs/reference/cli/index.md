@@ -1,9 +1,9 @@
-# orbiter_cli
+# exo_cli
 
-Command-line agent runner for the Orbiter framework.
+Command-line agent runner for the Exo framework.
 
 ```python
-from orbiter_cli import (
+from exo_cli import (
     # main — CLI entry point and config
     CLIError,
     app,
@@ -43,7 +43,7 @@ from orbiter_cli import (
 )
 ```
 
-**Install:** `pip install orbiter-cli`
+**Install:** `pip install exo-cli`
 
 ---
 
@@ -51,12 +51,12 @@ from orbiter_cli import (
 
 | Module | Description |
 |---|---|
-| [`orbiter_cli.main`](main.md) | CLI entry point, config discovery, Typer app |
-| [`orbiter_cli.loader`](loader.md) | Agent discovery and loading (Python, YAML, Markdown) |
-| [`orbiter_cli.executor`](executor.md) | Local agent execution with Rich output |
-| [`orbiter_cli.batch`](batch.md) | Batch input loading and concurrent execution |
-| [`orbiter_cli.console`](console.md) | Interactive REPL console with slash commands |
-| [`orbiter_cli.plugins`](plugins.md) | Plugin system with lifecycle hooks |
+| [`exo_cli.main`](main.md) | CLI entry point, config discovery, Typer app |
+| [`exo_cli.loader`](loader.md) | Agent discovery and loading (Python, YAML, Markdown) |
+| [`exo_cli.executor`](executor.md) | Local agent execution with Rich output |
+| [`exo_cli.batch`](batch.md) | Batch input loading and concurrent execution |
+| [`exo_cli.console`](console.md) | Interactive REPL console with slash commands |
+| [`exo_cli.plugins`](plugins.md) | Plugin system with lifecycle hooks |
 
 ---
 

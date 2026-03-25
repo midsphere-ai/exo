@@ -1,11 +1,11 @@
-# orbiter.models.vertex
+# exo.models.vertex
 
 Google Vertex AI LLM provider implementation. Wraps the `google-genai` SDK with Vertex AI (GCP Application Default Credentials) authentication to implement `ModelProvider.complete()` and `ModelProvider.stream()` with normalized response types.
 
 ## Module Path
 
 ```python
-from orbiter.models.vertex import VertexProvider
+from exo.models.vertex import VertexProvider
 ```
 
 ## Auto-Registration
@@ -106,7 +106,7 @@ Stream a completion from Vertex AI. Uses `generate_content_stream()` internally.
 
 Identical to the [Gemini provider](gemini.md) -- messages are converted to Google API format:
 
-| Orbiter Type | Google Format | Notes |
+| Exo Type | Google Format | Notes |
 |---|---|---|
 | `SystemMessage` | Extracted to `system_instruction` config | Multiple system messages are joined with newlines |
 | `UserMessage` | `{"role": "user", "parts": [{"text": ...}]}` | Direct content mapping |
@@ -121,7 +121,7 @@ Same as the [Gemini provider](gemini.md) -- tools are converted from OpenAI form
 
 Same as the [Gemini provider](gemini.md).
 
-| Google Value | Orbiter FinishReason |
+| Google Value | Exo FinishReason |
 |---|---|
 | `"STOP"` | `"stop"` |
 | `"MAX_TOKENS"` | `"length"` |
@@ -140,8 +140,8 @@ Vertex AI errors use the `"vertex:"` prefix in `ModelError` messages (e.g., `"ve
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import SystemMessage, UserMessage
+from exo.models import get_provider
+from exo.types import SystemMessage, UserMessage
 
 async def main():
     # No API key needed -- uses Application Default Credentials

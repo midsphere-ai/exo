@@ -1,9 +1,9 @@
-# orbiter.a2a.server
+# exo.a2a.server
 
 A2A server -- FastAPI-based agent serving with agent card discovery.
 
 ```python
-from orbiter.a2a.server import (
+from exo.a2a.server import (
     A2AServer,
     A2AServerError,
     AgentExecutor,
@@ -17,10 +17,10 @@ from orbiter.a2a.server import (
 ## A2AServerError
 
 ```python
-class A2AServerError(OrbiterError)
+class A2AServerError(ExoError)
 ```
 
-Raised for A2A server-level errors. Inherits from `orbiter.types.OrbiterError`.
+Raised for A2A server-level errors. Inherits from `exo.types.ExoError`.
 
 ---
 
@@ -89,7 +89,7 @@ class AgentExecutor(
 )
 ```
 
-Wraps an agent for A2A task execution. Accepts any object with a `run(input, ...)` async method and a `name` attribute (i.e. an Orbiter `Agent`).
+Wraps an agent for A2A task execution. Accepts any object with a `run(input, ...)` async method and a `name` attribute (i.e. an Exo `Agent`).
 
 ### Constructor parameters
 
@@ -221,7 +221,7 @@ Stream task execution as NDJSON. Each line is a `TaskStatusUpdateEvent` or `Task
 ### Example
 
 ```python
-from orbiter.a2a import A2AServer, AgentExecutor, ServingConfig, AgentSkill
+from exo.a2a import A2AServer, AgentExecutor, ServingConfig, AgentSkill
 
 executor = AgentExecutor(my_agent, streaming=True)
 

@@ -1,12 +1,12 @@
 # Agents
 
-Agents are the core building block in Orbiter. Each agent wraps an LLM model, a set of tools, optional handoff targets, and lifecycle hooks. When executed, an agent runs an LLM-tool loop: it calls the LLM, executes any requested tool calls in parallel, feeds the results back, and repeats until the LLM produces a text-only response or the step limit is reached.
+Agents are the core building block in Exo. Each agent wraps an LLM model, a set of tools, optional handoff targets, and lifecycle hooks. When executed, an agent runs an LLM-tool loop: it calls the LLM, executes any requested tool calls in parallel, feeds the results back, and repeats until the LLM produces a text-only response or the step limit is reached.
 
 ## Basic Usage
 
 ```python
-from orbiter.agent import Agent
-from orbiter.tool import tool
+from exo.agent import Agent
+from exo.tool import tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -24,7 +24,7 @@ agent = Agent(
 To execute an agent, use `run()` (see [Running Agents](running.md)):
 
 ```python
-from orbiter.runner import run
+from exo.runner import run
 
 result = await run(agent, "What's the weather in Tokyo?")
 print(result.output)
@@ -51,12 +51,12 @@ All parameters are keyword-only. Only `name` is required.
 
 ## Planner Phase
 
-When `planning_enabled=True`, Orbiter runs an ephemeral planner pass before the executor phase. The planner sees the same tool set as the executor, but its transcript stays separate from the executor conversation. Only the final planner text is injected back into the executor context together with the original task.
+When `planning_enabled=True`, Exo runs an ephemeral planner pass before the executor phase. The planner sees the same tool set as the executor, but its transcript stays separate from the executor conversation. Only the final planner text is injected back into the executor context together with the original task.
 
-If you set `planning_model` or `planning_instructions`, those values apply only to the planner. When they are unset, Orbiter falls back to the executor model and instructions.
+If you set `planning_model` or `planning_instructions`, those values apply only to the planner. When they are unset, Exo falls back to the executor model and instructions.
 
 ```python
-from orbiter.agent import Agent
+from exo.agent import Agent
 
 agent = Agent(
     name="researcher",
@@ -112,8 +112,8 @@ print(agent.describe())
 Tools are indexed by name for O(1) lookup. Duplicate tool names raise `AgentError`:
 
 ```python
-from orbiter.agent import Agent, AgentError
-from orbiter.tool import tool
+from exo.agent import Agent, AgentError
+from exo.tool import tool
 
 @tool
 def greet(name: str) -> str:
@@ -162,14 +162,14 @@ output = await agent.run(
 # output is an AgentOutput with .text, .tool_calls, .usage
 ```
 
-In most cases, you should use the top-level `run()` function from `orbiter.runner` instead, which adds state tracking, loop detection, and auto-resolved providers. See [Running Agents](running.md).
+In most cases, you should use the top-level `run()` function from `exo.runner` instead, which adds state tracking, loop detection, and auto-resolved providers. See [Running Agents](running.md).
 
 ## AgentConfig
 
-For serializable configuration, use `AgentConfig` from `orbiter.config`:
+For serializable configuration, use `AgentConfig` from `exo.config`:
 
 ```python
-from orbiter.config import AgentConfig
+from exo.config import AgentConfig
 
 config = AgentConfig(
     name="my_agent",
@@ -209,7 +209,7 @@ The `inject_message()` method pushes a user message into a running agent's conte
 
 ```python
 import asyncio
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 @tool
 def slow_search(query: str) -> str:
@@ -240,7 +240,7 @@ For full details and streaming examples, see [Streaming Events > Live Message In
 
 ## Error Handling
 
-Agent errors raise `AgentError`, a subclass of `OrbiterError`:
+Agent errors raise `AgentError`, a subclass of `ExoError`:
 
 - **Duplicate tools:** Registering two tools with the same name
 - **Duplicate handoffs:** Registering two handoff targets with the same name
@@ -249,7 +249,7 @@ Agent errors raise `AgentError`, a subclass of `OrbiterError`:
 - **Context length exceeded:** Input exceeds the model's context window
 
 ```python
-from orbiter.agent import Agent, AgentError
+from exo.agent import Agent, AgentError
 
 try:
     result = await agent.run("Hello", provider=None)
@@ -261,8 +261,8 @@ except AgentError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Agent` | `orbiter.agent` | Core agent class |
-| `AgentError` | `orbiter.agent` | Agent-level error |
-| `AgentConfig` | `orbiter.config` | Serializable agent configuration |
-| `AgentOutput` | `orbiter.types` | Output from a single LLM call |
-| `RunResult` | `orbiter.types` | Final result of `run()` |
+| `Agent` | `exo.agent` | Core agent class |
+| `AgentError` | `exo.agent` | Agent-level error |
+| `AgentConfig` | `exo.config` | Serializable agent configuration |
+| `AgentOutput` | `exo.types` | Output from a single LLM call |
+| `RunResult` | `exo.types` | Final result of `run()` |

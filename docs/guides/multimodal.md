@@ -1,15 +1,15 @@
 # Multimodal Support
 
-Orbiter supports multimodal inputs and outputs across all built-in LLM providers (OpenAI, Anthropic, Gemini, Vertex). Agents can receive images, audio, video, and documents from users, and tools can return media that the LLM processes directly.
+Exo supports multimodal inputs and outputs across all built-in LLM providers (OpenAI, Anthropic, Gemini, Vertex). Agents can receive images, audio, video, and documents from users, and tools can return media that the LLM processes directly.
 
 ---
 
 ## Content Block Types
 
-Six frozen Pydantic models represent media content. Import them from `orbiter` (re-exported from `orbiter.types`):
+Six frozen Pydantic models represent media content. Import them from `exo` (re-exported from `exo.types`):
 
 ```python
-from orbiter import (
+from exo import (
     AudioBlock,
     ContentBlock,
     DocumentBlock,
@@ -39,7 +39,7 @@ Pass a list of `ContentBlock` objects as the `input` to `run()`, or as a `UserMe
 
 ```python
 import base64
-from orbiter import run, Agent, ImageURLBlock, TextBlock
+from exo import run, Agent, ImageURLBlock, TextBlock
 
 agent = Agent(name="vision", model="openai:gpt-4o")
 
@@ -62,7 +62,7 @@ result = await run(agent, [
 For audio:
 
 ```python
-from orbiter import AudioBlock
+from exo import AudioBlock
 
 with open("speech.mp3", "rb") as f:
     b64 = base64.b64encode(f.read()).decode()
@@ -76,7 +76,7 @@ result = await run(agent, [
 For PDF documents (Anthropic):
 
 ```python
-from orbiter import DocumentBlock
+from exo import DocumentBlock
 
 with open("report.pdf", "rb") as f:
     b64 = base64.b64encode(f.read()).decode()
@@ -94,7 +94,7 @@ result = await run(agent, [
 A tool can return `list[ContentBlock]` — the agent automatically propagates the blocks to the LLM so it can reason about the generated media:
 
 ```python
-from orbiter import tool, ImageDataBlock
+from exo import tool, ImageDataBlock
 import base64
 
 @tool
@@ -117,13 +117,13 @@ The LLM receives the image alongside the tool result and can describe, analyze, 
 
 ## Built-in Generation Tools
 
-Three ready-to-use tools are available in `orbiter.models`. Add them directly to any agent.
+Three ready-to-use tools are available in `exo.models`. Add them directly to any agent.
 
 ### DALL-E 3 Image Generation
 
 ```python
-from orbiter import Agent
-from orbiter.models import dalle_generate_image
+from exo import Agent
+from exo.models import dalle_generate_image
 
 agent = Agent(
     name="artist",
@@ -143,7 +143,7 @@ Requires: `OPENAI_API_KEY` environment variable.
 ### Imagen 3 Image Generation
 
 ```python
-from orbiter.models import imagen_generate_image
+from exo.models import imagen_generate_image
 
 agent = Agent(
     name="illustrator",
@@ -161,7 +161,7 @@ Requires: `GOOGLE_API_KEY` environment variable.
 ### Veo 2 Video Generation
 
 ```python
-from orbiter.models import veo_generate_video
+from exo.models import veo_generate_video
 
 agent = Agent(
     name="director",
@@ -199,8 +199,8 @@ Unsupported blocks are silently skipped with a `WARNING` log. OpenAI tool result
 
 ```python
 import asyncio
-from orbiter import Agent, Swarm, run, ImageURLBlock, TextBlock
-from orbiter.models import dalle_generate_image
+from exo import Agent, Swarm, run, ImageURLBlock, TextBlock
+from exo.models import dalle_generate_image
 
 # Agent 1: Analyze an input image
 analyst = Agent(

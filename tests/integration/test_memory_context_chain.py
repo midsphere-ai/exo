@@ -41,25 +41,25 @@ async def test_summary_stored_and_retrieved_by_vector_search(
     conversation items (HumanMemory + AIMemory) are stored in SQLite and that
     AI content written to Chroma is semantically retrievable for the topic.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         AIMemory,
         MemoryMetadata,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     conv_id = "chain-sqlite-chroma-001"
     agent_name = "chain-test-agent"
 
-    chroma_dir = tempfile.mkdtemp(prefix="orbiter_chain_chroma_")
+    chroma_dir = tempfile.mkdtemp(prefix="exo_chain_chroma_")
     try:
         chroma_store = ChromaVectorMemoryStore(
             SentenceTransformerEmbeddingProvider(),
@@ -163,19 +163,19 @@ async def test_knowledge_neuron_injects_summary_into_next_run(
     Adapted from PRD: "assert KnowledgeNeuron fired (via system message)" —
     injection is confirmed by the agent giving the correct fictional answer.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         AgentMemory,
         AIMemory,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     # Obscure fictional fact unlikely to be in LLM training data.
     # The agent can only answer correctly if this is injected via KnowledgeNeuron.
@@ -185,7 +185,7 @@ async def test_knowledge_neuron_injects_summary_into_next_run(
         "Veloris has a distinctive crimson atmosphere and three moons."
     )
 
-    chroma_dir = tempfile.mkdtemp(prefix="orbiter_neuron_chroma_")
+    chroma_dir = tempfile.mkdtemp(prefix="exo_neuron_chroma_")
     try:
         chroma_store = ChromaVectorMemoryStore(
             SentenceTransformerEmbeddingProvider(),

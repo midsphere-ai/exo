@@ -1,11 +1,11 @@
-# orbiter.memory.base
+# exo.memory.base
 
 Memory store protocol, typed memory item hierarchy, and status lifecycle.
 
 ## Module Path
 
 ```python
-from orbiter.memory.base import (
+from exo.memory.base import (
     MemoryStore,
     MemoryItem,
     MemoryMetadata,
@@ -262,7 +262,7 @@ Remove memory items matching the filter. Returns count removed. If `metadata` is
 
 ```python
 import asyncio
-from orbiter.memory.base import (
+from exo.memory.base import (
     HumanMemory, AIMemory, MemoryMetadata, MemoryStatus,
 )
 

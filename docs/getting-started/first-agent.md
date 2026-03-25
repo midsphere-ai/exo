@@ -13,7 +13,7 @@ This tutorial builds a multi-agent system step by step. By the end you will have
 Start by creating tools the agent can use. Each tool is a Python function decorated with `@tool`. The decorator reads the function name, type hints, and Google-style docstring to generate a JSON schema automatically.
 
 ```python
-from orbiter import tool
+from exo import tool
 
 
 @tool
@@ -75,7 +75,7 @@ print(get_weather.parameters)
 Create an agent that uses these tools:
 
 ```python
-from orbiter import Agent
+from exo import Agent
 
 weather_agent = Agent(
     name="weather-assistant",
@@ -109,7 +109,7 @@ print(weather_agent.describe())
 Use `run.sync()` to execute the agent and inspect the result:
 
 ```python
-from orbiter import run
+from exo import run
 
 result = run.sync(weather_agent, "What's the weather in Tokyo and what time is it there?")
 
@@ -189,7 +189,7 @@ print(result.output)
 For more structured multi-agent execution, use a `Swarm`. In workflow mode, agents execute sequentially and each agent's output becomes the next agent's input:
 
 ```python
-from orbiter import Swarm
+from exo import Swarm
 
 # Research agent gathers information
 researcher = Agent(
@@ -289,7 +289,7 @@ Here is the full example in a single file:
 
 from pydantic import BaseModel
 
-from orbiter import Agent, Swarm, run, tool
+from exo import Agent, Swarm, run, tool
 
 
 # -- Tools --

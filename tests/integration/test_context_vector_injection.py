@@ -33,40 +33,40 @@ async def test_knowledge_neuron_enables_correct_answer(vertex_model: str) -> Non
     """KnowledgeNeuron injects Chroma-stored facts so the agent can answer
     a question it cannot answer from training data alone.
 
-    5 obscure fictional facts (Orbiter framework lore) are pre-loaded into
+    5 obscure fictional facts (Exo framework lore) are pre-loaded into
     ChromaVectorMemoryStore.  A new Agent with AgentMemory(long_term=Chroma)
     is prompted to name the founding city.  The correct answer ('auckland')
     must appear in the parsed CityResponse — confirming injection worked.
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         AgentMemory,
         AIMemory,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     # 5 obscure fictional facts unlikely to appear in any LLM training data.
     # The model can only answer the question correctly if these are injected.
     obscure_facts = [
-        "The Orbiter framework was founded in 2024 in Auckland, New Zealand.",
-        "The Orbiter framework's first public release was version 0.1.0-alpha, "
+        "The Exo framework was founded in 2024 in Auckland, New Zealand.",
+        "The Exo framework's first public release was version 0.1.0-alpha, "
         "published on 14 March 2024 under the MIT licence.",
-        "The Orbiter framework's mascot is a fictional orange satellite named "
+        "The Exo framework's mascot is a fictional orange satellite named "
         "Zibble, designed by co-founder Priya Mehta.",
-        "The Orbiter framework has a built-in plugin called NeuronCore that "
+        "The Exo framework has a built-in plugin called NeuronCore that "
         "handles long-term memory injection using vector similarity search.",
-        "The Orbiter framework's internal codename during development was "
+        "The Exo framework's internal codename during development was "
         "'Project Starfield', chosen because of the Auckland night sky.",
     ]
 
-    chroma_dir = tempfile.mkdtemp(prefix="orbiter_vector_injection_")
+    chroma_dir = tempfile.mkdtemp(prefix="exo_vector_injection_")
     try:
         chroma_store = ChromaVectorMemoryStore(
             SentenceTransformerEmbeddingProvider(),
@@ -98,7 +98,7 @@ async def test_knowledge_neuron_enables_correct_answer(vertex_model: str) -> Non
         provider = get_provider(vertex_model)
 
         result = await agent.run(
-            "Where was the Orbiter framework founded? Respond with just the city name.",
+            "Where was the Exo framework founded? Respond with just the city name.",
             provider=provider,
         )
 

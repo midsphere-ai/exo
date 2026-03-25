@@ -1,9 +1,9 @@
-# orbiter.trace.prompt_logger
+# exo.trace.prompt_logger
 
 Structured LLM execution logging with token breakdown and context analysis.
 
 ```python
-from orbiter.trace.prompt_logger import (
+from exo.trace.prompt_logger import (
     ExecutionLogEntry,
     PromptLogger,
     TokenBreakdown,
@@ -173,7 +173,7 @@ Structured LLM execution logger. Accepts message dicts (OpenAI-style), computes 
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `log` | `logging.Logger \| None` | `None` | Logger instance. Defaults to `orbiter.trace.prompt` logger |
+| `log` | `logging.Logger \| None` | `None` | Logger instance. Defaults to `exo.trace.prompt` logger |
 | `ratio` | `float` | `4.0` | Character-to-token ratio for estimation |
 
 ### Methods
@@ -211,7 +211,7 @@ Compute token breakdown and log a structured execution entry.
 ### Example
 
 ```python
-from orbiter.trace import PromptLogger
+from exo.trace import PromptLogger
 
 logger = PromptLogger()
 

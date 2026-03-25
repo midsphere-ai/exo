@@ -25,9 +25,9 @@ async def test_add_tool_after_init_available_immediately(vertex_model: str) -> N
     await agent.add_tool(). A constrained prompt forces the tool call.
     We assert a ToolCall with name == 'get_joke' appears in result.tool_calls.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 
@@ -79,9 +79,9 @@ async def test_remove_tool_unavailable_after_removal(vertex_model: str) -> None:
     that explicitly asks to use get_joke should result in no ToolCall
     with that name (model cannot call a tool it cannot see).
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 
@@ -133,8 +133,8 @@ async def test_concurrent_add_tool_no_race_condition() -> None:
     are present in agent.tools with no asyncio.Lock errors or exceptions.
     No LLM call is needed — this is a concurrency correctness test.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import FunctionTool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.tool import FunctionTool  # pyright: ignore[reportMissingImports]
 
     # Use a placeholder model string — no LLM calls are made in this test
     agent = Agent(

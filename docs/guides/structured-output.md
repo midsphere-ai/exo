@@ -8,8 +8,8 @@ Define a Pydantic model and pass it as the `output_type` parameter:
 
 ```python
 from pydantic import BaseModel
-from orbiter.agent import Agent
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.runner import run
 
 class MovieReview(BaseModel):
     title: str
@@ -43,7 +43,7 @@ The output parsing is handled by `parse_structured_output()` in the output parse
 The `parse_structured_output()` function performs two-step validation:
 
 ```python
-from orbiter._internal.output_parser import parse_structured_output, OutputParseError
+from exo._internal.output_parser import parse_structured_output, OutputParseError
 
 class WeatherData(BaseModel):
     city: str
@@ -128,7 +128,7 @@ class SearchResult(BaseModel):
 Structured output works alongside tools. The agent uses tools during its loop, and the final text response is validated against the output type:
 
 ```python
-from orbiter.tool import tool
+from exo.tool import tool
 
 @tool
 def lookup_price(ticker: str) -> str:
@@ -166,10 +166,10 @@ print(agent2.describe()["output_type"])  # None
 
 ## Error Handling
 
-Structured output errors are raised as `OutputParseError` (a subclass of `OrbiterError`):
+Structured output errors are raised as `OutputParseError` (a subclass of `ExoError`):
 
 ```python
-from orbiter._internal.output_parser import OutputParseError
+from exo._internal.output_parser import OutputParseError
 
 try:
     result = parse_structured_output(llm_text, MyModel)
@@ -194,9 +194,9 @@ except OutputParseError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `parse_structured_output()` | `orbiter._internal.output_parser` | Validate LLM text against a Pydantic model |
-| `parse_response()` | `orbiter._internal.output_parser` | Convert raw model fields to `AgentOutput` |
-| `parse_tool_arguments()` | `orbiter._internal.output_parser` | Parse JSON tool call arguments to `ActionModel` |
-| `OutputParseError` | `orbiter._internal.output_parser` | Parsing/validation error |
-| `AgentOutput` | `orbiter.types` | Output from a single LLM call |
-| `ActionModel` | `orbiter.types` | Parsed tool action ready for execution |
+| `parse_structured_output()` | `exo._internal.output_parser` | Validate LLM text against a Pydantic model |
+| `parse_response()` | `exo._internal.output_parser` | Convert raw model fields to `AgentOutput` |
+| `parse_tool_arguments()` | `exo._internal.output_parser` | Parse JSON tool call arguments to `ActionModel` |
+| `OutputParseError` | `exo._internal.output_parser` | Parsing/validation error |
+| `AgentOutput` | `exo.types` | Output from a single LLM call |
+| `ActionModel` | `exo.types` | Parsed tool action ready for execution |

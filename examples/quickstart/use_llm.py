@@ -1,4 +1,4 @@
-"""Use LLM providers directly — minimal Orbiter example.
+"""Use LLM providers directly — minimal Exo example.
 
 Shows how to use the ``get_provider`` factory to create
 a provider and call ``complete()`` directly, and also how
@@ -11,9 +11,9 @@ Usage:
 
 import asyncio
 
-from orbiter import Agent, run
-from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-from orbiter.types import SystemMessage, UserMessage
+from exo import Agent, run
+from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+from exo.types import SystemMessage, UserMessage
 
 
 async def direct_provider_call() -> None:

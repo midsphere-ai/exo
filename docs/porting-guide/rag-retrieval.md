@@ -1,10 +1,10 @@
-# RAG/Retrieval Pipeline — agent-core to Orbiter Mapping
+# RAG/Retrieval Pipeline — agent-core to Exo Mapping
 
 **Epic:** 3 — RAG/Retrieval Pipeline
 **Date:** 2026-03-11
 
-This document maps agent-core's (openJiuwen) RAG pipeline to Orbiter's
-`orbiter-retrieval` package, helping contributors familiar with either
+This document maps agent-core's (openJiuwen) RAG pipeline to Exo's
+`exo-retrieval` package, helping contributors familiar with either
 framework navigate both.
 
 ---
@@ -76,14 +76,14 @@ subject–predicate–object triples from chunks, enabling the
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter's RAG system lives in the `orbiter-retrieval` package
-(`packages/orbiter-retrieval/`) as a separate installable package.
+Exo's RAG system lives in the `exo-retrieval` package
+(`packages/exo-retrieval/`) as a separate installable package.
 
 ### Mapping Summary
 
-| Agent-Core | Orbiter | Notes |
+| Agent-Core | Exo | Notes |
 |------------|---------|-------|
 | `EmbeddingProvider` ABC | `Embeddings` ABC | Renamed; same `embed()`, `embed_batch()`, `dimension` interface |
 | `OpenAIEmbeddingProvider` | `OpenAIEmbeddings` | Uses httpx directly (no SDK dependency) |
@@ -115,10 +115,10 @@ Orbiter's RAG system lives in the `orbiter-retrieval` package
 
 ### Architecture Difference
 
-Agent-core bundles RAG inside the core framework. Orbiter extracts it
-into a standalone package (`orbiter-retrieval`) that depends only on
-`orbiter-core` for the `FunctionTool` type used by the agent integration
-helpers. All LLM calls go through `orbiter.models.get_provider()`,
+Agent-core bundles RAG inside the core framework. Exo extracts it
+into a standalone package (`exo-retrieval`) that depends only on
+`exo-core` for the `FunctionTool` type used by the agent integration
+helpers. All LLM calls go through `exo.models.get_provider()`,
 keeping the retrieval package model-agnostic.
 
 All embedding and retriever methods are **async-first**. Chunkers and
@@ -151,16 +151,16 @@ hybrid = HybridRetriever(dense=dense, sparse=sparse, vector_weight=0.6)
 results = await hybrid.retrieve("How does authentication work?", top_k=10)
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.retrieval import (
+from exo.retrieval import (
     OpenAIEmbeddings,
     HybridRetriever,
     VectorRetriever,
     SparseRetriever,
 )
-from orbiter.retrieval.backends.pgvector import PgVectorStore
+from exo.retrieval.backends.pgvector import PgVectorStore
 
 embeddings = OpenAIEmbeddings(api_key="sk-...", model="text-embedding-3-small")
 store = PgVectorStore(dsn="postgresql://...", dimensions=1536)
@@ -198,15 +198,15 @@ vectors = await embeddings.embed_batch([c.content for c in chunks])
 await store.add(chunks, vectors)
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.retrieval import (
+from exo.retrieval import (
     OpenAIEmbeddings,
     Document,
     CharacterChunker,
 )
-from orbiter.retrieval.backends.chroma import ChromaVectorStore
+from exo.retrieval.backends.chroma import ChromaVectorStore
 
 embeddings = OpenAIEmbeddings(api_key="sk-...")
 store = ChromaVectorStore(collection_name="papers", path="./chroma_data")
@@ -240,10 +240,10 @@ agentic = AgenticRetriever(
 results = await agentic.retrieve("What are the auth options?")
 ```
 
-**Orbiter:**
+**Exo:**
 
 ```python
-from orbiter.retrieval import (
+from exo.retrieval import (
     AgenticRetriever,
     QueryRewriter,
     VectorRetriever,
@@ -264,7 +264,7 @@ results = await agentic.retrieve("What are the auth options?")
 ### Giving an Agent Retrieval Tools
 
 ```python
-from orbiter.retrieval import (
+from exo.retrieval import (
     retrieve_tool,
     index_tool,
     VectorRetriever,
@@ -272,7 +272,7 @@ from orbiter.retrieval import (
     OpenAIEmbeddings,
     InMemoryVectorStore,
 )
-from orbiter.agent import Agent
+from exo.agent import Agent
 
 embeddings = OpenAIEmbeddings(api_key="sk-...")
 store = InMemoryVectorStore()
@@ -293,42 +293,42 @@ agent = Agent(
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.core.rag.EmbeddingProvider` | `orbiter.retrieval.embeddings.Embeddings` | ABC: `embed()`, `embed_batch()`, `dimension` |
-| `openjiuwen.core.rag.OpenAIEmbeddingProvider` | `orbiter.retrieval.openai_embeddings.OpenAIEmbeddings` | httpx-based, no SDK |
-| `openjiuwen.core.rag.VertexEmbeddingProvider` | `orbiter.retrieval.vertex_embeddings.VertexEmbeddings` | GCP Vertex AI |
-| `openjiuwen.core.rag.HTTPEmbeddingProvider` | `orbiter.retrieval.http_embeddings.HTTPEmbeddings` | Generic HTTP endpoint |
-| `openjiuwen.core.rag.VectorStore` | `orbiter.retrieval.vector_store.VectorStore` | ABC: `add()`, `search()`, `delete()`, `clear()` |
-| `openjiuwen.core.rag.PgVectorStore` | `orbiter.retrieval.backends.pgvector.PgVectorStore` | asyncpg + pgvector |
-| `openjiuwen.core.rag.ChromaStore` | `orbiter.retrieval.backends.chroma.ChromaVectorStore` | Persistent or ephemeral |
-| *(no equivalent)* | `orbiter.retrieval.vector_store.InMemoryVectorStore` | Pure-Python dev/test store |
-| `openjiuwen.core.rag.VectorRetriever` | `orbiter.retrieval.retriever.VectorRetriever` | Dense semantic search |
-| `openjiuwen.core.rag.SparseRetriever` | `orbiter.retrieval.sparse_retriever.SparseRetriever` | BM25 keyword matching |
-| `openjiuwen.core.rag.HybridRetriever` | `orbiter.retrieval.hybrid_retriever.HybridRetriever` | RRF fusion |
-| `openjiuwen.core.rag.AgenticRetriever` | `orbiter.retrieval.agentic_retriever.AgenticRetriever` | Multi-round LLM-driven |
-| `openjiuwen.core.rag.KnowledgeGraphRetriever` | `orbiter.retrieval.graph_retriever.GraphRetriever` | Beam-search graph traversal |
-| `openjiuwen.core.rag.Reranker` | `orbiter.retrieval.reranker.Reranker` | ABC: `rerank()` |
-| `openjiuwen.core.rag.LLMReranker` | `orbiter.retrieval.reranker.LLMReranker` | LLM-based passage ranking |
-| `openjiuwen.core.rag.QueryRewriter` | `orbiter.retrieval.query_rewriter.QueryRewriter` | LLM query expansion |
-| `openjiuwen.core.rag.Document` | `orbiter.retrieval.types.Document` | Pydantic model |
-| `openjiuwen.core.rag.Chunk` | `orbiter.retrieval.types.Chunk` | Immutable chunk slice |
-| *(inline result type)* | `orbiter.retrieval.types.RetrievalResult` | Scored chunk with metadata |
-| *(inline error)* | `orbiter.retrieval.types.RetrievalError` | `operation` + `details` |
-| *(inline chunking)* | `orbiter.retrieval.chunker.Chunker` | ABC: `chunk(document)` |
-| *(inline chunking)* | `orbiter.retrieval.chunker.CharacterChunker` | Fixed-size with overlap |
-| *(inline chunking)* | `orbiter.retrieval.chunker.ParagraphChunker` | Blank-line splitting |
-| *(inline chunking)* | `orbiter.retrieval.chunker.TokenChunker` | tiktoken-based |
-| *(inline parsing)* | `orbiter.retrieval.parsers.Parser` | ABC: `parse(source)` |
-| *(inline parsing)* | `orbiter.retrieval.parsers.TextParser` | Passthrough |
-| *(inline parsing)* | `orbiter.retrieval.parsers.MarkdownParser` | Strip formatting |
-| *(inline parsing)* | `orbiter.retrieval.parsers.JSONParser` | Flatten to key-paths |
-| *(inline parsing)* | `orbiter.retrieval.parsers.PDFParser` | pymupdf extraction |
-| `openjiuwen.core.rag.TripleExtractor` | `orbiter.retrieval.triple_extractor.TripleExtractor` | LLM knowledge-graph extraction |
-| `openjiuwen.core.rag.Triple` | `orbiter.retrieval.triple_extractor.Triple` | Frozen dataclass |
-| *(no equivalent)* | `orbiter.retrieval.tools.retrieve_tool` | `FunctionTool` factory for retrieval |
-| *(no equivalent)* | `orbiter.retrieval.tools.index_tool` | `FunctionTool` factory for indexing |
+| `openjiuwen.core.rag.EmbeddingProvider` | `exo.retrieval.embeddings.Embeddings` | ABC: `embed()`, `embed_batch()`, `dimension` |
+| `openjiuwen.core.rag.OpenAIEmbeddingProvider` | `exo.retrieval.openai_embeddings.OpenAIEmbeddings` | httpx-based, no SDK |
+| `openjiuwen.core.rag.VertexEmbeddingProvider` | `exo.retrieval.vertex_embeddings.VertexEmbeddings` | GCP Vertex AI |
+| `openjiuwen.core.rag.HTTPEmbeddingProvider` | `exo.retrieval.http_embeddings.HTTPEmbeddings` | Generic HTTP endpoint |
+| `openjiuwen.core.rag.VectorStore` | `exo.retrieval.vector_store.VectorStore` | ABC: `add()`, `search()`, `delete()`, `clear()` |
+| `openjiuwen.core.rag.PgVectorStore` | `exo.retrieval.backends.pgvector.PgVectorStore` | asyncpg + pgvector |
+| `openjiuwen.core.rag.ChromaStore` | `exo.retrieval.backends.chroma.ChromaVectorStore` | Persistent or ephemeral |
+| *(no equivalent)* | `exo.retrieval.vector_store.InMemoryVectorStore` | Pure-Python dev/test store |
+| `openjiuwen.core.rag.VectorRetriever` | `exo.retrieval.retriever.VectorRetriever` | Dense semantic search |
+| `openjiuwen.core.rag.SparseRetriever` | `exo.retrieval.sparse_retriever.SparseRetriever` | BM25 keyword matching |
+| `openjiuwen.core.rag.HybridRetriever` | `exo.retrieval.hybrid_retriever.HybridRetriever` | RRF fusion |
+| `openjiuwen.core.rag.AgenticRetriever` | `exo.retrieval.agentic_retriever.AgenticRetriever` | Multi-round LLM-driven |
+| `openjiuwen.core.rag.KnowledgeGraphRetriever` | `exo.retrieval.graph_retriever.GraphRetriever` | Beam-search graph traversal |
+| `openjiuwen.core.rag.Reranker` | `exo.retrieval.reranker.Reranker` | ABC: `rerank()` |
+| `openjiuwen.core.rag.LLMReranker` | `exo.retrieval.reranker.LLMReranker` | LLM-based passage ranking |
+| `openjiuwen.core.rag.QueryRewriter` | `exo.retrieval.query_rewriter.QueryRewriter` | LLM query expansion |
+| `openjiuwen.core.rag.Document` | `exo.retrieval.types.Document` | Pydantic model |
+| `openjiuwen.core.rag.Chunk` | `exo.retrieval.types.Chunk` | Immutable chunk slice |
+| *(inline result type)* | `exo.retrieval.types.RetrievalResult` | Scored chunk with metadata |
+| *(inline error)* | `exo.retrieval.types.RetrievalError` | `operation` + `details` |
+| *(inline chunking)* | `exo.retrieval.chunker.Chunker` | ABC: `chunk(document)` |
+| *(inline chunking)* | `exo.retrieval.chunker.CharacterChunker` | Fixed-size with overlap |
+| *(inline chunking)* | `exo.retrieval.chunker.ParagraphChunker` | Blank-line splitting |
+| *(inline chunking)* | `exo.retrieval.chunker.TokenChunker` | tiktoken-based |
+| *(inline parsing)* | `exo.retrieval.parsers.Parser` | ABC: `parse(source)` |
+| *(inline parsing)* | `exo.retrieval.parsers.TextParser` | Passthrough |
+| *(inline parsing)* | `exo.retrieval.parsers.MarkdownParser` | Strip formatting |
+| *(inline parsing)* | `exo.retrieval.parsers.JSONParser` | Flatten to key-paths |
+| *(inline parsing)* | `exo.retrieval.parsers.PDFParser` | pymupdf extraction |
+| `openjiuwen.core.rag.TripleExtractor` | `exo.retrieval.triple_extractor.TripleExtractor` | LLM knowledge-graph extraction |
+| `openjiuwen.core.rag.Triple` | `exo.retrieval.triple_extractor.Triple` | Frozen dataclass |
+| *(no equivalent)* | `exo.retrieval.tools.retrieve_tool` | `FunctionTool` factory for retrieval |
+| *(no equivalent)* | `exo.retrieval.tools.index_tool` | `FunctionTool` factory for indexing |
 
-All public symbols are also re-exported from `orbiter.retrieval` (the
-package `__init__.py`), so `from orbiter.retrieval import VectorRetriever`
+All public symbols are also re-exported from `exo.retrieval` (the
+package `__init__.py`), so `from exo.retrieval import VectorRetriever`
 works as a convenience import.

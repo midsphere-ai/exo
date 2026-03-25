@@ -1,0 +1,324 @@
+"""A2A client — HTTP client and RemoteAgent for calling remote A2A agents."""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+import httpx
+
+from exo.a2a.types import (  # pyright: ignore[reportMissingImports]
+    AgentCard,
+    ClientConfig,
+)
+from exo.types import AgentOutput, ExoError, Usage  # pyright: ignore[reportMissingImports]
+
+
+class A2AClientError(ExoError):
+    """Raised for A2A client-level errors."""
+
+
+# ---------------------------------------------------------------------------
+# A2A HTTP client
+# ---------------------------------------------------------------------------
+
+
+class A2AClient:
+    """HTTP client for communicating with a remote A2A agent.
+
+    Resolves agent cards from URLs or local files, sends tasks, and
+    optionally streams responses.
+
+    Args:
+        agent_card: An ``AgentCard`` instance, a URL string pointing to a
+            ``/.well-known/agent-card`` endpoint, or a local file path.
+        config: Client configuration (timeout, streaming prefs, etc.).
+    """
+
+    __slots__ = ("_agent_card", "_config", "_http", "_source")
+
+    def __init__(
+        self,
+        agent_card: AgentCard | str,
+        config: ClientConfig | None = None,
+    ) -> None:
+        self._config = config or ClientConfig()
+        self._source: str | None = None
+        self._agent_card: AgentCard | None = None
+
+        if isinstance(agent_card, AgentCard):
+            self._agent_card = agent_card
+        elif isinstance(agent_card, str):
+            if not agent_card.strip():
+                raise A2AClientError("agent_card string cannot be empty")
+            self._source = agent_card.strip()
+        else:
+            raise A2AClientError(
+                f"agent_card must be AgentCard, URL, or file path, got {type(agent_card).__name__}"
+            )
+        self._http = httpx.AsyncClient(timeout=self._config.timeout)
+
+    # -- Agent card resolution ------------------------------------------------
+
+    async def resolve_agent_card(self) -> AgentCard:
+        """Resolve and cache the agent card.
+
+        Returns:
+            The resolved ``AgentCard``.
+
+        Raises:
+            A2AClientError: If resolution fails.
+        """
+        if self._agent_card is not None:
+            return self._agent_card
+
+        if self._source is None:
+            raise A2AClientError("No agent card source to resolve")
+
+        if self._source.startswith(("http://", "https://")):
+            self._agent_card = await self._resolve_from_url(self._source)
+        else:
+            self._agent_card = self._resolve_from_file(self._source)
+        return self._agent_card
+
+    async def _resolve_from_url(self, url: str) -> AgentCard:
+        """Fetch agent card JSON from a remote URL."""
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            raise A2AClientError(f"Invalid URL: {url}")
+        try:
+            resp = await self._http.get(url)
+            resp.raise_for_status()
+            return AgentCard(**resp.json())
+        except httpx.HTTPError as exc:
+            raise A2AClientError(f"Failed to fetch agent card from {url}: {exc}") from exc
+
+    @staticmethod
+    def _resolve_from_file(path_str: str) -> AgentCard:
+        """Load agent card JSON from a local file."""
+        path = Path(path_str)
+        if not path.is_file():
+            raise A2AClientError(f"Agent card file not found: {path_str}")
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return AgentCard(**data)
+        except (json.JSONDecodeError, Exception) as exc:
+            raise A2AClientError(f"Invalid agent card file {path_str}: {exc}") from exc
+
+    # -- Task execution -------------------------------------------------------
+
+    async def send_task(self, text: str, *, task_id: str | None = None) -> dict[str, Any]:
+        """Send a task to the remote agent and return the response.
+
+        Args:
+            text: The input text for the task.
+            task_id: Optional task identifier. Auto-generated if omitted.
+
+        Returns:
+            Response dict from the server.
+
+        Raises:
+            A2AClientError: If the request fails.
+        """
+        card = await self.resolve_agent_card()
+        url = card.url.rstrip("/")
+        payload: dict[str, Any] = {"text": text}
+        if task_id:
+            payload["task_id"] = task_id
+
+        try:
+            resp = await self._http.post(f"{url}/", json=payload)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            raise A2AClientError(f"Task request failed: {exc}") from exc
+
+    async def send_task_streaming(
+        self,
+        text: str,
+        *,
+        task_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Send a task with streaming and collect all events.
+
+        Args:
+            text: The input text for the task.
+            task_id: Optional task identifier.
+
+        Returns:
+            List of parsed NDJSON event dicts.
+
+        Raises:
+            A2AClientError: If the request fails or streaming is not supported.
+        """
+        card = await self.resolve_agent_card()
+        if not card.capabilities.streaming:
+            raise A2AClientError("Remote agent does not support streaming")
+
+        url = card.url.rstrip("/")
+        payload: dict[str, Any] = {"text": text}
+        if task_id:
+            payload["task_id"] = task_id
+
+        try:
+            resp = await self._http.post(f"{url}/stream", json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise A2AClientError(f"Stream request failed: {exc}") from exc
+
+        events: list[dict[str, Any]] = []
+        for line in resp.text.strip().split("\n"):
+            line = line.strip()
+            if line:
+                events.append(json.loads(line))
+        return events
+
+    # -- Lifecycle ------------------------------------------------------------
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._http.aclose()
+
+    def __repr__(self) -> str:
+        name = self._agent_card.name if self._agent_card else self._source or "unresolved"
+        return f"A2AClient({name!r})"
+
+
+# ---------------------------------------------------------------------------
+# Thread-safe client manager
+# ---------------------------------------------------------------------------
+
+
+class ClientManager:
+    """Thread-safe manager that provides per-thread A2A client instances.
+
+    Each thread gets its own ``A2AClient`` via ``get_client()``.  Clients
+    are cleaned up when ``shutdown()`` is called.
+
+    Args:
+        agent_card: Agent card or source string to pass to each client.
+        config: Client configuration shared across all threads.
+    """
+
+    __slots__ = ("_agent_card", "_clients", "_config", "_local", "_lock")
+
+    def __init__(
+        self,
+        agent_card: AgentCard | str,
+        config: ClientConfig | None = None,
+    ) -> None:
+        self._agent_card = agent_card
+        self._config = config
+        self._local = threading.local()
+        self._clients: dict[int, A2AClient] = {}
+        self._lock = threading.Lock()
+
+    def get_client(self) -> A2AClient:
+        """Return the A2A client for the current thread, creating if needed."""
+        tid = threading.get_ident()
+        client: A2AClient | None = getattr(self._local, "client", None)
+        if client is None:
+            client = A2AClient(self._agent_card, self._config)
+            self._local.client = client
+            with self._lock:
+                self._clients[tid] = client
+        return client
+
+    async def shutdown(self) -> None:
+        """Close all client instances across all threads."""
+        with self._lock:
+            clients = list(self._clients.values())
+            self._clients.clear()
+        for client in clients:
+            await client.close()
+
+    def __repr__(self) -> str:
+        with self._lock:
+            count = len(self._clients)
+        return f"ClientManager(clients={count})"
+
+
+# ---------------------------------------------------------------------------
+# RemoteAgent — Agent-like wrapper for remote A2A agents
+# ---------------------------------------------------------------------------
+
+
+class RemoteAgent:
+    """Agent-compatible wrapper for calling a remote A2A agent.
+
+    Provides the same ``run(input, ...)`` interface as ``exo.agent.Agent``
+    so it can be used as a handoff target or standalone caller.
+
+    Args:
+        name: Local name for this remote agent.
+        agent_card: ``AgentCard``, URL, or file path for the remote agent.
+        config: Client configuration.
+    """
+
+    __slots__ = ("_client", "name")
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        agent_card: AgentCard | str,
+        config: ClientConfig | None = None,
+    ) -> None:
+        self.name = name
+        self._client = A2AClient(agent_card, config)
+
+    async def run(self, input: str, **kwargs: Any) -> AgentOutput:
+        """Send input to the remote agent and return the parsed output.
+
+        Args:
+            input: The user query text.
+            **kwargs: Ignored (compatibility with Agent.run signature).
+
+        Returns:
+            ``AgentOutput`` with the remote agent's response text.
+        """
+        logger.debug("RemoteAgent.run: name=%s input=%.80s...", self.name, input)
+        resp = await self._client.send_task(input)
+        text = _extract_text(resp)
+        return AgentOutput(text=text, tool_calls=[], usage=Usage())
+
+    async def describe(self) -> dict[str, Any]:
+        """Return a description using the resolved agent card."""
+        logger.debug("RemoteAgent.describe: name=%s", self.name)
+        card = await self._client.resolve_agent_card()
+        return {
+            "name": self.name,
+            "remote_name": card.name,
+            "description": card.description,
+            "url": card.url,
+            "capabilities": card.capabilities.model_dump(),
+        }
+
+    async def close(self) -> None:
+        """Close the underlying client."""
+        await self._client.close()
+
+    def __repr__(self) -> str:
+        return f"RemoteAgent(name={self.name!r}, client={self._client!r})"
+
+
+def _extract_text(resp: dict[str, Any]) -> str:
+    """Extract text from a task execution response.
+
+    Checks ``artifact.text``, then ``result``, then falls back to empty string.
+    """
+    artifact = resp.get("artifact")
+    if isinstance(artifact, dict):
+        text = artifact.get("text", "")
+        if text:
+            return text
+    result = resp.get("result")
+    if isinstance(result, str):
+        return result
+    return ""

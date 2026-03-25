@@ -1,11 +1,11 @@
-# orbiter.context._internal.knowledge
+# exo.context._internal.knowledge
 
 In-memory artifact indexing with chunking and keyword search. This is an internal module used by `Workspace` for auto-indexing.
 
 ## Module Path
 
 ```python
-from orbiter.context._internal.knowledge import (
+from exo.context._internal.knowledge import (
     KnowledgeStore,
     KnowledgeError,
     Chunk,
@@ -191,7 +191,7 @@ Total number of chunks across all artifacts.
 ### Example
 
 ```python
-from orbiter.context._internal.knowledge import KnowledgeStore
+from exo.context._internal.knowledge import KnowledgeStore
 
 store = KnowledgeStore(chunk_size=100, chunk_overlap=20)
 
@@ -218,8 +218,8 @@ range_chunks = store.get_range("readme", start=0, end=200)
 When a `KnowledgeStore` is attached to a `Workspace`, artifacts are auto-indexed on write and de-indexed on delete:
 
 ```python
-from orbiter.context.workspace import Workspace
-from orbiter.context._internal.knowledge import KnowledgeStore
+from exo.context.workspace import Workspace
+from exo.context._internal.knowledge import KnowledgeStore
 
 ks = KnowledgeStore()
 ws = Workspace("ws-1", knowledge_store=ks)

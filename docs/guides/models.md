@@ -1,14 +1,14 @@
 # Model Providers
 
-Model providers are the bridge between Orbiter's agent system and LLM APIs. Orbiter ships with providers for OpenAI, Anthropic, Google Gemini, and Google Vertex AI, and supports custom providers via the `ModelProvider` abstract base class.
+Model providers are the bridge between Exo's agent system and LLM APIs. Exo ships with providers for OpenAI, Anthropic, Google Gemini, and Google Vertex AI, and supports custom providers via the `ModelProvider` abstract base class.
 
 ## Basic Usage
 
 Providers are typically resolved automatically from the agent's model string:
 
 ```python
-from orbiter.agent import Agent
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.runner import run
 
 # Provider auto-resolved from "openai:gpt-4o"
 agent = Agent(name="bot", model="openai:gpt-4o")
@@ -30,7 +30,7 @@ result = await run(agent, "Hello!")
 You can also create providers explicitly:
 
 ```python
-from orbiter.models.provider import get_provider
+from exo.models.provider import get_provider
 
 provider = get_provider("openai:gpt-4o", api_key="sk-...")
 result = await run(agent, "Hello!", provider=provider)
@@ -54,7 +54,7 @@ vertex:gemini-2.5-pro
 If no colon is present, the provider defaults to `"openai"`:
 
 ```python
-from orbiter.config import parse_model_string
+from exo.config import parse_model_string
 
 parse_model_string("gpt-4o")                    # ("openai", "gpt-4o")
 parse_model_string("openai:gpt-4o")             # ("openai", "gpt-4o")
@@ -85,7 +85,7 @@ def get_provider(
 | `**kwargs` | `Any` | -- | Extra fields forwarded to `ModelConfig` |
 
 ```python
-from orbiter.models.provider import get_provider
+from exo.models.provider import get_provider
 
 # Basic usage
 provider = get_provider("openai:gpt-4o")
@@ -226,8 +226,8 @@ class ToolCallDelta(BaseModel):
 The `OpenAIProvider` wraps the `openai.AsyncOpenAI` client:
 
 ```python
-from orbiter.models.openai import OpenAIProvider
-from orbiter.config import ModelConfig
+from exo.models.openai import OpenAIProvider
+from exo.config import ModelConfig
 
 config = ModelConfig(
     provider="openai",
@@ -238,7 +238,7 @@ provider = OpenAIProvider(config)
 ```
 
 The OpenAI provider:
-- Converts Orbiter messages to OpenAI chat format (`role`, `content`, `tool_calls`)
+- Converts Exo messages to OpenAI chat format (`role`, `content`, `tool_calls`)
 - Converts tool results to `role: "tool"` messages
 - Handles `tool_calls` in responses as `ToolCall` objects
 - Extracts `reasoning_content` from o1/o3 models
@@ -251,8 +251,8 @@ Registered automatically as `"openai"` in the model registry.
 The `AnthropicProvider` wraps the `anthropic.AsyncAnthropic` client:
 
 ```python
-from orbiter.models.anthropic import AnthropicProvider
-from orbiter.config import ModelConfig
+from exo.models.anthropic import AnthropicProvider
+from exo.config import ModelConfig
 
 config = ModelConfig(
     provider="anthropic",
@@ -278,8 +278,8 @@ Registered automatically as `"anthropic"` in the model registry.
 The `GeminiProvider` wraps the `google.genai.Client` with API key authentication:
 
 ```python
-from orbiter.models.gemini import GeminiProvider
-from orbiter.config import ModelConfig
+from exo.models.gemini import GeminiProvider
+from exo.config import ModelConfig
 
 config = ModelConfig(
     provider="gemini",
@@ -291,7 +291,7 @@ provider = GeminiProvider(config)
 
 The Gemini provider:
 - Extracts system messages into the `system_instruction` config parameter
-- Converts Orbiter messages to Google `Content` format (`"user"` / `"model"` roles)
+- Converts Exo messages to Google `Content` format (`"user"` / `"model"` roles)
 - Converts OpenAI-format tool schemas to Google `function_declarations` format
 - Tool results are sent as `function_response` parts within `"user"` messages
 - Generates synthetic tool call IDs (`call_0`, `call_1`, ...) when the API omits them
@@ -321,8 +321,8 @@ Or set the `GOOGLE_API_KEY` environment variable.
 The `VertexProvider` wraps the `google.genai.Client` with GCP Application Default Credentials (ADC) for Vertex AI:
 
 ```python
-from orbiter.models.vertex import VertexProvider
-from orbiter.config import ModelConfig
+from exo.models.vertex import VertexProvider
+from exo.config import ModelConfig
 
 config = ModelConfig(
     provider="vertex",
@@ -370,10 +370,10 @@ export GOOGLE_CLOUD_PROJECT="my-project-id"
 To add support for a new LLM provider:
 
 ```python
-from orbiter.models.provider import ModelProvider, model_registry
-from orbiter.models.types import ModelResponse, StreamChunk
-from orbiter.config import ModelConfig
-from orbiter.types import Message, ToolCall, Usage
+from exo.models.provider import ModelProvider, model_registry
+from exo.models.types import ModelResponse, StreamChunk
+from exo.config import ModelConfig
+from exo.types import Message, ToolCall, Usage
 
 class MyProvider(ModelProvider):
     def __init__(self, config: ModelConfig) -> None:
@@ -423,7 +423,7 @@ class MyProvider(ModelProvider):
             yield StreamChunk(delta=chunk.text)
 
     def _convert_messages(self, messages):
-        # Convert Orbiter Message types to your format
+        # Convert Exo Message types to your format
         ...
 
 # Register with the model registry
@@ -442,7 +442,7 @@ result = await run(agent, "Hello!")
 The global `model_registry` maps provider names to `ModelProvider` subclasses:
 
 ```python
-from orbiter.models.provider import model_registry
+from exo.models.provider import model_registry
 
 # List registered providers
 print(model_registry.list_all())  # ["openai", "anthropic", "gemini", "vertex"]
@@ -459,7 +459,7 @@ cls = model_registry.get("openai")  # returns OpenAIProvider class
 Provider errors are raised as `ModelError`:
 
 ```python
-from orbiter.models.types import ModelError
+from exo.models.types import ModelError
 
 try:
     response = await provider.complete(messages)
@@ -477,16 +477,16 @@ except ModelError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `ModelProvider` | `orbiter.models.provider` | Abstract base class for LLM providers |
-| `model_registry` | `orbiter.models.provider` | Global provider registry |
-| `get_provider()` | `orbiter.models.provider` | Factory to build a provider from a model string |
-| `OpenAIProvider` | `orbiter.models.openai` | OpenAI provider implementation |
-| `AnthropicProvider` | `orbiter.models.anthropic` | Anthropic provider implementation |
-| `GeminiProvider` | `orbiter.models.gemini` | Google Gemini provider implementation |
-| `VertexProvider` | `orbiter.models.vertex` | Google Vertex AI provider implementation |
-| `ModelResponse` | `orbiter.models.types` | Response from `complete()` |
-| `StreamChunk` | `orbiter.models.types` | Chunk from `stream()` |
-| `ToolCallDelta` | `orbiter.models.types` | Incremental tool call fragment |
-| `ModelError` | `orbiter.models.types` | Provider error |
-| `FinishReason` | `orbiter.models.types` | Why the model stopped generating |
-| `ModelConfig` | `orbiter.config` | Provider connection configuration |
+| `ModelProvider` | `exo.models.provider` | Abstract base class for LLM providers |
+| `model_registry` | `exo.models.provider` | Global provider registry |
+| `get_provider()` | `exo.models.provider` | Factory to build a provider from a model string |
+| `OpenAIProvider` | `exo.models.openai` | OpenAI provider implementation |
+| `AnthropicProvider` | `exo.models.anthropic` | Anthropic provider implementation |
+| `GeminiProvider` | `exo.models.gemini` | Google Gemini provider implementation |
+| `VertexProvider` | `exo.models.vertex` | Google Vertex AI provider implementation |
+| `ModelResponse` | `exo.models.types` | Response from `complete()` |
+| `StreamChunk` | `exo.models.types` | Chunk from `stream()` |
+| `ToolCallDelta` | `exo.models.types` | Incremental tool call fragment |
+| `ModelError` | `exo.models.types` | Provider error |
+| `FinishReason` | `exo.models.types` | Why the model stopped generating |
+| `ModelConfig` | `exo.config` | Provider connection configuration |

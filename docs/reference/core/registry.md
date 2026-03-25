@@ -1,11 +1,11 @@
-# orbiter.registry
+# exo.registry
 
 Generic named registry for items with duplicate detection and decorator support.
 
-**Module:** `orbiter.registry`
+**Module:** `exo.registry`
 
 ```python
-from orbiter.registry import Registry, RegistryError, agent_registry, tool_registry
+from exo.registry import Registry, RegistryError, agent_registry, tool_registry
 ```
 
 ---
@@ -13,10 +13,10 @@ from orbiter.registry import Registry, RegistryError, agent_registry, tool_regis
 ## RegistryError
 
 ```python
-class RegistryError(OrbiterError)
+class RegistryError(ExoError)
 ```
 
-Raised on registry operations that fail (duplicate or missing items). Inherits from `OrbiterError`.
+Raised on registry operations that fail (duplicate or missing items). Inherits from `ExoError`.
 
 ---
 
@@ -96,7 +96,7 @@ Return all registered names in insertion order.
 ### Example
 
 ```python
-from orbiter.registry import Registry
+from exo.registry import Registry
 
 # Create a typed registry
 my_registry: Registry[str] = Registry("my_items")
@@ -143,7 +143,7 @@ Global registry for tool instances. Pre-instantiated for framework-wide tool reg
 ### Example
 
 ```python
-from orbiter.registry import agent_registry, tool_registry
+from exo.registry import agent_registry, tool_registry
 
 # Register an agent
 agent_registry.register("my_agent", my_agent_instance)

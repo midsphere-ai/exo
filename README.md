@@ -5,12 +5,12 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
-  <img alt="Orbiter — Multi-Agent Framework" src="docs/assets/logo-light.svg" width="560">
+  <img alt="Exo — Multi-Agent Framework" src="docs/assets/logo-light.svg" width="560">
 </picture>
 
 <br><br>
 
-<p><strong>Build single agents, multi-agent swarms, and complex orchestration pipelines — with minimal boilerplate.</strong></p>
+<p><strong>Build exotic, cutting-edge agents with Exo.</strong></p>
 
 <br>
 
@@ -30,14 +30,14 @@
 
 <br>
 
-## Why Orbiter
+## Why Exo
 
-Orbiter is the next-generation rewrite of [AWorld](https://github.com/inclusionAI/AWorld), designed around **composability**, **type safety**, and a clean **async-first** API.
+Exo is the next-generation rewrite of [AWorld](https://github.com/inclusionAI/AWorld), designed around **composability**, **type safety**, and a clean **async-first** API.
 
 > One `Agent` class. Three execution modes. Zero inheritance hierarchies.
 
 ```python
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 @tool
 async def get_weather(city: str) -> str:
@@ -114,7 +114,7 @@ print(result.output)
 
 <div align="center">
 
-> 🌐 **Orbiter Web** — Full-featured agent platform with visual workflow editor, real-time playground, knowledge bases, scheduling, and team management. Built with Astro 5 + React 19 + FastAPI.
+> 🌐 **Exo Web** — Full-featured agent platform with visual workflow editor, real-time playground, knowledge bases, scheduling, and team management. Built with Astro 5 + React 19 + FastAPI.
 
 </div>
 
@@ -124,16 +124,16 @@ print(result.output)
 
 ```bash
 # Meta-package — installs core + all standard extras
-pip install orbiter
+pip install exo
 
 # Minimal — agent, tools, runner, swarm only
-pip install orbiter-core
+pip install exo-core
 
 # Core + LLM providers
-pip install orbiter-core orbiter-models
+pip install exo-core exo-models
 
 # Distributed execution
-pip install orbiter-distributed
+pip install exo-distributed
 ```
 
 > **Requires Python 3.11+**
@@ -148,7 +148,7 @@ Rich streaming events provide real-time visibility into agent execution:
 
 ```python
 import asyncio
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 @tool
 async def get_weather(city: str) -> str:
@@ -184,7 +184,7 @@ async for event in run.stream(agent, "...", detailed=True):
 Chain agents with the flow DSL:
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(
     name="researcher",
@@ -214,7 +214,7 @@ Constrain agent output to Pydantic models:
 
 ```python
 from pydantic import BaseModel
-from orbiter import Agent, run
+from exo import Agent, run
 
 class WeatherReport(BaseModel):
     city: str
@@ -238,7 +238,7 @@ print(result.output)  # WeatherReport(city='Paris', temperature_celsius=18.0, co
 
 <div align="center">
 
-Orbiter is organized as a UV workspace monorepo with **15 focused packages**:
+Exo is organized as a UV workspace monorepo with **15 focused packages**:
 
 </div>
 
@@ -246,28 +246,28 @@ Orbiter is organized as a UV workspace monorepo with **15 focused packages**:
 
 | | Package | Description |
 |:--|:--------|:------------|
-| 🎯 | [`orbiter-core`](packages/orbiter-core/) | Agent, Tool, Runner, Swarm, Config, Events, Hooks, Registry |
-| 🤖 | [`orbiter-models`](packages/orbiter-models/) | LLM providers — OpenAI, Anthropic, Gemini, Vertex AI |
-| 🧠 | [`orbiter-context`](packages/orbiter-context/) | Context engine, neurons, prompt builder, workspace, checkpoints |
-| 💾 | [`orbiter-memory`](packages/orbiter-memory/) | Short/long-term memory, SQLite, Postgres, vector backends |
-| 🔌 | [`orbiter-mcp`](packages/orbiter-mcp/) | Model Context Protocol client/server |
-| 📦 | [`orbiter-sandbox`](packages/orbiter-sandbox/) | Local + Kubernetes sandboxed execution |
-| 📊 | [`orbiter-observability`](packages/orbiter-observability/) | Logging, tracing, metrics, health checks, cost tracking |
-| 🌐 | [`orbiter-distributed`](packages/orbiter-distributed/) | Redis task queue, workers, Temporal workflows, event streaming |
-| 📏 | [`orbiter-eval`](packages/orbiter-eval/) | Evaluators, scorers, reflection framework |
-| 🤝 | [`orbiter-a2a`](packages/orbiter-a2a/) | Agent-to-Agent protocol (server + client) |
-| ⌨️ | [`orbiter-cli`](packages/orbiter-cli/) | CLI runner, interactive console, batch processing |
-| 🚀 | [`orbiter-server`](packages/orbiter-server/) | FastAPI server, session management, WebSocket streaming |
-| 🏋️ | [`orbiter-train`](packages/orbiter-train/) | Trajectory dataset, data synthesis, VeRL integration |
-| 🖥️ | [`orbiter-web`](packages/orbiter-web/) | Full platform UI — visual workflows, playground, knowledge bases |
-| 📦 | [`orbiter`](packages/orbiter/) | Meta-package that installs core + all extras |
+| 🎯 | [`exo-core`](packages/exo-core/) | Agent, Tool, Runner, Swarm, Config, Events, Hooks, Registry |
+| 🤖 | [`exo-models`](packages/exo-models/) | LLM providers — OpenAI, Anthropic, Gemini, Vertex AI |
+| 🧠 | [`exo-context`](packages/exo-context/) | Context engine, neurons, prompt builder, workspace, checkpoints |
+| 💾 | [`exo-memory`](packages/exo-memory/) | Short/long-term memory, SQLite, Postgres, vector backends |
+| 🔌 | [`exo-mcp`](packages/exo-mcp/) | Model Context Protocol client/server |
+| 📦 | [`exo-sandbox`](packages/exo-sandbox/) | Local + Kubernetes sandboxed execution |
+| 📊 | [`exo-observability`](packages/exo-observability/) | Logging, tracing, metrics, health checks, cost tracking |
+| 🌐 | [`exo-distributed`](packages/exo-distributed/) | Redis task queue, workers, Temporal workflows, event streaming |
+| 📏 | [`exo-eval`](packages/exo-eval/) | Evaluators, scorers, reflection framework |
+| 🤝 | [`exo-a2a`](packages/exo-a2a/) | Agent-to-Agent protocol (server + client) |
+| ⌨️ | [`exo-cli`](packages/exo-cli/) | CLI runner, interactive console, batch processing |
+| 🚀 | [`exo-server`](packages/exo-server/) | FastAPI server, session management, WebSocket streaming |
+| 🏋️ | [`exo-train`](packages/exo-train/) | Trajectory dataset, data synthesis, VeRL integration |
+| 🖥️ | [`exo-web`](packages/exo-web/) | Full platform UI — visual workflows, playground, knowledge bases |
+| 📦 | [`exo`](packages/exo/) | Meta-package that installs core + all extras |
 
 <br>
 
 ### Dependency Graph
 
 ```
-                         orbiter (meta)
+                         exo (meta)
                              │
       ┌──────────┬───────────┼───────────┬──────────┐
       │          │           │           │          │
@@ -288,7 +288,7 @@ Orbiter is organized as a UV workspace monorepo with **15 focused packages**:
                └──────── core ◄────────────┘
 ```
 
-> `orbiter-core` has zero heavy dependencies (only `pydantic`). Provider SDKs are isolated in `orbiter-models`.
+> `exo-core` has zero heavy dependencies (only `pydantic`). Provider SDKs are isolated in `exo-models`.
 
 <br>
 
@@ -317,7 +317,7 @@ Full documentation is in the [`docs/`](docs/) directory:
 | 🏗️ | [Architecture](docs/architecture/) | Design philosophy, dependency graph, execution flow, async patterns |
 | 📋 | [API Reference](docs/reference/) | Complete reference for all public APIs |
 | 🤝 | [Contributing](docs/contributing/) | Development setup, code style, testing, package structure |
-| 🔄 | [Migration Guide](docs/migration-guide.md) | Migrating from AWorld to Orbiter |
+| 🔄 | [Migration Guide](docs/migration-guide.md) | Migrating from AWorld to Exo |
 
 <br>
 
@@ -325,7 +325,7 @@ Full documentation is in the [`docs/`](docs/) directory:
 
 ```bash
 # Clone the repository
-git clone https://github.com/hazel-core/orbiter-ai && cd orbiter-ai
+git clone https://github.com/hazel-core/exo-ai && cd exo-ai
 
 # Install UV (if needed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -334,7 +334,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 
 # Verify installation
-uv run python -c "from orbiter import Agent, run, tool; print('OK')"
+uv run python -c "from exo import Agent, run, tool; print('OK')"
 
 # Run all tests
 uv run pytest
@@ -344,13 +344,13 @@ uv run ruff check packages/
 uv run ruff format --check packages/
 
 # Type-check
-uv run pyright packages/orbiter-core/
+uv run pyright packages/exo-core/
 ```
 
-### Orbiter Web (Platform UI)
+### Exo Web (Platform UI)
 
 ```bash
-cd packages/orbiter-web
+cd packages/exo-web
 npm install
 npm run dev          # Runs Astro frontend + FastAPI backend concurrently
 ```

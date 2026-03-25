@@ -1,6 +1,6 @@
 # Distributed Execution Architecture
 
-This document describes the architecture of `orbiter-distributed`, which enables horizontal scaling of agent execution across multiple workers using Redis for task queuing, event streaming, and state management.
+This document describes the architecture of `exo-distributed`, which enables horizontal scaling of agent execution across multiple workers using Redis for task queuing, event streaming, and state management.
 
 ## System Architecture
 
@@ -13,13 +13,13 @@ graph TB
     end
 
     subgraph Redis ["Redis"]
-        TS["Task Stream<br/><code>orbiter:tasks</code>"]
-        THash["Task Hashes<br/><code>orbiter:task:{id}</code>"]
-        PS["Pub/Sub Channels<br/><code>orbiter:events:{id}</code>"]
-        ES["Event Streams<br/><code>orbiter:stream:{id}</code>"]
-        CS["Cancel Channels<br/><code>orbiter:cancel:{id}</code>"]
-        HB["Worker Heartbeats<br/><code>orbiter:workers:{id}</code>"]
-        IX["Task Index<br/><code>orbiter:task:index</code>"]
+        TS["Task Stream<br/><code>exo:tasks</code>"]
+        THash["Task Hashes<br/><code>exo:task:{id}</code>"]
+        PS["Pub/Sub Channels<br/><code>exo:events:{id}</code>"]
+        ES["Event Streams<br/><code>exo:stream:{id}</code>"]
+        CS["Cancel Channels<br/><code>exo:cancel:{id}</code>"]
+        HB["Worker Heartbeats<br/><code>exo:workers:{id}</code>"]
+        IX["Task Index<br/><code>exo:task:index</code>"]
     end
 
     subgraph Workers ["Worker Pool"]
@@ -98,7 +98,7 @@ stateDiagram-v2
 
 1. Claims task from queue via `TaskBroker.claim()`
 2. Sets task status to `RUNNING` in `TaskStore`
-3. Starts a cancel listener (Pub/Sub subscription on `orbiter:cancel:{task_id}`)
+3. Starts a cancel listener (Pub/Sub subscription on `exo:cancel:{task_id}`)
 4. Reconstructs `Agent` or `Swarm` from `agent_config` via `from_dict()`
 5. **Memory hydration** (if `task.metadata["memory"]` is present):
    - Creates a `MemoryStore` from the config (short-term, SQLite, or Postgres)
@@ -116,7 +116,7 @@ stateDiagram-v2
 
 **Concurrency:** The `concurrency` parameter spawns multiple `_claim_loop` coroutines, allowing a single worker process to execute multiple tasks in parallel.
 
-**Heartbeat:** A separate Redis connection publishes health data to `orbiter:workers:{worker_id}` as a Redis hash with a configurable TTL (default 30s). The heartbeat fires every `heartbeat_ttl / 3` seconds.
+**Heartbeat:** A separate Redis connection publishes health data to `exo:workers:{worker_id}` as a Redis hash with a configurable TTL (default 30s). The heartbeat fires every `heartbeat_ttl / 3` seconds.
 
 ### EventPublisher / EventSubscriber (`events.py`)
 
@@ -125,8 +125,8 @@ Events are published to two destinations for different consumption patterns:
 ```mermaid
 graph LR
     Worker -->|"publish(task_id, event)"| EP["EventPublisher"]
-    EP -->|"PUBLISH (JSON)"| PubSub["Pub/Sub Channel<br/><code>orbiter:events:{id}</code>"]
-    EP -->|"XADD (JSON)"| Stream["Redis Stream<br/><code>orbiter:stream:{id}</code>"]
+    EP -->|"PUBLISH (JSON)"| PubSub["Pub/Sub Channel<br/><code>exo:events:{id}</code>"]
+    EP -->|"XADD (JSON)"| Stream["Redis Stream<br/><code>exo:stream:{id}</code>"]
 
     PubSub -->|"subscribe()"| Live["Live Consumer<br/>(real-time)"]
     Stream -->|"replay()"| Replay["Replay Consumer<br/>(persistent)"]
@@ -134,8 +134,8 @@ graph LR
 
 | Channel | Redis Type | Use Case | Delivery |
 |---------|-----------|----------|----------|
-| `orbiter:events:{task_id}` | Pub/Sub | Live real-time events | At-most-once, only active subscribers |
-| `orbiter:stream:{task_id}` | Stream | Replay / persistence | Durable, TTL-based expiry (default 1h) |
+| `exo:events:{task_id}` | Pub/Sub | Live real-time events | At-most-once, only active subscribers |
+| `exo:stream:{task_id}` | Stream | Replay / persistence | Durable, TTL-based expiry (default 1h) |
 
 **Event deserialization:** Events are serialized as JSON with a `type` discriminator field. `_deserialize_event()` uses `_EVENT_TYPE_MAP` to reconstruct the correct Pydantic model from JSON.
 
@@ -149,8 +149,8 @@ The task store tracks task status using Redis hashes with TTL-based auto-cleanup
 
 | Redis Key | Type | Contents |
 |-----------|------|----------|
-| `orbiter:task:{task_id}` | Hash | `task_id`, `status`, `worker_id`, `started_at`, `completed_at`, `result` (JSON), `error`, `retries` |
-| `orbiter:task:index` | Set | All known `task_id` values (for listing) |
+| `exo:task:{task_id}` | Hash | `task_id`, `status`, `worker_id`, `started_at`, `completed_at`, `result` (JSON), `error`, `retries` |
+| `exo:task:index` | Set | All known `task_id` values (for listing) |
 
 Each hash has a configurable TTL (default 24h) set on every `set_status()` call. The secondary index set enables `list_tasks()` without scanning all Redis keys.
 
@@ -211,7 +211,7 @@ sequenceDiagram
     participant T as CancellationToken
 
     App->>B: cancel(task_id)
-    B->>R: PUBLISH orbiter:cancel:{task_id}
+    B->>R: PUBLISH exo:cancel:{task_id}
     B->>R: HSET status=CANCELLED
 
     R-->>W: cancel message
@@ -234,24 +234,24 @@ Frozen Pydantic `BaseModel` instances used as data carriers:
 Workers publish health data via the heartbeat loop. The health system provides:
 
 - **`WorkerHealth`** — Frozen dataclass with worker status, task counts, heartbeat timestamp
-- **`WorkerHealthCheck`** — Implements `orbiter.observability.health.HealthCheck` protocol for integration with the observability stack
-- **`get_worker_fleet_status()`** — Scans all `orbiter:workers:*` keys to return fleet-wide health; workers with heartbeat older than 60s are marked dead
+- **`WorkerHealthCheck`** — Implements `exo.observability.health.HealthCheck` protocol for integration with the observability stack
+- **`get_worker_fleet_status()`** — Scans all `exo:workers:*` keys to return fleet-wide health; workers with heartbeat older than 60s are marked dead
 
 ### Metrics (`metrics.py`)
 
-Records distributed task metrics using the `orbiter-observability` infrastructure (OTel when available, in-memory fallback otherwise):
+Records distributed task metrics using the `exo-observability` infrastructure (OTel when available, in-memory fallback otherwise):
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `orbiter.distributed.tasks.submitted` | Counter | Tasks submitted to the queue |
-| `orbiter.distributed.tasks.completed` | Counter | Successfully completed tasks |
-| `orbiter.distributed.tasks.failed` | Counter | Failed tasks |
-| `orbiter.distributed.tasks.cancelled` | Counter | Cancelled tasks |
-| `orbiter.distributed.queue.depth` | Gauge | Current queue depth |
-| `orbiter.distributed.task.duration` | Histogram | Task execution duration |
-| `orbiter.distributed.task.wait_time` | Histogram | Time from submission to execution start |
-| `orbiter.stream.events.emitted` | Counter | Streaming events emitted (by type) |
-| `orbiter.stream.event.publish_duration` | Histogram | Event publish latency |
+| `exo.distributed.tasks.submitted` | Counter | Tasks submitted to the queue |
+| `exo.distributed.tasks.completed` | Counter | Successfully completed tasks |
+| `exo.distributed.tasks.failed` | Counter | Failed tasks |
+| `exo.distributed.tasks.cancelled` | Counter | Cancelled tasks |
+| `exo.distributed.queue.depth` | Gauge | Current queue depth |
+| `exo.distributed.task.duration` | Histogram | Task execution duration |
+| `exo.distributed.task.wait_time` | Histogram | Time from submission to execution start |
+| `exo.stream.events.emitted` | Counter | Streaming events emitted (by type) |
+| `exo.stream.event.publish_duration` | Histogram | Event publish latency |
 
 ### Alerts (`alerts.py`)
 
@@ -269,8 +269,8 @@ Pre-defined alert rules registered with the global `AlertManager`:
 
 Distributed tracing spans the full task lifecycle from submission to execution:
 
-1. **Client side:** `distributed()` creates an `orbiter.distributed.submit` span and injects W3C Baggage context into `TaskPayload.metadata['trace_context']`
-2. **Worker side:** `_execute_task()` extracts the trace context and creates a child `orbiter.distributed.execute` span linked to the submission span
+1. **Client side:** `distributed()` creates an `exo.distributed.submit` span and injects W3C Baggage context into `TaskPayload.metadata['trace_context']`
+2. **Worker side:** `_execute_task()` extracts the trace context and creates a child `exo.distributed.execute` span linked to the submission span
 3. **Inner execution:** Tool calls within the agent use the existing `@traced` decorator for nested spans
 
 ## Data Flow
@@ -281,7 +281,7 @@ Distributed tracing spans the full task lifecycle from submission to execution:
 Client                          Redis                          Worker
   |                               |                              |
   |-- distributed(agent, input) ->|                              |
-  |   XADD orbiter:tasks          |                              |
+  |   XADD exo:tasks          |                              |
   |                               |<-- XREADGROUP (blocking) --- |
   |                               |--- TaskPayload ------------>|
   |                               |                              |
@@ -293,7 +293,7 @@ Client                          Redis                          Worker
   |                               |<-- HSET COMPLETED --------- |
   |                               |<-- XACK ------------------- |
   |-- handle.result() ---------->|                              |
-  |   HGETALL orbiter:task:{id}   |                              |
+  |   HGETALL exo:task:{id}   |                              |
   |<-- TaskResult ---------------|                              |
 ```
 
@@ -321,11 +321,11 @@ In Temporal mode, the worker submits a `AgentExecutionWorkflow` to Temporal inst
 
 | Key Pattern | Type | Purpose | TTL |
 |-------------|------|---------|-----|
-| `orbiter:tasks` | Stream | Task queue (consumer group) | None |
-| `orbiter:tasks:group` | Consumer Group | Worker task distribution | N/A |
-| `orbiter:task:{task_id}` | Hash | Task status and result | 24h |
-| `orbiter:task:index` | Set | Task ID index for listing | None |
-| `orbiter:events:{task_id}` | Pub/Sub Channel | Live event streaming | N/A |
-| `orbiter:stream:{task_id}` | Stream | Persistent event replay | 1h |
-| `orbiter:cancel:{task_id}` | Pub/Sub Channel | Cancel signal delivery | N/A |
-| `orbiter:workers:{worker_id}` | Hash | Worker health/heartbeat | 30s |
+| `exo:tasks` | Stream | Task queue (consumer group) | None |
+| `exo:tasks:group` | Consumer Group | Worker task distribution | N/A |
+| `exo:task:{task_id}` | Hash | Task status and result | 24h |
+| `exo:task:index` | Set | Task ID index for listing | None |
+| `exo:events:{task_id}` | Pub/Sub Channel | Live event streaming | N/A |
+| `exo:stream:{task_id}` | Stream | Persistent event replay | 1h |
+| `exo:cancel:{task_id}` | Pub/Sub Channel | Cancel signal delivery | N/A |
+| `exo:workers:{worker_id}` | Hash | Worker health/heartbeat | 30s |

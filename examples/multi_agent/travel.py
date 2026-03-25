@@ -10,7 +10,7 @@ Usage:
     uv run python examples/multi_agent/travel.py
 """
 
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 # --- Specialist agents ---------------------------------------------------
 

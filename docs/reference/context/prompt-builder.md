@@ -1,11 +1,11 @@
-# orbiter.context.prompt_builder
+# exo.context.prompt_builder
 
 Compose neurons in priority order to build rich system prompts.
 
 ## Module Path
 
 ```python
-from orbiter.context.prompt_builder import PromptBuilder, PromptBuilderError
+from exo.context.prompt_builder import PromptBuilder, PromptBuilderError
 ```
 
 ---
@@ -115,7 +115,7 @@ Remove all registered neuron entries.
 
 ```python
 import asyncio
-from orbiter.context import Context, PromptBuilder
+from exo.context import Context, PromptBuilder
 
 async def main():
     ctx = Context("task-1")
@@ -159,7 +159,7 @@ asyncio.run(main())
 When a `DynamicVariableRegistry` is provided, `${path}` placeholders in the final prompt are resolved:
 
 ```python
-from orbiter.context.variables import DynamicVariableRegistry
+from exo.context.variables import DynamicVariableRegistry
 
 variables = DynamicVariableRegistry()
 variables.register("user.name", lambda state: state.get("user_name", "User"))

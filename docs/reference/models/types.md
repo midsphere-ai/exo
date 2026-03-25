@@ -1,11 +1,11 @@
-# orbiter.models.types
+# exo.models.types
 
 Provider-agnostic model response types. These define the contract between LLM provider implementations and the agent core.
 
 ## Module Path
 
 ```python
-from orbiter.models.types import (
+from exo.models.types import (
     ModelError,
     FinishReason,
     ModelResponse,
@@ -20,7 +20,7 @@ from orbiter.models.types import (
 
 Exception raised when an LLM provider call fails.
 
-**Inherits:** `orbiter.types.OrbiterError`
+**Inherits:** `exo.types.ExoError`
 
 ### Constructor
 
@@ -44,7 +44,7 @@ ModelError(message: str, *, model: str = "", code: str = "")
 ### Example
 
 ```python
-from orbiter.models.types import ModelError
+from exo.models.types import ModelError
 
 try:
     response = await provider.complete(messages)
@@ -202,9 +202,9 @@ async for chunk in await provider.stream(messages):
 
 ---
 
-## Related Types (from orbiter.types)
+## Related Types (from exo.types)
 
-These types are used in the models API but defined in `orbiter-core`:
+These types are used in the models API but defined in `exo-core`:
 
 - **`Usage`** -- Token usage statistics with `input_tokens`, `output_tokens`, `total_tokens` fields
 - **`ToolCall`** -- A tool invocation request with `id`, `name`, `arguments` fields

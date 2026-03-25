@@ -1,11 +1,11 @@
-# orbiter.config
+# exo.config
 
-Configuration types for models, agents, tasks, and runs in the Orbiter framework.
+Configuration types for models, agents, tasks, and runs in the Exo framework.
 
-**Module:** `orbiter.config`
+**Module:** `exo.config`
 
 ```python
-from orbiter.config import (
+from exo.config import (
     parse_model_string,
     ModelConfig,
     AgentConfig,
@@ -39,7 +39,7 @@ A `(provider, model_name)` tuple of strings.
 ### Example
 
 ```python
-from orbiter.config import parse_model_string
+from exo.config import parse_model_string
 
 provider, model_name = parse_model_string("openai:gpt-4o")
 # provider = "openai", model_name = "gpt-4o"
@@ -75,7 +75,7 @@ Configuration for an LLM provider connection. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.config import ModelConfig
+from exo.config import ModelConfig
 
 config = ModelConfig(
     provider="openai",
@@ -118,7 +118,7 @@ Configuration for an Agent. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.config import AgentConfig
+from exo.config import AgentConfig
 
 config = AgentConfig(
     name="researcher",
@@ -154,7 +154,7 @@ Configuration for a task. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.config import TaskConfig
+from exo.config import TaskConfig
 
 config = TaskConfig(
     name="summarize",
@@ -184,7 +184,7 @@ Configuration for a single run invocation. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.config import RunConfig
+from exo.config import RunConfig
 
 config = RunConfig(
     max_steps=20,

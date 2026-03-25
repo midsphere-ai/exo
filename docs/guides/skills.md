@@ -5,7 +5,7 @@ Skills are reusable capability packages defined as markdown files with YAML fron
 ## Basic Usage
 
 ```python
-from orbiter.skills import SkillRegistry
+from exo.skills import SkillRegistry
 
 registry = SkillRegistry()
 registry.register_source("/path/to/my/skills")
@@ -105,7 +105,7 @@ class SkillRegistry:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `conflict` | `ConflictStrategy \| str` | `"keep_first"` | How to handle duplicate skill names |
-| `cache_dir` | `Path \| None` | `~/.orbiter/skills/` | Directory for caching GitHub clones |
+| `cache_dir` | `Path \| None` | `~/.exo/skills/` | Directory for caching GitHub clones |
 
 ### Registering Sources
 
@@ -176,7 +176,7 @@ all_skills = registry.skills
 When the same skill name appears in multiple sources, the conflict strategy determines what happens:
 
 ```python
-from orbiter.skills import ConflictStrategy, SkillRegistry
+from exo.skills import ConflictStrategy, SkillRegistry
 
 # Keep the first occurrence (default)
 registry = SkillRegistry(conflict=ConflictStrategy.KEEP_FIRST)
@@ -228,7 +228,7 @@ https://github.com/{owner}/{repo}/tree/{branch}/{subdir}
 
 ### Cache Directory
 
-Cloned repositories are cached at `~/.orbiter/skills/{owner}/{repo}/{branch}/`. You can customize the cache location:
+Cloned repositories are cached at `~/.exo/skills/{owner}/{repo}/{branch}/`. You can customize the cache location:
 
 ```python
 from pathlib import Path
@@ -241,7 +241,7 @@ registry = SkillRegistry(cache_dir=Path("/tmp/skill-cache"))
 The `extract_front_matter()` function parses YAML front-matter from skill files:
 
 ```python
-from orbiter.skills import extract_front_matter
+from exo.skills import extract_front_matter
 
 text = """---
 name: my_skill
@@ -279,7 +279,7 @@ The registry recursively walks the directory tree looking for files named `skill
 ## Error Handling
 
 ```python
-from orbiter.skills import SkillError, SkillRegistry
+from exo.skills import SkillError, SkillRegistry
 
 registry = SkillRegistry(conflict="raise")
 
@@ -307,9 +307,9 @@ except SkillError as e:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `Skill` | `orbiter.skills` | A loaded skill with metadata and usage content |
-| `SkillRegistry` | `orbiter.skills` | Multi-source skill registry |
-| `ConflictStrategy` | `orbiter.skills` | Enum for duplicate name handling |
-| `SkillError` | `orbiter.skills` | Skill loading/registry error |
-| `extract_front_matter()` | `orbiter.skills` | Parse YAML front-matter from markdown |
-| `parse_github_url()` | `orbiter.skills` | Parse a GitHub URL into components |
+| `Skill` | `exo.skills` | A loaded skill with metadata and usage content |
+| `SkillRegistry` | `exo.skills` | Multi-source skill registry |
+| `ConflictStrategy` | `exo.skills` | Enum for duplicate name handling |
+| `SkillError` | `exo.skills` | Skill loading/registry error |
+| `extract_front_matter()` | `exo.skills` | Parse YAML front-matter from markdown |
+| `parse_github_url()` | `exo.skills` | Parse a GitHub URL into components |

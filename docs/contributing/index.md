@@ -1,13 +1,13 @@
-# Contributing to Orbiter
+# Contributing to Exo
 
-Thank you for your interest in contributing to Orbiter. This section covers everything you need to get started.
+Thank you for your interest in contributing to Exo. This section covers everything you need to get started.
 
 ## Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/anthropics/orbiter.git
-cd orbiter
+git clone https://github.com/anthropics/exo.git
+cd exo
 
 # Install dependencies (requires UV)
 uv sync
@@ -19,7 +19,7 @@ uv run pytest
 uv run ruff check packages/
 
 # Run type checking
-uv run pyright packages/orbiter-core/
+uv run pyright packages/exo-core/
 ```
 
 ## Contribution Areas
@@ -41,7 +41,7 @@ uv run pyright packages/orbiter-core/
    ```bash
    uv run pytest                           # tests
    uv run ruff check packages/             # linting
-   uv run pyright packages/orbiter-core/   # type checking
+   uv run pyright packages/exo-core/   # type checking
    ```
 6. **Commit with a descriptive message** following conventional commits:
    ```
@@ -56,7 +56,7 @@ uv run pyright packages/orbiter-core/
 Before contributing, read the [Architecture Overview](../architecture/index.md) to understand:
 
 - The 13-package monorepo structure
-- The dependency DAG (orbiter-core at the bottom, everything depends on it)
+- The dependency DAG (exo-core at the bottom, everything depends on it)
 - The execution flow (run -> call_runner -> agent.run -> tool loop)
 - The design decisions (why single Agent class, why async-first, etc.)
 
@@ -66,4 +66,4 @@ Before contributing, read the [Architecture Overview](../architecture/index.md) 
 - **Async-first.** All internal functions are `async def`. No sync/async duplication.
 - **Type-safe.** Full pyright strict-mode compliance. All public functions must have type hints.
 - **Composition over inheritance.** Max 2 levels of inheritance. Prefer tools, hooks, and processors.
-- **Zero heavy deps in core.** `orbiter-core` depends only on `pydantic`. Provider SDKs live in `orbiter-models`.
+- **Zero heavy deps in core.** `exo-core` depends only on `pydantic`. Provider SDKs live in `exo-models`.

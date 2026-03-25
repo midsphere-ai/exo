@@ -1,11 +1,11 @@
-# orbiter.memory.long_term
+# exo.memory.long_term
 
 Persistent knowledge across sessions with async LLM extraction.
 
 ## Module Path
 
 ```python
-from orbiter.memory.long_term import (
+from exo.memory.long_term import (
     LongTermMemory,
     ExtractionType,
     Extractor,
@@ -277,7 +277,7 @@ def list_tasks(self, *, status: TaskStatus | None = None) -> list[ExtractionTask
 
 ```python
 import asyncio
-from orbiter.memory import (
+from exo.memory import (
     LongTermMemory, MemoryOrchestrator, OrchestratorConfig,
     ExtractionType, HumanMemory, AIMemory,
 )

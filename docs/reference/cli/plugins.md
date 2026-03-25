@@ -1,14 +1,14 @@
-# orbiter_cli.plugins
+# exo_cli.plugins
 
-Plugin system for extending Orbiter CLI functionality. Plugins hook into CLI lifecycle events (startup, pre-run, post-run, shutdown) and can register additional commands or modify agent configuration.
+Plugin system for extending Exo CLI functionality. Plugins hook into CLI lifecycle events (startup, pre-run, post-run, shutdown) and can register additional commands or modify agent configuration.
 
 ```python
-from orbiter_cli.plugins import PluginError, PluginHook, PluginManager, PluginSpec
+from exo_cli.plugins import PluginError, PluginHook, PluginManager, PluginSpec
 ```
 
 **Discovery sources:**
 
-1. **Entry points** -- packages declaring the `orbiter.plugins` group in their metadata (e.g. `[project.entry-points."orbiter.plugins"]`).
+1. **Entry points** -- packages declaring the `exo.plugins` group in their metadata (e.g. `[project.entry-points."exo.plugins"]`).
 2. **Python files** -- `.py` files in a plugins directory, each exporting a `plugin` attribute conforming to `PluginSpec`.
 
 ---
@@ -83,7 +83,7 @@ Async callable invoked at a plugin hook point.
 ### Example
 
 ```python
-from orbiter_cli import PluginSpec, PluginHook
+from exo_cli import PluginSpec, PluginHook
 
 async def on_startup(**kwargs):
     print("Plugin starting up!")
@@ -154,7 +154,7 @@ Register a plugin spec.
 def load_entrypoints(self) -> int
 ```
 
-Discover and load plugins from `orbiter.plugins` entry points. Each entry point should reference a `PluginSpec` instance or a callable returning one.
+Discover and load plugins from `exo.plugins` entry points. Each entry point should reference a `PluginSpec` instance or a callable returning one.
 
 **Returns:** `int` -- Number of plugins successfully loaded.
 
@@ -206,7 +206,7 @@ Run the `SHUTDOWN` hook on all plugins.
 ### Example
 
 ```python
-from orbiter_cli import PluginManager
+from exo_cli import PluginManager
 
 manager = PluginManager()
 
@@ -235,14 +235,14 @@ for name, spec in manager.plugins.items():
 In `pyproject.toml`:
 
 ```toml
-[project.entry-points."orbiter.plugins"]
+[project.entry-points."exo.plugins"]
 my_plugin = "my_package.plugin:plugin"
 ```
 
 In `my_package/plugin.py`:
 
 ```python
-from orbiter_cli import PluginSpec, PluginHook
+from exo_cli import PluginSpec, PluginHook
 
 async def on_startup(**kwargs):
     print("My plugin started!")

@@ -1,10 +1,10 @@
 # API Reference
 
-Complete API reference for the Orbiter framework.
+Complete API reference for the Exo framework.
 
 ## Packages
 
-### [orbiter-core](core/index.md)
+### [exo-core](core/index.md)
 
 The foundational package providing agents, tools, runners, swarms, hooks, events, configuration, and the type system. Everything you need to build and run LLM-powered agents.
 
@@ -25,7 +25,7 @@ The foundational package providing agents, tools, runners, swarms, hooks, events
 | [loader](core/loader.md) | YAML agent and swarm loader with variable substitution |
 | [skills](core/skills.md) | Multi-source skill registry for loading skills from local paths and GitHub |
 
-### [orbiter-core Internal](core-internal/index.md)
+### [exo-core Internal](core-internal/index.md)
 
 Internal modules that power the public API. These are implementation details subject to change without notice.
 

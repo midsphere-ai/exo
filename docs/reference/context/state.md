@@ -1,11 +1,11 @@
-# orbiter.context.state
+# exo.context.state
 
 Hierarchical key-value state with parent inheritance.
 
 ## Module Path
 
 ```python
-from orbiter.context.state import ContextState
+from exo.context.state import ContextState
 ```
 
 ---
@@ -153,7 +153,7 @@ All accessible keys (local + parent chain).
 ### Example
 
 ```python
-from orbiter.context.state import ContextState
+from exo.context.state import ContextState
 
 # Parent state
 parent = ContextState({"color": "blue", "size": 10})

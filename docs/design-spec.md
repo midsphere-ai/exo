@@ -1,13 +1,13 @@
-# Orbiter Design Specification
+# Exo Design Specification
 
 ## 1. Target API
 
-Orbiter's API draws from the best of **OpenAI Agents SDK** (clean Runner pattern, first-class handoffs), **Google ADK** (explicit workflow primitives), and **Pydantic AI** (dependency injection, model string convention). It rejects CrewAI's role-playing metaphor and excessive configuration.
+Exo's API draws from the best of **OpenAI Agents SDK** (clean Runner pattern, first-class handoffs), **Google ADK** (explicit workflow primitives), and **Pydantic AI** (dependency injection, model string convention). It rejects CrewAI's role-playing metaphor and excessive configuration.
 
 ### 1.1 Agent Definition
 
 ```python
-from orbiter import Agent
+from exo import Agent
 
 # Minimal — just a model and instructions
 agent = Agent(
@@ -52,7 +52,7 @@ agent = Agent(
 **Primary: `@tool` decorator** (module-level, like OpenAI Agents SDK):
 
 ```python
-from orbiter import tool
+from exo import tool
 
 @tool
 def get_weather(city: str, unit: str = "celsius") -> str:
@@ -80,7 +80,7 @@ async def search_web(query: str) -> list[str]:
 **Secondary: `Tool` base class** (for complex tools):
 
 ```python
-from orbiter import Tool
+from exo import Tool
 
 class DatabaseQuery(Tool):
     name = "query_database"
@@ -93,7 +93,7 @@ class DatabaseQuery(Tool):
 ### 1.3 Running Agents
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="assistant", model="openai:gpt-4o", instructions="Be helpful.")
 
@@ -123,7 +123,7 @@ result = await run(agent, "What about tomorrow?", messages=result.messages)
 **Workflow** (sequential/parallel DAG — like Google ADK's SequentialAgent):
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", ...)
 writer = Agent(name="writer", ...)
@@ -168,7 +168,7 @@ result = await run(team, "Research and report on market trends")
 
 ### 1.5 Context Engine
 
-The context engine (rewritten clean from AWorld's AMNI system) is Orbiter's "digital brain" for agent execution. It manages runtime state, composable prompt building, hierarchical task decomposition, knowledge retrieval (RAG), workspace artifacts, token tracking, and checkpoint/restore. Unlike simple context managers in other frameworks, Orbiter's context is an **active system** that optimizes what goes into the LLM context window.
+The context engine (rewritten clean from AWorld's AMNI system) is Exo's "digital brain" for agent execution. It manages runtime state, composable prompt building, hierarchical task decomposition, knowledge retrieval (RAG), workspace artifacts, token tracking, and checkpoint/restore. Unlike simple context managers in other frameworks, Exo's context is an **active system** that optimizes what goes into the LLM context window.
 
 **Core design principles:**
 - Context isn't just a container — it actively manages execution state, memory, and LLM interaction
@@ -180,7 +180,7 @@ The context engine (rewritten clean from AWorld's AMNI system) is Orbiter's "dig
 #### 1.5.1 Context Creation & Configuration
 
 ```python
-from orbiter.context import Context, ContextConfig
+from exo.context import Context, ContextConfig
 
 # Configure context automation level
 config = ContextConfig(
@@ -240,7 +240,7 @@ ctx.merge(child_ctx)
 Neurons are modular prompt components that build rich system prompts from context. Each neuron produces a prompt fragment; they compose in priority order.
 
 ```python
-from orbiter.context import PromptBuilder
+from exo.context import PromptBuilder
 
 builder = PromptBuilder(ctx)
 builder.add("system", "You are a helpful assistant.")
@@ -270,7 +270,7 @@ prompt = await builder.build()
 Custom neurons:
 
 ```python
-from orbiter.context import Neuron, neuron_registry
+from exo.context import Neuron, neuron_registry
 
 @neuron_registry.register("custom_domain")
 class DomainNeuron(Neuron):
@@ -286,7 +286,7 @@ class DomainNeuron(Neuron):
 Processors intervene at specific points in the LLM execution cycle. They transform context before/after LLM calls and tool execution.
 
 ```python
-from orbiter.context import ContextProcessor
+from exo.context import ContextProcessor
 
 class ToolResultOffloader(ContextProcessor):
     """Offload large tool results to workspace to save context window."""
@@ -398,7 +398,7 @@ checkpoints = await ctx.list_checkpoints()
 Special tools that let agents manipulate their own context during execution.
 
 ```python
-from orbiter.context.tools import planning_tool, knowledge_tool
+from exo.context.tools import planning_tool, knowledge_tool
 
 agent = Agent(
     name="researcher",
@@ -414,8 +414,8 @@ agent = Agent(
 #### 1.5.10 Integration with Agent
 
 ```python
-from orbiter import Agent, run
-from orbiter.context import Context, ContextConfig
+from exo import Agent, run
+from exo.context import Context, ContextConfig
 
 ctx = Context(
     task_id="research-task",
@@ -451,41 +451,41 @@ result = await run(agent, "Research quantum computing")
 
 ```python
 # Core — everything most users need
-from orbiter import Agent, Swarm, Tool, tool, run
-from orbiter.types import (
+from exo import Agent, Swarm, Tool, tool, run
+from exo.types import (
     UserMessage, AssistantMessage, SystemMessage,
     ToolCall, ToolResult, Message,
     RunResult, StreamEvent, TextEvent, ToolCallEvent,
 )
-from orbiter.config import AgentConfig, ModelConfig
-from orbiter.registry import Registry, agent_registry, tool_registry
-from orbiter.events import EventBus
-from orbiter.hooks import Hook, HookPoint
+from exo.config import AgentConfig, ModelConfig
+from exo.registry import Registry, agent_registry, tool_registry
+from exo.events import EventBus
+from exo.hooks import Hook, HookPoint
 
 # Models
-from orbiter.models import ModelResponse, StreamChunk, ModelError, FinishReason
-from orbiter.models import ModelProvider, get_provider
+from exo.models import ModelResponse, StreamChunk, ModelError, FinishReason
+from exo.models import ModelProvider, get_provider
 
 # Context engine
-from orbiter.context import Context, ContextConfig, PromptBuilder, ContextProcessor
+from exo.context import Context, ContextConfig, PromptBuilder, ContextProcessor
 
 # Memory
-from orbiter.memory import ShortTermMemory, LongTermMemory
+from exo.memory import ShortTermMemory, LongTermMemory
 
 # MCP
-from orbiter.mcp import mcp_tools, MCPClient
+from exo.mcp import mcp_tools, MCPClient
 
 # Sandbox
-from orbiter.sandbox import Sandbox, LocalSandbox
+from exo.sandbox import Sandbox, LocalSandbox
 
 # Trace
-from orbiter.trace import traced, trace_span, TraceConfig
+from exo.trace import traced, trace_span, TraceConfig
 
 # Eval
-from orbiter.eval import Evaluator, Scorer, EvalResult
+from exo.eval import Evaluator, Scorer, EvalResult
 
 # A2A
-from orbiter.a2a import A2AServer, A2AClient
+from exo.a2a import A2AServer, A2AClient
 ```
 
 ---
@@ -495,7 +495,7 @@ from orbiter.a2a import A2AServer, A2AClient
 ### 2.1 Execution Flow
 
 ```
-User code                    orbiter internals
+User code                    exo internals
 ─────────                    ─────────────────
 run(agent, input)
   │
@@ -532,10 +532,10 @@ run(agent, input)
 ### 2.2 Module Dependency Graph
 
 ```
-orbiter-core (zero external deps except pydantic)
+exo-core (zero external deps except pydantic)
   ├── types.py          → no internal deps
   ├── config.py         → types
-  ├── registry.py       → types (OrbiterError)
+  ├── registry.py       → types (ExoError)
   ├── events.py         → no internal deps
   ├── hooks.py          → types
   ├── tool.py           → types, registry
@@ -549,12 +549,12 @@ orbiter-core (zero external deps except pydantic)
       ├── state.py           → types
       └── graph.py           → no internal deps
 
-orbiter-models  → orbiter-core (types, config)
-  ├── types.py          → orbiter-core types (ToolCall, Usage, OrbiterError)
+exo-models  → exo-core (types, config)
+  ├── types.py          → exo-core types (ToolCall, Usage, ExoError)
   ├── provider.py       → types (ModelResponse, StreamChunk)
   ├── openai.py         → provider, types
   └── anthropic.py      → provider, types
-orbiter-context → orbiter-core (types, hooks, events), orbiter-memory (storage backends)
+exo-context → exo-core (types, hooks, events), exo-memory (storage backends)
   ├── context.py        → types, config
   ├── config.py         → no internal deps
   ├── prompt_builder.py → context, types
@@ -562,20 +562,20 @@ orbiter-context → orbiter-core (types, hooks, events), orbiter-memory (storage
   ├── state.py          → types
   ├── workspace.py      → no internal deps
   └── checkpoint.py     → context, state
-orbiter-memory  → orbiter-core (types)
-orbiter-mcp     → orbiter-core (tool)
-orbiter-sandbox → orbiter-core (tool)
-orbiter-trace   → orbiter-core (hooks)
-orbiter-eval    → orbiter-core (types)
-orbiter-a2a     → orbiter-core (agent, runner)
-orbiter-cli     → orbiter-core, orbiter-models
-orbiter-server  → orbiter-core, orbiter-models
-orbiter-train   → orbiter-core, orbiter-models
+exo-memory  → exo-core (types)
+exo-mcp     → exo-core (tool)
+exo-sandbox → exo-core (tool)
+exo-trace   → exo-core (hooks)
+exo-eval    → exo-core (types)
+exo-a2a     → exo-core (agent, runner)
+exo-cli     → exo-core, exo-models
+exo-server  → exo-core, exo-models
+exo-train   → exo-core, exo-models
 ```
 
 ### 2.3 Key Simplifications Over AWorld
 
-| AWorld Pattern | Orbiter Pattern | Why |
+| AWorld Pattern | Exo Pattern | Why |
 |---|---|---|
 | `Message[DataType]` with 15 fields, stringly-typed `category`/`topic` routing | Typed message classes (`UserMessage`, `AssistantMessage`, etc.) as simple Pydantic models | Type safety, no routing bugs |
 | `ConfigDict(dict)` + `BaseConfig` + Pydantic models mixed | Pydantic v2 models only | One config system, not three |
@@ -677,7 +677,7 @@ Rules:
 
 ```python
 # Good — specific exceptions with context
-class ToolExecutionError(OrbiterError):
+class ToolExecutionError(ExoError):
     """Raised when a tool fails during execution."""
 
     def __init__(self, tool_name: str, cause: Exception):
@@ -693,7 +693,7 @@ except Exception as e:
 ```
 
 Rules:
-- All Orbiter exceptions inherit from `OrbiterError` (defined in `orbiter/types.py`)
+- All Exo exceptions inherit from `ExoError` (defined in `exo/types.py`)
 - Include the thing that failed (tool name, agent name, provider) in the message
 - Use `from e` for exception chaining
 - Never silently swallow exceptions — log or re-raise
@@ -703,7 +703,7 @@ Rules:
 
 ```python
 import pytest
-from orbiter import Agent, tool, run
+from exo import Agent, tool, run
 
 # Test file naming: test_<module>.py
 # Test function naming: test_<what>_<scenario>
@@ -736,7 +736,7 @@ Rules:
 - Test the public API surface, not internal methods
 - Use `@pytest.fixture` for shared setup
 - Aim for ~1 test file per source file, ~5-15 tests per file
-- Test file names must be unique across all packages (e.g., `test_model_types.py` not `test_types.py` if orbiter-core already has one). Pytest uses `--import-mode=importlib` to handle multiple `tests/` packages.
+- Test file names must be unique across all packages (e.g., `test_model_types.py` not `test_types.py` if exo-core already has one). Pytest uses `--import-mode=importlib` to handle multiple `tests/` packages.
 - For cross-namespace-package imports in test files, add `# pyright: ignore[reportMissingImports]` on the import line (pyright can't resolve `.pth`-based editable installs)
 
 ### 3.6 File Size Guidelines
@@ -753,10 +753,10 @@ Rules:
 ### 4.1 Package Layout
 
 ```
-packages/orbiter-core/
+packages/exo-core/
 ├── pyproject.toml
 ├── src/
-│   └── orbiter/
+│   └── exo/
 │       ├── __init__.py          # re-exports: Agent, Swarm, Tool, tool, run
 │       ├── types.py             # Message types, RunResult, StreamEvent
 │       ├── config.py            # AgentConfig, ModelConfig, TaskConfig
@@ -790,10 +790,10 @@ packages/orbiter-core/
 ```
 
 ```
-packages/orbiter-context/
+packages/exo-context/
 ├── pyproject.toml
 ├── src/
-│   └── orbiter/
+│   └── exo/
 │       └── context/
 │           ├── __init__.py          # re-exports: Context, ContextConfig, PromptBuilder, etc.
 │           ├── context.py           # Context class — runtime execution context
@@ -826,10 +826,10 @@ packages/orbiter-context/
 ```
 
 ```
-packages/orbiter-models/
+packages/exo-models/
 ├── pyproject.toml
 ├── src/
-│   └── orbiter/
+│   └── exo/
 │       └── models/
 │           ├── __init__.py          # re-exports: ModelError, ModelResponse, StreamChunk, etc.
 │           ├── types.py             # ModelError, FinishReason, ModelResponse, ToolCallDelta, StreamChunk
@@ -844,25 +844,25 @@ packages/orbiter-models/
 ### 4.2 `__init__.py` Pattern
 
 ```python
-"""Orbiter Core: Agent, Tool, Runner, Config, Events, Hooks, Swarm."""
+"""Exo Core: Agent, Tool, Runner, Config, Events, Hooks, Swarm."""
 
 from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
 __version__ = "0.1.0"
 
-# Public API — these are what users import from `orbiter`
-from orbiter.agent import Agent
-from orbiter.runner import run
-from orbiter.swarm import Swarm
-from orbiter.tool import Tool, tool
+# Public API — these are what users import from `exo`
+from exo.agent import Agent
+from exo.runner import run
+from exo.swarm import Swarm
+from exo.tool import Tool, tool
 ```
 
 Rules:
 - `__init__.py` is the **public API surface** — only export what users need
 - Use `__all__` if the export list is ambiguous
 - Never put logic in `__init__.py`
-- Subpackages (`orbiter.models`, `orbiter.memory`, etc.) follow the same pattern
+- Subpackages (`exo.models`, `exo.memory`, etc.) follow the same pattern
 
 ### 4.3 Naming Conventions
 
@@ -887,14 +887,14 @@ Provider and model are specified as a single string: `"provider:model_name"`.
 "anthropic:claude-haiku-3-20240307"
 ```
 
-Parsed by `parse_model_string()` in `orbiter.config` (and by `get_provider()` in `orbiter-models`). If no prefix, defaults to `"openai"`.
+Parsed by `parse_model_string()` in `exo.config` (and by `get_provider()` in `exo-models`). If no prefix, defaults to `"openai"`.
 
 ### 4.5 Dependency Rules
 
-1. **`orbiter-core` has ZERO heavy dependencies** — only `pydantic`. No `openai`, no `anthropic`, no `httpx`.
-2. Provider SDKs live in `orbiter-models` only.
+1. **`exo-core` has ZERO heavy dependencies** — only `pydantic`. No `openai`, no `anthropic`, no `httpx`.
+2. Provider SDKs live in `exo-models` only.
 3. Optional heavy deps (chromadb, kubernetes, etc.) are declared as extras.
-4. Internal packages depend on `orbiter-core` but NOT on each other (no `orbiter-models` → `orbiter-memory` dep).
+4. Internal packages depend on `exo-core` but NOT on each other (no `exo-models` → `exo-memory` dep).
 5. `_internal/` modules are never imported from outside their package.
 
 ---

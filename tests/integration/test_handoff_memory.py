@@ -33,13 +33,13 @@ async def test_three_agent_chain_all_messages_persisted(
     After the full A→B→C handoff chain runs, the shared store should
     contain items from all three agents, identifiable by agent_id metadata.
     """
-    from orbiter import Swarm  # pyright: ignore[reportMissingImports]
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo import Swarm  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 

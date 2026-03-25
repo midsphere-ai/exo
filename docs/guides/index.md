@@ -1,6 +1,6 @@
-# Orbiter Framework Guides
+# Exo Framework Guides
 
-Comprehensive guides covering every feature of the Orbiter multi-agent framework.
+Comprehensive guides covering every feature of the Exo multi-agent framework.
 
 ## Core Concepts
 
@@ -92,14 +92,14 @@ Comprehensive guides covering every feature of the Orbiter multi-agent framework
 
 ## Quick Reference
 
-All framework types live in `orbiter.types`:
+All framework types live in `exo.types`:
 
 - **Messages:** `UserMessage`, `SystemMessage`, `AssistantMessage`, `ToolResult`
 - **Execution:** `AgentOutput`, `RunResult`, `ActionModel`
 - **Streaming:** `TextEvent`, `ToolCallEvent`, `StreamEvent`
 - **Stats:** `Usage`
 
-Configuration types live in `orbiter.config`:
+Configuration types live in `exo.config`:
 
 - `ModelConfig`, `AgentConfig`, `TaskConfig`, `RunConfig`
 - `parse_model_string()` -- split `"provider:model"` strings

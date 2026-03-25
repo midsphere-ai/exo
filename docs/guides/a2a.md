@@ -1,13 +1,13 @@
 # Agent-to-Agent (A2A)
 
-The `orbiter-a2a` package implements the Agent-to-Agent protocol, enabling agents to discover, communicate with, and delegate tasks to other agents over HTTP. It provides an `A2AServer` for exposing agents as network services, an `A2AClient` for consuming them, and a `RemoteAgent` wrapper that makes remote agents look like local ones.
+The `exo-a2a` package implements the Agent-to-Agent protocol, enabling agents to discover, communicate with, and delegate tasks to other agents over HTTP. It provides an `A2AServer` for exposing agents as network services, an `A2AClient` for consuming them, and a `RemoteAgent` wrapper that makes remote agents look like local ones.
 
 ## Basic Usage
 
 ### Server Side
 
 ```python
-from orbiter.a2a import A2AServer, AgentCard, AgentCapabilities, AgentSkill, ServingConfig
+from exo.a2a import A2AServer, AgentCard, AgentCapabilities, AgentSkill, ServingConfig
 
 # Define what your agent can do
 card = AgentCard(
@@ -35,7 +35,7 @@ await server.start()
 ### Client Side
 
 ```python
-from orbiter.a2a import A2AClient, ClientConfig
+from exo.a2a import A2AClient, ClientConfig
 
 config = ClientConfig(timeout=30.0)
 client = A2AClient(config=config)
@@ -58,7 +58,7 @@ print(result)
 An `AgentCard` describes an agent's identity, capabilities, and skills:
 
 ```python
-from orbiter.a2a import AgentCard, AgentCapabilities, AgentSkill
+from exo.a2a import AgentCard, AgentCapabilities, AgentSkill
 
 card = AgentCard(
     name="data-analyst",
@@ -120,7 +120,7 @@ Tasks follow a state machine:
 | `CANCELLED` | Cancelled by client |
 
 ```python
-from orbiter.a2a import TaskState
+from exo.a2a import TaskState
 
 # Task status updates are emitted during execution
 # TaskStatusUpdateEvent: task_id, state, message
@@ -132,7 +132,7 @@ from orbiter.a2a import TaskState
 The server uses FastAPI to expose agent capabilities:
 
 ```python
-from orbiter.a2a import A2AServer, AgentCard, ServingConfig
+from exo.a2a import A2AServer, AgentCard, ServingConfig
 
 server = A2AServer(
     card=agent_card,
@@ -159,7 +159,7 @@ server = A2AServer(
 Register an executor that handles incoming tasks:
 
 ```python
-from orbiter.a2a.server import AgentExecutor
+from exo.a2a.server import AgentExecutor
 
 class MyExecutor(AgentExecutor):
     async def execute(self, task_id: str, input: str) -> str:
@@ -178,7 +178,7 @@ server.register_executor(MyExecutor())
 The server uses an in-memory task store by default. Implement the `TaskStore` protocol for persistence:
 
 ```python
-from orbiter.a2a.server import TaskStore
+from exo.a2a.server import TaskStore
 
 class RedisTaskStore(TaskStore):
     async def create(self, task_id: str, input: str) -> None: ...
@@ -192,7 +192,7 @@ class RedisTaskStore(TaskStore):
 The client handles HTTP communication and card resolution:
 
 ```python
-from orbiter.a2a import A2AClient, ClientConfig
+from exo.a2a import A2AClient, ClientConfig
 
 client = A2AClient(
     config=ClientConfig(
@@ -217,7 +217,7 @@ async for event in client.stream_task("http://agent:8001", input="Hello"):
 `RemoteAgent` wraps an A2A client connection to make remote agents behave like local `Agent` instances:
 
 ```python
-from orbiter.a2a import RemoteAgent
+from exo.a2a import RemoteAgent
 
 remote = RemoteAgent(
     url="http://researcher:8001",
@@ -238,7 +238,7 @@ print(info["name"])  # "researcher"
 Thread-safe manager for multiple A2A client connections:
 
 ```python
-from orbiter.a2a import ClientManager
+from exo.a2a import ClientManager
 
 manager = ClientManager()
 
@@ -258,7 +258,7 @@ result = await client.send_task("http://researcher:8001", input="Find papers on 
 Use A2A to coordinate multiple specialized agents:
 
 ```python
-from orbiter.a2a import A2AClient, RemoteAgent
+from exo.a2a import A2AClient, RemoteAgent
 
 client = A2AClient()
 
@@ -303,16 +303,16 @@ print()  # final newline
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `AgentCard` | `orbiter.a2a` | Agent identity, capabilities, and skills |
-| `AgentCapabilities` | `orbiter.a2a` | Streaming, batch, push notification support |
-| `AgentSkill` | `orbiter.a2a` | Named skill with optional input schema |
-| `ServingConfig` | `orbiter.a2a` | Server configuration: host, port, CORS |
-| `ClientConfig` | `orbiter.a2a` | Client configuration: timeout, retries |
-| `A2AServer` | `orbiter.a2a` | FastAPI-based agent server |
-| `A2AClient` | `orbiter.a2a` | HTTP client for A2A communication |
-| `RemoteAgent` | `orbiter.a2a` | Agent-compatible wrapper for remote agents |
-| `ClientManager` | `orbiter.a2a` | Thread-safe multi-client manager |
-| `TaskState` | `orbiter.a2a` | Enum: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED` |
-| `TransportMode` | `orbiter.a2a` | Enum: `HTTP`, `SSE`, `WEBSOCKET` |
-| `TaskStore` | `orbiter.a2a.server` | Protocol for task persistence |
-| `AgentExecutor` | `orbiter.a2a.server` | Protocol for task execution |
+| `AgentCard` | `exo.a2a` | Agent identity, capabilities, and skills |
+| `AgentCapabilities` | `exo.a2a` | Streaming, batch, push notification support |
+| `AgentSkill` | `exo.a2a` | Named skill with optional input schema |
+| `ServingConfig` | `exo.a2a` | Server configuration: host, port, CORS |
+| `ClientConfig` | `exo.a2a` | Client configuration: timeout, retries |
+| `A2AServer` | `exo.a2a` | FastAPI-based agent server |
+| `A2AClient` | `exo.a2a` | HTTP client for A2A communication |
+| `RemoteAgent` | `exo.a2a` | Agent-compatible wrapper for remote agents |
+| `ClientManager` | `exo.a2a` | Thread-safe multi-client manager |
+| `TaskState` | `exo.a2a` | Enum: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED` |
+| `TransportMode` | `exo.a2a` | Enum: `HTTP`, `SSE`, `WEBSOCKET` |
+| `TaskStore` | `exo.a2a.server` | Protocol for task persistence |
+| `AgentExecutor` | `exo.a2a.server` | Protocol for task execution |

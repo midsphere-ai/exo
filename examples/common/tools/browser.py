@@ -15,7 +15,7 @@ import html
 import re
 from urllib.parse import quote, urlparse
 
-from orbiter import tool
+from exo import tool
 
 
 @tool
@@ -34,7 +34,7 @@ async def browse_url(url: str) -> str:
     safe_url = quote(url, safe=":/?#[]@!$&'()*+,;=-._~%")
     req = urllib.request.Request(
         safe_url,
-        headers={"User-Agent": "OrbiterBot/1.0"},
+        headers={"User-Agent": "ExoBot/1.0"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:

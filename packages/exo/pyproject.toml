@@ -1,0 +1,44 @@
+[project]
+name = "exo-ai"
+version = "0.1.0"
+description = "Exo: A modern multi-agent framework (meta-package)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "exo-core>=0.1.0",
+    "exo-models>=0.1.0",
+    "exo-memory>=0.1.0",
+    "exo-mcp>=0.1.0",
+    "exo-sandbox>=0.1.0",
+    "exo-observability>=0.1.0",
+    "exo-eval>=0.1.0",
+    "exo-a2a>=0.1.0",
+]
+
+[tool.uv.sources]
+exo-core = { workspace = true }
+exo-models = { workspace = true }
+exo-memory = { workspace = true }
+exo-mcp = { workspace = true }
+exo-sandbox = { workspace = true }
+exo-observability = { workspace = true }
+exo-eval = { workspace = true }
+exo-a2a = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/_exo_meta"]

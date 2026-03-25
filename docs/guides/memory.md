@@ -1,11 +1,11 @@
 # Memory
 
-The `orbiter-memory` package provides typed, protocol-based memory management for agents. It separates memory into short-term (conversation-scoped) and long-term (persistent, extractable) layers, with a typed hierarchy for different message roles and a status lifecycle for memory curation.
+The `exo-memory` package provides typed, protocol-based memory management for agents. It separates memory into short-term (conversation-scoped) and long-term (persistent, extractable) layers, with a typed hierarchy for different message roles and a status lifecycle for memory curation.
 
 ## Basic Usage
 
 ```python
-from orbiter.memory import (
+from exo.memory import (
     MemoryItem, MemoryMetadata, MemoryStatus,
     HumanMemory, AIMemory, SystemMemory, ToolMemory,
     ShortTermMemory,
@@ -68,7 +68,7 @@ tool_msg = ToolMemory(
 `MemoryMetadata` carries routing information for scoping and filtering:
 
 ```python
-from orbiter.memory import MemoryMetadata
+from exo.memory import MemoryMetadata
 
 metadata = MemoryMetadata(
     user_id="user-alice",
@@ -104,7 +104,7 @@ print(item.status)  # MemoryStatus.DISCARD
 `ShortTermMemory` manages recent conversation messages with scoping and windowing:
 
 ```python
-from orbiter.memory import ShortTermMemory, MemoryMetadata
+from exo.memory import ShortTermMemory, MemoryMetadata
 
 stm = ShortTermMemory(scope="session")
 
@@ -135,7 +135,7 @@ Short-term memory also maintains tool call integrity -- when windowing truncates
 `LongTermMemory` stores persistent knowledge extracted from conversations:
 
 ```python
-from orbiter.memory import LongTermMemory, ExtractionType
+from exo.memory import LongTermMemory, ExtractionType
 
 ltm = LongTermMemory()
 
@@ -162,7 +162,7 @@ Long-term memory includes deduplication -- adding a memory that is similar to an
 The `MemoryOrchestrator` coordinates extraction from conversations into long-term memory:
 
 ```python
-from orbiter.memory import MemoryOrchestrator, OrchestratorConfig
+from exo.memory import MemoryOrchestrator, OrchestratorConfig
 
 orchestrator = MemoryOrchestrator(
     config=OrchestratorConfig(
@@ -183,7 +183,7 @@ results = await orchestrator.process_all()
 When conversations grow long, use summarization to compress older messages:
 
 ```python
-from orbiter.memory import SummaryConfig, SummaryTemplate, check_trigger, generate_summary
+from exo.memory import SummaryConfig, SummaryTemplate, check_trigger, generate_summary
 
 config = SummaryConfig(
     threshold=20,          # trigger after 20 messages
@@ -213,9 +213,9 @@ Summary templates:
 `MemoryPersistence` automatically saves LLM responses and tool results to a memory store using hooks. Instead of manually adding memory items after each call, attach a `MemoryPersistence` instance to your agent and it handles persistence for both `run()` and `run.stream()`.
 
 ```python
-from orbiter.agent import Agent
-from orbiter.memory import ShortTermMemory, MemoryPersistence, MemoryMetadata, HumanMemory
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.memory import ShortTermMemory, MemoryPersistence, MemoryMetadata, HumanMemory
+from exo.runner import run
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -253,8 +253,8 @@ This is the same mechanism used internally by the [distributed worker](../distri
 Wrap any `MemoryStore` with `MemoryEventEmitter` to emit events on memory operations:
 
 ```python
-from orbiter.memory import MemoryEventEmitter
-from orbiter.events import EventBus
+from exo.memory import MemoryEventEmitter
+from exo.events import EventBus
 
 bus = EventBus()
 store = SQLiteMemoryStore(":memory:")
@@ -277,21 +277,21 @@ See [Memory Backends](memory-backends.md) for storage backend configuration (SQL
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `MemoryItem` | `orbiter.memory` | Base memory type (Pydantic model) |
-| `SystemMemory` | `orbiter.memory` | System instruction memory |
-| `HumanMemory` | `orbiter.memory` | User message memory |
-| `AIMemory` | `orbiter.memory` | Assistant response with `tool_calls` |
-| `ToolMemory` | `orbiter.memory` | Tool result with `tool_call_id`, `tool_name`, `is_error` |
-| `MemoryMetadata` | `orbiter.memory` | Routing metadata: `user_id`, `session_id`, `task_id`, `agent_id` |
-| `MemoryStatus` | `orbiter.memory` | Enum: `DRAFT`, `ACCEPTED`, `DISCARD` |
-| `MemoryStore` | `orbiter.memory` | Protocol: `add`, `get`, `search`, `clear` |
-| `ShortTermMemory` | `orbiter.memory` | Scoped, windowed conversation memory |
-| `LongTermMemory` | `orbiter.memory` | Persistent extracted knowledge with deduplication |
-| `ExtractionType` | `orbiter.memory` | Enum: `USER_PROFILE`, `AGENT_EXPERIENCE`, `FACTS` |
-| `MemoryOrchestrator` | `orbiter.memory` | Coordinates LLM extraction into long-term memory |
-| `SummaryConfig` | `orbiter.memory` | Configuration for summarization triggers |
-| `SummaryTemplate` | `orbiter.memory` | Enum: `CONVERSATION`, `FACTS`, `PROFILES` |
-| `check_trigger` | `orbiter.memory` | Check if summarization should trigger |
-| `generate_summary` | `orbiter.memory` | Generate a summary from messages |
-| `MemoryPersistence` | `orbiter.memory` | Hook-based auto-persistence for LLM responses and tool results |
-| `MemoryEventEmitter` | `orbiter.memory` | Event-emitting wrapper for any `MemoryStore` |
+| `MemoryItem` | `exo.memory` | Base memory type (Pydantic model) |
+| `SystemMemory` | `exo.memory` | System instruction memory |
+| `HumanMemory` | `exo.memory` | User message memory |
+| `AIMemory` | `exo.memory` | Assistant response with `tool_calls` |
+| `ToolMemory` | `exo.memory` | Tool result with `tool_call_id`, `tool_name`, `is_error` |
+| `MemoryMetadata` | `exo.memory` | Routing metadata: `user_id`, `session_id`, `task_id`, `agent_id` |
+| `MemoryStatus` | `exo.memory` | Enum: `DRAFT`, `ACCEPTED`, `DISCARD` |
+| `MemoryStore` | `exo.memory` | Protocol: `add`, `get`, `search`, `clear` |
+| `ShortTermMemory` | `exo.memory` | Scoped, windowed conversation memory |
+| `LongTermMemory` | `exo.memory` | Persistent extracted knowledge with deduplication |
+| `ExtractionType` | `exo.memory` | Enum: `USER_PROFILE`, `AGENT_EXPERIENCE`, `FACTS` |
+| `MemoryOrchestrator` | `exo.memory` | Coordinates LLM extraction into long-term memory |
+| `SummaryConfig` | `exo.memory` | Configuration for summarization triggers |
+| `SummaryTemplate` | `exo.memory` | Enum: `CONVERSATION`, `FACTS`, `PROFILES` |
+| `check_trigger` | `exo.memory` | Check if summarization should trigger |
+| `generate_summary` | `exo.memory` | Generate a summary from messages |
+| `MemoryPersistence` | `exo.memory` | Hook-based auto-persistence for LLM responses and tool results |
+| `MemoryEventEmitter` | `exo.memory` | Event-emitting wrapper for any `MemoryStore` |

@@ -1,6 +1,6 @@
 """FastAPI endpoint that submits a distributed task and streams SSE events.
 
-Demonstrates how to bridge Orbiter's distributed streaming with
+Demonstrates how to bridge Exo's distributed streaming with
 Server-Sent Events so a web frontend can consume agent output in
 real time.
 
@@ -9,13 +9,13 @@ Prerequisites:
     docker run -p 6379:6379 redis:7
 
     # Terminal 2 — start a worker
-    export ORBITER_REDIS_URL=redis://localhost:6379
-    orbiter start worker
+    export EXO_REDIS_URL=redis://localhost:6379
+    exo start worker
 
     # Terminal 3 — install extra deps and run this server
     pip install fastapi uvicorn
     export OPENAI_API_KEY=sk-...
-    export ORBITER_REDIS_URL=redis://localhost:6379
+    export EXO_REDIS_URL=redis://localhost:6379
     uv run uvicorn examples.distributed.fastapi_sse:app --reload
 
     # Terminal 4 — test with curl
@@ -28,11 +28,11 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 
-from orbiter import Agent, tool
-from orbiter.distributed import distributed  # pyright: ignore[reportMissingImports]
-from orbiter.types import StreamEvent
+from exo import Agent, tool
+from exo.distributed import distributed  # pyright: ignore[reportMissingImports]
+from exo.types import StreamEvent
 
-app = FastAPI(title="Orbiter Distributed SSE Example")
+app = FastAPI(title="Exo Distributed SSE Example")
 
 
 # -- Agent definition -------------------------------------------------------
@@ -57,7 +57,7 @@ agent = Agent(
 # -- SSE streaming helper ---------------------------------------------------
 
 async def _event_generator(handle_stream: AsyncIterator[StreamEvent]) -> AsyncIterator[str]:
-    """Convert Orbiter StreamEvents into SSE-formatted strings.
+    """Convert Exo StreamEvents into SSE-formatted strings.
 
     Each event is sent as a JSON object with ``type`` and ``data`` fields,
     following the standard ``text/event-stream`` format.
@@ -77,7 +77,7 @@ async def chat(message: str = Query(..., description="User message")) -> Streami
     """Submit a chat message and stream agent events as SSE.
 
     The endpoint returns a ``text/event-stream`` response.  Each SSE event
-    has a ``type`` matching the Orbiter event type (``text``, ``tool_call``,
+    has a ``type`` matching the Exo event type (``text``, ``tool_call``,
     ``tool_result``, ``status``, etc.) and a JSON ``data`` payload.
 
     Example JavaScript client::
@@ -113,9 +113,9 @@ async def task_status(task_id: str) -> dict:
     """
     import os
 
-    from orbiter.distributed import TaskStore  # pyright: ignore[reportMissingImports]
+    from exo.distributed import TaskStore  # pyright: ignore[reportMissingImports]
 
-    redis_url = os.environ["ORBITER_REDIS_URL"]
+    redis_url = os.environ["EXO_REDIS_URL"]
     store = TaskStore(redis_url)
     await store.connect()
     try:

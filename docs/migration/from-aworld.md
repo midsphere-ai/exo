@@ -1,24 +1,24 @@
-# Migrating from AWorld to Orbiter
+# Migrating from AWorld to Exo
 
-This guide provides detailed, side-by-side examples for migrating every major AWorld pattern to its Orbiter equivalent.
+This guide provides detailed, side-by-side examples for migrating every major AWorld pattern to its Exo equivalent.
 
 ## Package Mapping
 
-| AWorld | Orbiter | Notes |
+| AWorld | Exo | Notes |
 |--------|---------|-------|
-| `aworld` (monolith) | `orbiter` (meta-package) | Split into 13 focused packages |
-| `aworld.agents` | `orbiter.agent` | Single `Agent` class replaces 5 agent types |
-| `aworld.core.tool` | `orbiter.tool` | `@tool` decorator, `FunctionTool`, `Tool` ABC |
-| `aworld.runner` | `orbiter.runner` | `run()`, `run.sync()`, `run.stream()` |
-| `aworld.models` | `orbiter.models` | `get_provider("openai:gpt-4o")` factory |
-| `aworld.core.context.amni` | `orbiter.context` | Clean rewrite -- neurons, processors, workspace |
-| `aworld.memory` | `orbiter.memory` | Short/long-term, SQLite/Postgres backends |
-| `aworld.mcp_client` | `orbiter.mcp` | MCP client + `@mcp_server` decorator |
-| `aworld.sandbox` | `orbiter.sandbox` | Local + Kubernetes sandboxes |
-| `aworld.trace` | `orbiter.trace` | OpenTelemetry-based tracing |
-| `aworld.evaluations` | `orbiter.eval` | Scorers, reflection, evaluator |
-| `aworld.ralph_loop` | `orbiter.ralph` | Ralph loop -- state, detectors, runner |
-| `aworld.experimental.a2a` | `orbiter.a2a` | Agent-to-Agent protocol |
+| `aworld` (monolith) | `exo` (meta-package) | Split into 13 focused packages |
+| `aworld.agents` | `exo.agent` | Single `Agent` class replaces 5 agent types |
+| `aworld.core.tool` | `exo.tool` | `@tool` decorator, `FunctionTool`, `Tool` ABC |
+| `aworld.runner` | `exo.runner` | `run()`, `run.sync()`, `run.stream()` |
+| `aworld.models` | `exo.models` | `get_provider("openai:gpt-4o")` factory |
+| `aworld.core.context.amni` | `exo.context` | Clean rewrite -- neurons, processors, workspace |
+| `aworld.memory` | `exo.memory` | Short/long-term, SQLite/Postgres backends |
+| `aworld.mcp_client` | `exo.mcp` | MCP client + `@mcp_server` decorator |
+| `aworld.sandbox` | `exo.sandbox` | Local + Kubernetes sandboxes |
+| `aworld.trace` | `exo.trace` | OpenTelemetry-based tracing |
+| `aworld.evaluations` | `exo.eval` | Scorers, reflection, evaluator |
+| `aworld.ralph_loop` | `exo.ralph` | Ralph loop -- state, detectors, runner |
+| `aworld.experimental.a2a` | `exo.a2a` | Agent-to-Agent protocol |
 
 ## 1. Agent Definition
 
@@ -40,10 +40,10 @@ task_config = TaskConfig(name="my-task", description="Do something")
 agent = LLMAgent(agent_config=agent_config, task_config=task_config)
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter import Agent
+from exo import Agent
 
 agent = Agent(
     name="my-agent",
@@ -85,12 +85,12 @@ class AgentConfig(BaseModel):
     name: str
 ```
 
-### After (Orbiter)
+### After (Exo)
 
-Orbiter uses Pydantic v2 models exclusively:
+Exo uses Pydantic v2 models exclusively:
 
 ```python
-from orbiter.config import AgentConfig, ModelConfig, TaskConfig, RunConfig
+from exo.config import AgentConfig, ModelConfig, TaskConfig, RunConfig
 
 # All configs are frozen Pydantic models
 agent_config = AgentConfig(
@@ -138,10 +138,10 @@ class MyAsyncTool(AsyncBaseTool):
         return observation, reward, terminated, truncated, info
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter import tool, Tool
+from exo import tool, Tool
 
 # Decorator (preferred) -- sync or async
 @tool
@@ -198,10 +198,10 @@ async for event in runner.streaming_run_task(task): ...
 result = await runner.streamed_run_task(task)
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="assistant", model="openai:gpt-4o", instructions="Be helpful.")
 
@@ -244,10 +244,10 @@ builder.add_edge(writer, editor)
 swarm = builder.build()
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", ...)
 writer = Agent(name="writer", ...)
@@ -306,10 +306,10 @@ prompt_service = PromptService(context)
 prompt = await prompt_service.build_prompt(neuron_names=["task", "history"])
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter.context import Context, ContextConfig, PromptBuilder
+from exo.context import Context, ContextConfig, PromptBuilder
 
 # Config-based (no factory)
 config = ContextConfig(
@@ -358,10 +358,10 @@ memory = Memory(
 )
 ```
 
-### After (Orbiter)
+### After (Exo)
 
 ```python
-from orbiter.memory import ShortTermMemory, LongTermMemory
+from exo.memory import ShortTermMemory, LongTermMemory
 
 agent = Agent(
     name="assistant",
@@ -378,33 +378,33 @@ agent = Agent(
 
 ## 8. Import Mapping Reference
 
-| AWorld Import | Orbiter Import |
+| AWorld Import | Exo Import |
 |--------------|----------------|
-| `from aworld.agents import LLMAgent` | `from orbiter import Agent` |
-| `from aworld.agents import TaskLLMAgent` | `from orbiter import Agent` |
-| `from aworld.agents import ParallelLLMAgent` | `from orbiter import Swarm` (with parallel flow) |
-| `from aworld.agents import SerialLLMAgent` | `from orbiter import Swarm` (with sequential flow) |
-| `from aworld.agents import SwarmComposerAgent` | `from orbiter import Swarm` |
-| `from aworld.config.conf import AgentConfig` | `from orbiter.config import AgentConfig` |
-| `from aworld.config.conf import TaskConfig` | `from orbiter.config import TaskConfig` |
+| `from aworld.agents import LLMAgent` | `from exo import Agent` |
+| `from aworld.agents import TaskLLMAgent` | `from exo import Agent` |
+| `from aworld.agents import ParallelLLMAgent` | `from exo import Swarm` (with parallel flow) |
+| `from aworld.agents import SerialLLMAgent` | `from exo import Swarm` (with sequential flow) |
+| `from aworld.agents import SwarmComposerAgent` | `from exo import Swarm` |
+| `from aworld.config.conf import AgentConfig` | `from exo.config import AgentConfig` |
+| `from aworld.config.conf import TaskConfig` | `from exo.config import TaskConfig` |
 | `from aworld.config.conf import ConfigDict` | Use Pydantic models directly |
-| `from aworld.core.tool.base import BaseTool` | `from orbiter import Tool` |
-| `from aworld.core.tool.base import AsyncBaseTool` | `from orbiter import Tool` (same class) |
-| `from aworld.tools.function_tools import FunctionTool` | `from orbiter import tool` (decorator) |
-| `from aworld.runner import create_runner` | `from orbiter import run` |
-| `from aworld.models import llm` | `from orbiter.models import get_provider` |
-| `from aworld.core.context.amni.contexts import AmniContext` | `from orbiter.context import Context` |
-| `from aworld.core.context.amni.config import AmniConfig` | `from orbiter.context import ContextConfig` |
-| `from aworld.memory.main import Memory` | `from orbiter.memory import LongTermMemory` |
-| `from aworld.trace import traced` | `from orbiter.trace import traced` |
-| `from aworld.evaluations import Evaluator` | `from orbiter.eval import Evaluator` |
+| `from aworld.core.tool.base import BaseTool` | `from exo import Tool` |
+| `from aworld.core.tool.base import AsyncBaseTool` | `from exo import Tool` (same class) |
+| `from aworld.tools.function_tools import FunctionTool` | `from exo import tool` (decorator) |
+| `from aworld.runner import create_runner` | `from exo import run` |
+| `from aworld.models import llm` | `from exo.models import get_provider` |
+| `from aworld.core.context.amni.contexts import AmniContext` | `from exo.context import Context` |
+| `from aworld.core.context.amni.config import AmniConfig` | `from exo.context import ContextConfig` |
+| `from aworld.memory.main import Memory` | `from exo.memory import LongTermMemory` |
+| `from aworld.trace import traced` | `from exo.trace import traced` |
+| `from aworld.evaluations import Evaluator` | `from exo.eval import Evaluator` |
 
 ## Migration Checklist
 
 Use this checklist to track your migration progress:
 
-- [ ] **Install Orbiter packages** -- `pip install orbiter` or individual packages
-- [ ] **Update imports** -- Replace `aworld.*` imports with `orbiter.*` equivalents (see table above)
+- [ ] **Install Exo packages** -- `pip install exo` or individual packages
+- [ ] **Update imports** -- Replace `aworld.*` imports with `exo.*` equivalents (see table above)
 - [ ] **Migrate agent definitions** -- Replace agent subclasses with single `Agent` class
 - [ ] **Migrate tool definitions** -- Replace `BaseTool`/`AsyncBaseTool`/`FunctionTool` with `@tool` decorator or `Tool` ABC
 - [ ] **Migrate configuration** -- Replace `ConfigDict`/`BaseConfig` with Pydantic v2 models
@@ -421,10 +421,10 @@ Use this checklist to track your migration progress:
 
 1. **`run.sync()` cannot be called from an async context.** If you are already in an async function, use `await run()` instead. `asyncio.run()` raises an error if an event loop is already running.
 
-2. **Tool return types changed.** AWorld tools returned a gym-style 5-tuple `(obs, reward, term, trunc, info)`. Orbiter tools return `str | dict`. You need to update the return statements.
+2. **Tool return types changed.** AWorld tools returned a gym-style 5-tuple `(obs, reward, term, trunc, info)`. Exo tools return `str | dict`. You need to update the return statements.
 
-3. **Message types are immutable.** Orbiter messages use `model_config = {"frozen": True}`. You cannot modify a message after creation -- create a new one instead.
+3. **Message types are immutable.** Exo messages use `model_config = {"frozen": True}`. You cannot modify a message after creation -- create a new one instead.
 
-4. **No automatic config hoisting.** AWorld sometimes hoisted kwargs between config levels. Orbiter requires explicit config construction.
+4. **No automatic config hoisting.** AWorld sometimes hoisted kwargs between config levels. Exo requires explicit config construction.
 
 5. **Model string format.** Use `"openai:gpt-4o"` not `"gpt-4o"` (though bare model names default to OpenAI).

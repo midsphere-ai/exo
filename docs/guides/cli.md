@@ -1,24 +1,24 @@
 # CLI
 
-The `orbiter-cli` package provides a command-line interface for running agents, interactive REPL sessions, batch processing, and plugin-based extensibility. It supports agent discovery from Python, YAML, and Markdown files, with automatic config file detection and Rich-formatted output.
+The `exo-cli` package provides a command-line interface for running agents, interactive REPL sessions, batch processing, and plugin-based extensibility. It supports agent discovery from Python, YAML, and Markdown files, with automatic config file detection and Rich-formatted output.
 
 ## Basic Usage
 
 ```bash
 # Run an agent with input
-orbiter run "What is Python?"
+exo run "What is Python?"
 
 # Run with explicit config
-orbiter run --config agents.yaml "Explain decorators"
+exo run --config agents.yaml "Explain decorators"
 
 # Run with model override
-orbiter run -m openai:gpt-4o "Hello"
+exo run -m openai:gpt-4o "Hello"
 
 # Enable streaming
-orbiter run --stream "Tell me a story"
+exo run --stream "Tell me a story"
 
 # Verbose output
-orbiter --verbose run "Debug this code"
+exo --verbose run "Debug this code"
 ```
 
 ## Config File Discovery
@@ -26,14 +26,14 @@ orbiter --verbose run "Debug this code"
 The CLI searches for configuration in this order:
 
 1. Explicit `--config` / `-c` flag
-2. `.orbiter.yaml` in the current directory
-3. `orbiter.config.yaml` in the current directory
+2. `.exo.yaml` in the current directory
+3. `exo.config.yaml` in the current directory
 
 ```python
-from orbiter_cli import find_config, load_config, resolve_config
+from exo_cli import find_config, load_config, resolve_config
 
 # Auto-discover config
-path = find_config()  # searches cwd for .orbiter.yaml or orbiter.config.yaml
+path = find_config()  # searches cwd for .exo.yaml or exo.config.yaml
 
 # Load explicit config
 config = load_config("agents.yaml")
@@ -53,7 +53,7 @@ Must export a `create_agent()` function:
 
 ```python
 # agents/research.py
-from orbiter.agent import Agent
+from exo.agent import Agent
 
 def create_agent():
     return Agent(
@@ -75,7 +75,7 @@ def create_agent():
 
 ### YAML Files (.yaml)
 
-Agent definitions in YAML format (loaded via `orbiter.loader.load_agents`):
+Agent definitions in YAML format (loaded via `exo.loader.load_agents`):
 
 ```yaml
 # agents/team.yaml
@@ -112,7 +112,7 @@ The markdown body (after front-matter) is used as `instructions` unless an expli
 ### Directory Scanning
 
 ```python
-from orbiter_cli import discover_agent_files, scan_directory, validate_agent
+from exo_cli import discover_agent_files, scan_directory, validate_agent
 
 # Find agent files in a directory
 files = discover_agent_files("/path/to/agents")
@@ -131,7 +131,7 @@ validate_agent("my_agent", agent)  # checks for 'name' and 'run' attributes
 The `InteractiveConsole` provides a REPL for chatting with agents:
 
 ```python
-from orbiter_cli import InteractiveConsole
+from exo_cli import InteractiveConsole
 
 console = InteractiveConsole(
     agents={"assistant": my_agent, "coder": coding_agent},
@@ -157,7 +157,7 @@ await console.start()
 ### Command Parsing
 
 ```python
-from orbiter_cli import parse_command
+from exo_cli import parse_command
 
 cmd, arg = parse_command("/switch researcher")
 # cmd = "switch", arg = "researcher"
@@ -169,7 +169,7 @@ cmd, arg = parse_command("Hello, how are you?")
 ### Agent Table Display
 
 ```python
-from orbiter_cli import format_agents_table
+from exo_cli import format_agents_table
 
 table = format_agents_table(agents)
 # Rich Table with Name, Model, Description columns
@@ -177,10 +177,10 @@ table = format_agents_table(agents)
 
 ## Local Executor
 
-The `LocalExecutor` wraps `orbiter.runner.run` with timeout, retry, and Rich output:
+The `LocalExecutor` wraps `exo.runner.run` with timeout, retry, and Rich output:
 
 ```python
-from orbiter_cli import LocalExecutor
+from exo_cli import LocalExecutor
 
 executor = LocalExecutor(
     agent=my_agent,
@@ -212,8 +212,8 @@ executor.print_error(error)    # Red error message
 Process multiple inputs from JSON, CSV, or JSONL files:
 
 ```python
-from orbiter_cli import load_batch_items, BatchItem, InputFormat
-from orbiter_cli.batch import batch_execute, results_to_jsonl, results_to_csv
+from exo_cli import load_batch_items, BatchItem, InputFormat
+from exo_cli.batch import batch_execute, results_to_jsonl, results_to_csv
 
 # Load inputs from file
 items = load_batch_items(
@@ -250,7 +250,7 @@ Each row/object must have an `input` field (configurable via `input_key`).
 ### Batch Items
 
 ```python
-from orbiter_cli import BatchItem
+from exo_cli import BatchItem
 
 item = BatchItem(
     id="item-1",
@@ -266,7 +266,7 @@ Extend the CLI with plugins that hook into lifecycle events:
 ### Creating a Plugin
 
 ```python
-from orbiter_cli import PluginSpec, PluginHook
+from exo_cli import PluginSpec, PluginHook
 
 async def on_startup(**kwargs):
     print("CLI starting up!")
@@ -305,7 +305,7 @@ plugin = PluginSpec(
 ### Plugin Manager
 
 ```python
-from orbiter_cli import PluginManager
+from exo_cli import PluginManager
 
 manager = PluginManager()
 
@@ -331,7 +331,7 @@ Packages can register plugins via entry points:
 
 ```toml
 # pyproject.toml
-[project.entry-points."orbiter.plugins"]
+[project.entry-points."exo.plugins"]
 my_plugin = "my_package:plugin"
 ```
 
@@ -341,7 +341,7 @@ Place `.py` files in a plugins directory, each exporting a `plugin` attribute:
 
 ```python
 # plugins/my_plugin.py
-from orbiter_cli import PluginSpec, PluginHook
+from exo_cli import PluginSpec, PluginHook
 
 plugin = PluginSpec(
     name="my-plugin",
@@ -354,7 +354,7 @@ plugin = PluginSpec(
 ### Custom Config Loading
 
 ```python
-from orbiter_cli import find_config, load_config
+from exo_cli import find_config, load_config
 
 config = load_config("custom-agents.yaml")
 agents = config.get("agents", {})
@@ -363,7 +363,7 @@ agents = config.get("agents", {})
 ### Programmatic Batch Processing
 
 ```python
-from orbiter_cli import load_batch_items, InputFormat
+from exo_cli import load_batch_items, InputFormat
 
 # Force a specific format
 items = load_batch_items("data.txt", fmt=InputFormat.JSONL)
@@ -393,25 +393,25 @@ finally:
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `app` | `orbiter_cli` | Typer CLI application |
-| `find_config` | `orbiter_cli` | Auto-discover config file in cwd |
-| `load_config` | `orbiter_cli` | Load and validate a YAML config file |
-| `resolve_config` | `orbiter_cli` | Resolve config from explicit path or auto-discovery |
-| `InteractiveConsole` | `orbiter_cli` | REPL console with slash commands |
-| `parse_command` | `orbiter_cli` | Parse slash commands from input text |
-| `format_agents_table` | `orbiter_cli` | Rich table of available agents |
-| `LocalExecutor` | `orbiter_cli` | Agent executor with timeout and Rich output |
-| `discover_agent_files` | `orbiter_cli` | Find agent files in a directory |
-| `load_python_agent` | `orbiter_cli` | Load agents from a `.py` file |
-| `load_yaml_agents` | `orbiter_cli` | Load agents from a `.yaml` file |
-| `load_markdown_agent` | `orbiter_cli` | Load an agent from a `.md` file |
-| `scan_directory` | `orbiter_cli` | Discover and load all agents from a directory |
-| `validate_agent` | `orbiter_cli` | Validate an agent instance |
-| `load_batch_items` | `orbiter_cli` | Load batch items from JSON/CSV/JSONL |
-| `BatchItem` | `orbiter_cli` | Batch input item: `id`, `input`, `metadata` |
-| `InputFormat` | `orbiter_cli` | Enum: `JSON`, `CSV`, `JSONL` |
-| `results_to_jsonl` | `orbiter_cli` | Serialize batch results to JSONL |
-| `results_to_csv` | `orbiter_cli` | Serialize batch results to CSV |
-| `PluginManager` | `orbiter_cli` | Plugin discovery and lifecycle management |
-| `PluginSpec` | `orbiter_cli` | Plugin definition with hooks |
-| `PluginHook` | `orbiter_cli` | Enum: `STARTUP`, `SHUTDOWN`, `PRE_RUN`, `POST_RUN` |
+| `app` | `exo_cli` | Typer CLI application |
+| `find_config` | `exo_cli` | Auto-discover config file in cwd |
+| `load_config` | `exo_cli` | Load and validate a YAML config file |
+| `resolve_config` | `exo_cli` | Resolve config from explicit path or auto-discovery |
+| `InteractiveConsole` | `exo_cli` | REPL console with slash commands |
+| `parse_command` | `exo_cli` | Parse slash commands from input text |
+| `format_agents_table` | `exo_cli` | Rich table of available agents |
+| `LocalExecutor` | `exo_cli` | Agent executor with timeout and Rich output |
+| `discover_agent_files` | `exo_cli` | Find agent files in a directory |
+| `load_python_agent` | `exo_cli` | Load agents from a `.py` file |
+| `load_yaml_agents` | `exo_cli` | Load agents from a `.yaml` file |
+| `load_markdown_agent` | `exo_cli` | Load an agent from a `.md` file |
+| `scan_directory` | `exo_cli` | Discover and load all agents from a directory |
+| `validate_agent` | `exo_cli` | Validate an agent instance |
+| `load_batch_items` | `exo_cli` | Load batch items from JSON/CSV/JSONL |
+| `BatchItem` | `exo_cli` | Batch input item: `id`, `input`, `metadata` |
+| `InputFormat` | `exo_cli` | Enum: `JSON`, `CSV`, `JSONL` |
+| `results_to_jsonl` | `exo_cli` | Serialize batch results to JSONL |
+| `results_to_csv` | `exo_cli` | Serialize batch results to CSV |
+| `PluginManager` | `exo_cli` | Plugin discovery and lifecycle management |
+| `PluginSpec` | `exo_cli` | Plugin definition with hooks |
+| `PluginHook` | `exo_cli` | Enum: `STARTUP`, `SHUTDOWN`, `PRE_RUN`, `POST_RUN` |

@@ -9,7 +9,7 @@ Usage:
     uv run python examples/multi_agent/deepresearch.py
 """
 
-from orbiter import Agent, ParallelGroup, Swarm, run
+from exo import Agent, ParallelGroup, Swarm, run
 
 web_researcher = Agent(
     name="web_researcher",

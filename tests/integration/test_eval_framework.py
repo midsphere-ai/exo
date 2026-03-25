@@ -17,9 +17,9 @@ import pytest
 @pytest.mark.timeout(60)
 async def test_trajectory_collected_after_run(vertex_model: str) -> None:
     """TrajectoryDataset captures an agent run with input, output, and tool_calls fields."""
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.train.trajectory import TrajectoryDataset  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.train.trajectory import TrajectoryDataset  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
     agent = Agent(
@@ -51,9 +51,9 @@ async def test_trajectory_collected_after_run(vertex_model: str) -> None:
 @pytest.mark.timeout(60)
 async def test_llm_judge_scorer_returns_valid_score(vertex_model: str) -> None:
     """LLMAsJudgeScorer with rubric returns a float score in [0.0, 1.0]."""
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.eval.llm_scorer import LLMAsJudgeScorer  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.eval.llm_scorer import LLMAsJudgeScorer  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     rubric = (
         "Did the agent answer the question correctly? "
@@ -95,7 +95,7 @@ async def test_llm_judge_scorer_returns_valid_score(vertex_model: str) -> None:
 @pytest.mark.timeout(60)
 async def test_rule_based_scorer_exact_match() -> None:
     """ExactMatchScorer returns 1.0 when output contains expected string, 0.0 otherwise."""
-    from orbiter.eval.base import Scorer, ScorerResult  # pyright: ignore[reportMissingImports]
+    from exo.eval.base import Scorer, ScorerResult  # pyright: ignore[reportMissingImports]
 
     class ExactMatchScorer(Scorer):
         """Scores 1.0 if the expected string appears in the output, 0.0 otherwise."""

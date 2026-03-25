@@ -1,9 +1,9 @@
-# orbiter_server.agents
+# exo_server.agents
 
 Agent management and workspace routes. Provides endpoints for listing registered agents, inspecting agent details, and accessing workspace artifacts.
 
 ```python
-from orbiter_server.agents import AgentInfo, WorkspaceFile, WorkspaceFileContent, agent_router
+from exo_server.agents import AgentInfo, WorkspaceFile, WorkspaceFileContent, agent_router
 ```
 
 ---

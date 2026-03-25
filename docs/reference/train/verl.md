@@ -1,9 +1,9 @@
-# orbiter.train.verl
+# exo.train.verl
 
 VeRL integration for reinforcement learning from human feedback (RLHF).
 
 ```python
-from orbiter.train.verl import (
+from exo.train.verl import (
     RewardSpec,
     VeRLAlgorithm,
     VeRLConfig,
@@ -11,7 +11,7 @@ from orbiter.train.verl import (
 )
 ```
 
-**Requires:** `pip install orbiter-train[verl]`
+**Requires:** `pip install exo-train[verl]`
 
 ---
 
@@ -214,7 +214,7 @@ Run evaluation on test data. Uses test data from `check_dataset` if not provided
 ### Example
 
 ```python
-from orbiter.train import VeRLTrainer, VeRLConfig, VeRLAlgorithm, RewardSpec
+from exo.train import VeRLTrainer, VeRLConfig, VeRLAlgorithm, RewardSpec
 
 config = VeRLConfig(
     algorithm=VeRLAlgorithm.GRPO,

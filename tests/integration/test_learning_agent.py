@@ -49,20 +49,20 @@ async def test_agent_learns_in_run_1_recalls_in_run_2(vertex_model: str) -> None
 
     Asserts at least 4 of 5 facts are correctly recalled (fact_N_correct == True).
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
-    from orbiter.memory.base import (  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import (  # pyright: ignore[reportMissingImports]
         AgentMemory,
         AIMemory,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     # 5 entirely fictional facts — invented names, institutions, specs, and dates.
     # These cannot appear in any LLM training corpus, so correct recall in Run 2
@@ -81,7 +81,7 @@ async def test_agent_learns_in_run_1_recalls_in_run_2(vertex_model: str) -> None
             "is locally known as the City of Blue Bridges."
         ),
         (
-            "Orbiter version 3.7 introduced the MemNeuron subsystem on September 12, 2025, "
+            "Exo version 3.7 introduced the MemNeuron subsystem on September 12, 2025, "
             "reducing context token usage by exactly 34 percent in internal benchmark tests."
         ),
         (
@@ -90,7 +90,7 @@ async def test_agent_learns_in_run_1_recalls_in_run_2(vertex_model: str) -> None
         ),
     ]
 
-    chroma_dir = tempfile.mkdtemp(prefix="orbiter_learning_chroma_")
+    chroma_dir = tempfile.mkdtemp(prefix="exo_learning_chroma_")
     try:
         chroma_store = ChromaVectorMemoryStore(
             SentenceTransformerEmbeddingProvider(),
@@ -187,7 +187,7 @@ async def test_agent_learns_in_run_1_recalls_in_run_2(vertex_model: str) -> None
             "Statement 2: The Prixium-9 alloy has a melting point of 4127 degrees "
             "Celsius.\n"
             "Statement 3: Quarvenheim is known as the City of Blue Bridges.\n"
-            "Statement 4: Orbiter version 3.7 introduced the MemNeuron subsystem.\n"
+            "Statement 4: Exo version 3.7 introduced the MemNeuron subsystem.\n"
             "Statement 5: Flaxenburg-compliant devices must include a Qondra hash "
             "module.\n\n"
             "Output ONLY the JSON object with fact_1_correct through fact_5_correct."

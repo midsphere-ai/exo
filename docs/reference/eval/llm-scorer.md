@@ -1,11 +1,11 @@
-# orbiter.eval.llm_scorer
+# exo.eval.llm_scorer
 
 LLM-as-Judge scorers and multi-dimensional quality assessment. Delegates evaluation to an LLM via a judge callable.
 
 ## Module Path
 
 ```python
-from orbiter.eval.llm_scorer import (
+from exo.eval.llm_scorer import (
     extract_json,
     LLMAsJudgeScorer,
     OutputQualityScorer,
@@ -109,7 +109,7 @@ Respond with a JSON object: {"score": <float>, "explanation": "<reasoning>"}.
 
 ```python
 import asyncio
-from orbiter.eval import LLMAsJudgeScorer
+from exo.eval import LLMAsJudgeScorer
 
 async def my_llm_judge(prompt: str) -> str:
     # In practice, call your LLM provider here
@@ -198,7 +198,7 @@ Computes weighted score from dimension scores. Assigns a quality label based on 
 
 ```python
 import asyncio
-from orbiter.eval import OutputQualityScorer
+from exo.eval import OutputQualityScorer
 
 async def judge(prompt: str) -> str:
     return '''{
@@ -350,7 +350,7 @@ Computes score from individual constraint results. Score = `passed_count / total
 
 ```python
 import asyncio
-from orbiter.eval import ConstraintSatisfactionScorer
+from exo.eval import ConstraintSatisfactionScorer
 
 async def judge(prompt: str) -> str:
     return '''{

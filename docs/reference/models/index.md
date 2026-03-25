@@ -1,22 +1,22 @@
-# orbiter-models
+# exo-models
 
-Provider-agnostic LLM abstraction layer for the Orbiter framework.
+Provider-agnostic LLM abstraction layer for the Exo framework.
 
 ## Module Path
 
 ```
-orbiter.models
+exo.models
 ```
 
 ## Installation
 
 ```bash
-pip install orbiter-models
+pip install exo-models
 ```
 
 ## Overview
 
-The `orbiter-models` package provides a unified interface for calling LLM providers. It defines a `ModelProvider` abstract base class with `complete()` and `stream()` methods, normalized response types (`ModelResponse`, `StreamChunk`), and a registry-based factory for building providers from `"provider:model_name"` strings.
+The `exo-models` package provides a unified interface for calling LLM providers. It defines a `ModelProvider` abstract base class with `complete()` and `stream()` methods, normalized response types (`ModelResponse`, `StreamChunk`), and a registry-based factory for building providers from `"provider:model_name"` strings.
 
 Four built-in providers are included: `OpenAIProvider`, `AnthropicProvider`, `GeminiProvider`, and `VertexProvider`. All auto-register on import.
 
@@ -41,7 +41,7 @@ Four built-in providers are included: `OpenAIProvider`, `AnthropicProvider`, `Ge
 
 ```python
 # Import everything from the package
-from orbiter.models import (
+from exo.models import (
     ModelProvider,
     OpenAIProvider,
     AnthropicProvider,
@@ -57,7 +57,7 @@ from orbiter.models import (
 )
 
 # Common usage: build a provider via factory
-from orbiter.models import get_provider
+from exo.models import get_provider
 
 provider = get_provider("openai:gpt-4o", api_key="sk-...")
 provider = get_provider("gemini:gemini-2.0-flash", api_key="AIza...")
@@ -68,8 +68,8 @@ provider = get_provider("vertex:gemini-2.0-flash")  # uses GCP ADC
 
 ```python
 import asyncio
-from orbiter.models import get_provider
-from orbiter.types import UserMessage
+from exo.models import get_provider
+from exo.types import UserMessage
 
 async def main():
     provider = get_provider("openai:gpt-4o", api_key="sk-...")

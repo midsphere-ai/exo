@@ -9,9 +9,9 @@ Usage:
     uv run python examples/quickstart/serving.py
 """
 
-from orbiter import Agent
-from orbiter.a2a.server import A2AServer, AgentExecutor  # pyright: ignore[reportMissingImports]
-from orbiter.a2a.types import ServingConfig  # pyright: ignore[reportMissingImports]
+from exo import Agent
+from exo.a2a.server import A2AServer, AgentExecutor  # pyright: ignore[reportMissingImports]
+from exo.a2a.types import ServingConfig  # pyright: ignore[reportMissingImports]
 
 agent = Agent(
     name="weather-bot",

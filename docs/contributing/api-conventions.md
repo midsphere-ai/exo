@@ -1,10 +1,10 @@
 # REST API Patterns and Conventions
 
-This document describes the internal API patterns used in Orbiter Web. All endpoints follow these conventions to ensure consistency.
+This document describes the internal API patterns used in Exo Web. All endpoints follow these conventions to ensure consistency.
 
 ## Error Response Envelope
 
-All errors use a standardized JSON envelope defined in `orbiter_web/errors.py`:
+All errors use a standardized JSON envelope defined in `exo_web/errors.py`:
 
 ```json
 {
@@ -55,7 +55,7 @@ Error handlers are registered centrally via `register_error_handlers()` in `app.
 
 ## Pagination (Cursor-Based)
 
-All list endpoints use cursor-based pagination from `orbiter_web/pagination.py`.
+All list endpoints use cursor-based pagination from `exo_web/pagination.py`.
 
 ### Response Shape
 
@@ -84,7 +84,7 @@ Cursors are base64-encoded `created_at|id` strings. The `paginate()` helper hand
 ### Usage
 
 ```python
-from orbiter_web.pagination import paginate
+from exo_web.pagination import paginate
 
 @router.get("")
 async def list_projects(
@@ -116,10 +116,10 @@ async def list_projects(
 
 ### Session Cookie
 
-The primary auth mechanism is an HTTP-only session cookie (`orbiter_session`). The `get_current_user` dependency extracts and validates it:
+The primary auth mechanism is an HTTP-only session cookie (`exo_session`). The `get_current_user` dependency extracts and validates it:
 
 ```python
-from orbiter_web.routes.auth import get_current_user
+from exo_web.routes.auth import get_current_user
 
 @router.get("")
 async def list_things(
@@ -149,7 +149,7 @@ CI/CD and external integrations authenticate via the `X-API-Key` header. API key
 WebSocket connections cannot use `Depends()`. Extract the session cookie manually:
 
 ```python
-session_id = websocket.cookies.get("orbiter_session")
+session_id = websocket.cookies.get("exo_session")
 # Validate session_id against DB before websocket.accept()
 ```
 
@@ -162,7 +162,7 @@ Three roles with a strict hierarchy: `viewer < developer < admin`.
 Use the `require_role()` dependency factory:
 
 ```python
-from orbiter_web.routes.auth import require_role
+from exo_web.routes.auth import require_role
 
 @router.delete("/{agent_id}")
 async def delete_agent(
@@ -243,7 +243,7 @@ Security-sensitive actions must be audit-logged via `audit_log()` from `services
 ### Usage
 
 ```python
-from orbiter_web.services.audit import audit_log
+from exo_web.services.audit import audit_log
 
 # After a successful action:
 ip = request.client.host if request.client else None
@@ -281,7 +281,7 @@ Use `httpx.AsyncClient` with the FastAPI app for route tests:
 ```python
 import pytest
 from httpx import ASGITransport, AsyncClient
-from orbiter_web.app import app
+from exo_web.app import app
 
 @pytest.fixture
 async def client():
@@ -317,7 +317,7 @@ Prefix test files uniquely to avoid pytest collection conflicts across workspace
 
 ```
 test_agent_runtime.py    -- good (specific)
-test_agents.py           -- bad (could conflict with orbiter-core tests)
+test_agents.py           -- bad (could conflict with exo-core tests)
 ```
 
 ### Mocking Auth
@@ -325,7 +325,7 @@ test_agents.py           -- bad (could conflict with orbiter-core tests)
 Patch `get_current_user` to bypass authentication in tests:
 
 ```python
-@patch("orbiter_web.routes.projects.get_current_user")
+@patch("exo_web.routes.projects.get_current_user")
 async def test_list_projects(mock_auth, client):
     mock_auth.return_value = {"id": "user-1", "email": "test@example.com", "role": "admin"}
     resp = await client.get("/api/v1/projects")
@@ -336,7 +336,7 @@ async def test_list_projects(mock_auth, client):
 
 ### File Location
 
-`packages/orbiter-web/src/orbiter_web/migrations/`
+`packages/exo-web/src/exo_web/migrations/`
 
 ### Naming
 

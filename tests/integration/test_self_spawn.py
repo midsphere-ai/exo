@@ -4,7 +4,7 @@ US-INT-012: Verifies that a parent agent can spawn child agents for parallel
 subtasks and aggregate their results, and that the depth limit is correctly
 enforced without infinite recursion.
 
-The spawn mechanism in Orbiter registers a ``spawn_self(task)`` tool when
+The spawn mechanism in Exo registers a ``spawn_self(task)`` tool when
 ``allow_self_spawn=True`` is passed to Agent.  The tool creates a child agent
 with ``_spawn_depth = parent._spawn_depth + 1``; when depth reaches
 ``max_spawn_depth`` the tool returns an error string instead of spawning.
@@ -29,8 +29,8 @@ async def test_parent_spawns_two_children_and_aggregates(vertex_model: str) -> N
     - result.text contains 'canberra' and 'brasilia' (case-insensitive)
     - result.tool_calls contains at least two spawn_self entries
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 
@@ -97,8 +97,8 @@ async def test_spawn_depth_limit_enforced(vertex_model: str) -> None:
     - result.text is non-empty (LLM handled the error message)
     - No infinite recursion occurs
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(vertex_model)
 

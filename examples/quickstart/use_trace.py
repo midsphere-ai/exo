@@ -1,4 +1,4 @@
-"""Use the tracing system — Orbiter quickstart.
+"""Use the tracing system — Exo quickstart.
 
 Demonstrates the ``@traced`` decorator, manual span context managers,
 and the ``PromptLogger`` for structured LLM execution logging.
@@ -10,9 +10,9 @@ Usage:
 import asyncio
 import logging
 
-from orbiter.trace.config import TraceBackend, TraceConfig  # pyright: ignore[reportMissingImports]
-from orbiter.trace.decorator import span_async, traced  # pyright: ignore[reportMissingImports]
-from orbiter.trace.prompt_logger import PromptLogger  # pyright: ignore[reportMissingImports]
+from exo.trace.config import TraceBackend, TraceConfig  # pyright: ignore[reportMissingImports]
+from exo.trace.decorator import span_async, traced  # pyright: ignore[reportMissingImports]
+from exo.trace.prompt_logger import PromptLogger  # pyright: ignore[reportMissingImports]
 
 logging.basicConfig(level=logging.INFO)
 

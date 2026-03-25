@@ -1,10 +1,10 @@
-# DeepAgent Toolkit — agent-core to Orbiter Mapping
+# DeepAgent Toolkit — agent-core to Exo Mapping
 
 **Epic:** 8 — Deep Agent Toolkit
 **Date:** 2026-03-11
 
 This document maps agent-core's (openJiuwen) deep_agent toolkit to
-Orbiter's built-in tool system, covering file I/O, shell execution,
+Exo's built-in tool system, covering file I/O, shell execution,
 sandboxed code execution, todo/task CRUD, and the priority event queue.
 
 ---
@@ -69,19 +69,19 @@ messaging with per-session topic routing. In the deep_agent context, this
 enables reactive event handling — but it lacks explicit priority ordering.
 
 The prioritized steering concept (ABORT > STEER > FOLLOWUP) is implemented
-in Orbiter's `TaskLoopQueue` rather than in agent-core's deep_agent
+in Exo's `TaskLoopQueue` rather than in agent-core's deep_agent
 directory. Agent-core's deep_agent relies on the controller module's
 `EventQueue` for cross-component messaging.
 
 ---
 
-## 2. Orbiter Equivalent
+## 2. Exo Equivalent
 
-Orbiter distributes deep_agent functionality across two packages:
-`orbiter-core` (base tool system) and `orbiter-sandbox` (file, shell, and
-code execution tools). Task management lives in `orbiter.task_controller`.
+Exo distributes deep_agent functionality across two packages:
+`exo-core` (base tool system) and `exo-sandbox` (file, shell, and
+code execution tools). Task management lives in `exo.task_controller`.
 
-### Tool Base System (`orbiter.tool`)
+### Tool Base System (`exo.tool`)
 
 - **`Tool`** — Abstract base class: `name`, `description`, `parameters`,
   async `execute()`
@@ -89,7 +89,7 @@ code execution tools). Task management lives in `orbiter.task_controller`.
   JSON Schema generation from type hints
 - **`@tool` decorator** — Converts a plain function into a `FunctionTool`
 
-### File Tools (`orbiter.sandbox.tools.FilesystemTool`)
+### File Tools (`exo.sandbox.tools.FilesystemTool`)
 
 `FilesystemTool` combines read/write/list into a single tool with an
 `action` parameter. Path validation restricts access to configured
@@ -97,13 +97,13 @@ code execution tools). Task management lives in `orbiter.task_controller`.
 no line-range reads or multi-edit batching.
 
 ```python
-from orbiter.sandbox.tools import filesystem_tool
+from exo.sandbox.tools import filesystem_tool
 
 fs = filesystem_tool(allowed_directories=["/workspace"])
 result = await fs.execute(action="read", path="/workspace/data.csv")
 ```
 
-### Shell Tool (`orbiter.sandbox.tools.ShellTool`)
+### Shell Tool (`exo.sandbox.tools.ShellTool`)
 
 Two variants:
 
@@ -115,17 +115,17 @@ Two variants:
   Blocks dangerous commands via a blacklist (`rm -rf`, `dd`, `shutdown`,
   etc.). Factory: `terminal_tool(blocked_commands=None, timeout=30.0)`
 
-### Code Execution (`orbiter.sandbox.tools.CodeTool`)
+### Code Execution (`exo.sandbox.tools.CodeTool`)
 
 Sandboxed Python execution with a blocked-names list (`__import__`, `open`,
 `os`, `sys`, `subprocess`, `shutil` by default). Can optionally delegate to
 a container-based `Sandbox` for stronger isolation. Factory:
 `code_tool(sandbox=None, blocked_names=None, timeout=10.0)`
 
-### Todo / Task Management (`orbiter.task_controller`)
+### Todo / Task Management (`exo.task_controller`)
 
-Orbiter has no direct `TodoTool` equivalent. Instead, the
-`TaskLoopQueue` from `orbiter.task_controller` provides the priority
+Exo has no direct `TodoTool` equivalent. Instead, the
+`TaskLoopQueue` from `exo.task_controller` provides the priority
 event queue for mid-execution steering:
 
 | Priority | Type | Purpose |
@@ -163,9 +163,9 @@ tools = [
 agent = SuperReActAgent(tools=tools, model=my_model)
 result = await agent.run("Analyze the CSV file in /workspace")
 
-# Orbiter
-from orbiter.agent import Agent
-from orbiter.sandbox.tools import (
+# Exo
+from exo.agent import Agent
+from exo.sandbox.tools import (
     filesystem_tool, shell_tool, code_tool,
 )
 
@@ -190,15 +190,15 @@ bash = BashTool(timeout=30)
 output = await bash.execute(command="find /workspace -name '*.py' | wc -l")
 # Returns: "stdout: 42\nstderr: \nexit_code: 0"
 
-# Orbiter — allowlisted commands (ShellTool)
-from orbiter.sandbox.tools import shell_tool
+# Exo — allowlisted commands (ShellTool)
+from exo.sandbox.tools import shell_tool
 
 shell = shell_tool(allowed_commands=["find", "wc"], timeout=30.0)
 output = await shell.execute(command="find /workspace -name '*.py'")
 # Only allowlisted commands execute; others raise an error
 
-# Orbiter — full shell with blacklist (TerminalTool)
-from orbiter.sandbox.tools import terminal_tool
+# Exo — full shell with blacklist (TerminalTool)
+from exo.sandbox.tools import terminal_tool
 
 terminal = terminal_tool(timeout=30.0)
 output = await terminal.execute(
@@ -219,8 +219,8 @@ output = await reader.execute(
 )
 # Returns lines 10-25 with line numbers
 
-# Orbiter — reads entire file (no line-range API)
-from orbiter.sandbox.tools import filesystem_tool
+# Exo — reads entire file (no line-range API)
+from exo.sandbox.tools import filesystem_tool
 
 fs = filesystem_tool(allowed_directories=["/workspace"])
 output = await fs.execute(action="read", path="/workspace/main.py")
@@ -231,27 +231,27 @@ output = await fs.execute(action="read", path="/workspace/main.py")
 
 ## 4. Migration Table
 
-| Agent-Core Path | Orbiter Import | Symbol |
+| Agent-Core Path | Exo Import | Symbol |
 |----------------|----------------|--------|
-| `openjiuwen.deep_agent.tools.FileReaderTool` | `orbiter.sandbox.tools.filesystem_tool` | `FilesystemTool` with `action="read"` — no line-range support |
-| `openjiuwen.deep_agent.tools.FileEditorTool` | `orbiter.sandbox.tools.filesystem_tool` | `FilesystemTool` with `action="write"` — no multi-edit batching |
+| `openjiuwen.deep_agent.tools.FileReaderTool` | `exo.sandbox.tools.filesystem_tool` | `FilesystemTool` with `action="read"` — no line-range support |
+| `openjiuwen.deep_agent.tools.FileEditorTool` | `exo.sandbox.tools.filesystem_tool` | `FilesystemTool` with `action="write"` — no multi-edit batching |
 | `openjiuwen.deep_agent.tools.FileAnalyzerTool` | *(no direct equivalent)* | Combine `FilesystemTool` read + custom LLM analysis |
-| `openjiuwen.deep_agent.tools.BashTool` | `orbiter.sandbox.tools.terminal_tool` | `TerminalTool` — full shell with destructive-command blacklist |
-| `openjiuwen.deep_agent.tools.BashTool` (restricted) | `orbiter.sandbox.tools.shell_tool` | `ShellTool` — allowlist-based, no shell interpretation |
-| `openjiuwen.deep_agent.tools.PythonInterpreterTool` | `orbiter.sandbox.tools.code_tool` | `CodeTool` — blocked-names list; optional container sandbox |
-| `openjiuwen.deep_agent.tools.TodoTool` | *(no direct equivalent)* | Use `orbiter.task_controller.TaskManager` for CRUD task tracking |
+| `openjiuwen.deep_agent.tools.BashTool` | `exo.sandbox.tools.terminal_tool` | `TerminalTool` — full shell with destructive-command blacklist |
+| `openjiuwen.deep_agent.tools.BashTool` (restricted) | `exo.sandbox.tools.shell_tool` | `ShellTool` — allowlist-based, no shell interpretation |
+| `openjiuwen.deep_agent.tools.PythonInterpreterTool` | `exo.sandbox.tools.code_tool` | `CodeTool` — blocked-names list; optional container sandbox |
+| `openjiuwen.deep_agent.tools.TodoTool` | *(no direct equivalent)* | Use `exo.task_controller.TaskManager` for CRUD task tracking |
 | `openjiuwen.deep_agent.tools.DoneTool` | *(no direct equivalent)* | Agent loop termination is handled by `Agent.run()` return |
-| `openjiuwen.deep_agent.tools.WebSearchTool` | `orbiter.perplexica` | Perplexica pipeline provides web search + summarization |
-| `openjiuwen.deep_agent.tools.DeepResearcherTool` | *(no direct equivalent)* | Multi-round research orchestration not in Orbiter core |
-| `openjiuwen.deep_agent.tools.BrowserTool` | *(no direct equivalent)* | Browser automation not in Orbiter core |
-| `openjiuwen.deep_agent.tools.MdifyTool` | *(no direct equivalent)* | File format conversion not in Orbiter core |
-| `openjiuwen.deep_agent.tools.ToolGeneratorTool` | *(no direct equivalent)* | Dynamic tool generation not in Orbiter core |
-| `openjiuwen.deep_agent.tools.ReformulatorTool` | *(no direct equivalent)* | Answer formatting not in Orbiter core |
-| `openjiuwen.core.controller.EventQueue` | `orbiter.task_controller.TaskEventBus` | Typed pub/sub with `TaskEventType` enum |
-| *(priority steering)* | `orbiter.task_controller.TaskLoopQueue` | Thread-safe priority queue: ABORT (0) > STEER (1) > FOLLOWUP (2) |
-| *(priority events)* | `orbiter.task_controller.TaskLoopEvent` | Priority-ordered event with `type`, `content`, `metadata` |
-| *(steering tools)* | `orbiter.task_controller.steer_agent_tool` | Queue-bound tool to redirect agent mid-task |
-| *(abort tools)* | `orbiter.task_controller.abort_agent_tool` | Queue-bound tool to stop agent execution |
-| `orbiter.tool.Tool` | `orbiter.tool.Tool` | Abstract base class for all tools |
-| `orbiter.tool.FunctionTool` | `orbiter.tool.FunctionTool` | Wraps Python functions with auto JSON Schema |
-| `orbiter.tool.tool` | `orbiter.tool.tool` | `@tool` decorator for quick tool creation |
+| `openjiuwen.deep_agent.tools.WebSearchTool` | `exo.search` | Exo Search pipeline provides web search + summarization |
+| `openjiuwen.deep_agent.tools.DeepResearcherTool` | *(no direct equivalent)* | Multi-round research orchestration not in Exo core |
+| `openjiuwen.deep_agent.tools.BrowserTool` | *(no direct equivalent)* | Browser automation not in Exo core |
+| `openjiuwen.deep_agent.tools.MdifyTool` | *(no direct equivalent)* | File format conversion not in Exo core |
+| `openjiuwen.deep_agent.tools.ToolGeneratorTool` | *(no direct equivalent)* | Dynamic tool generation not in Exo core |
+| `openjiuwen.deep_agent.tools.ReformulatorTool` | *(no direct equivalent)* | Answer formatting not in Exo core |
+| `openjiuwen.core.controller.EventQueue` | `exo.task_controller.TaskEventBus` | Typed pub/sub with `TaskEventType` enum |
+| *(priority steering)* | `exo.task_controller.TaskLoopQueue` | Thread-safe priority queue: ABORT (0) > STEER (1) > FOLLOWUP (2) |
+| *(priority events)* | `exo.task_controller.TaskLoopEvent` | Priority-ordered event with `type`, `content`, `metadata` |
+| *(steering tools)* | `exo.task_controller.steer_agent_tool` | Queue-bound tool to redirect agent mid-task |
+| *(abort tools)* | `exo.task_controller.abort_agent_tool` | Queue-bound tool to stop agent execution |
+| `exo.tool.Tool` | `exo.tool.Tool` | Abstract base class for all tools |
+| `exo.tool.FunctionTool` | `exo.tool.FunctionTool` | Wraps Python functions with auto JSON Schema |
+| `exo.tool.tool` | `exo.tool.tool` | `@tool` decorator for quick tool creation |

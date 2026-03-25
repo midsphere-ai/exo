@@ -1,13 +1,13 @@
-# orbiter.memory.backends
+# exo.memory.backends
 
 Persistent backend implementations: SQLite, PostgreSQL, and Vector (embedding-based).
 
 ## Module Paths
 
 ```python
-from orbiter.memory.backends.sqlite import SQLiteMemoryStore
-from orbiter.memory.backends.postgres import PostgresMemoryStore
-from orbiter.memory.backends.vector import VectorMemoryStore, Embeddings, OpenAIEmbeddings
+from exo.memory.backends.sqlite import SQLiteMemoryStore
+from exo.memory.backends.postgres import PostgresMemoryStore
+from exo.memory.backends.vector import VectorMemoryStore, Embeddings, OpenAIEmbeddings
 ```
 
 ---
@@ -120,12 +120,12 @@ PostgreSQL-backed persistent memory store using asyncpg. Uses JSONB for metadata
 ### Constructor
 
 ```python
-PostgresMemoryStore(dsn: str = "postgresql://localhost/orbiter")
+PostgresMemoryStore(dsn: str = "postgresql://localhost/exo")
 ```
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `dsn` | `str` | `"postgresql://localhost/orbiter"` | PostgreSQL connection DSN |
+| `dsn` | `str` | `"postgresql://localhost/exo"` | PostgreSQL connection DSN |
 
 ### Lifecycle
 
@@ -287,8 +287,8 @@ Metadata, memory_type, and status filters are applied as post-filters before ran
 
 ```python
 import asyncio
-from orbiter.memory.backends.vector import VectorMemoryStore, OpenAIEmbeddings
-from orbiter.memory import HumanMemory, AIMemory
+from exo.memory.backends.vector import VectorMemoryStore, OpenAIEmbeddings
+from exo.memory import HumanMemory, AIMemory
 
 async def main():
     embeddings = OpenAIEmbeddings(api_key="sk-...")

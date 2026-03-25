@@ -79,9 +79,9 @@ async def test_a2a_agent_delegates_and_receives_result(
     a2a_server_b: str,
 ) -> None:
     """Agent A delegates translation to Agent B via A2A HTTP and uses the result."""
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-    from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
     a2a_url = a2a_server_b
 

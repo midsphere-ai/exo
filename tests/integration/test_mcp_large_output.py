@@ -6,7 +6,7 @@ to access the content, and that the retrieved content is used in the final
 response.
 
 The get_large_dataset tool added to mcp_test_server.py returns exactly 15 KB
-and always contains the keyword ORBITER_DATASET_KEYWORD_2024.
+and always contains the keyword EXO_DATASET_KEYWORD_2024.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pydantic import BaseModel
 _HELPERS_DIR = Path(__file__).parent / "helpers"
 _MCP_SERVER_SCRIPT = str(_HELPERS_DIR / "mcp_test_server.py")
 
-_DATASET_KEYWORD = "ORBITER_DATASET_KEYWORD_2024"
+_DATASET_KEYWORD = "EXO_DATASET_KEYWORD_2024"
 
 
 class DataSummary(BaseModel):
@@ -50,9 +50,9 @@ async def test_large_mcp_output_offloaded_to_workspace(vertex_model: str) -> Non
     4. LLM receives a pointer and calls retrieve_artifact to get the content.
     5. We verify the workspace has an artifact and retrieve_artifact appeared in tool calls.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     mcp_config = MCPServerConfig(
         name="test-server",
@@ -122,17 +122,17 @@ async def test_retrieved_artifact_content_in_final_output(vertex_model: str) -> 
     """The agent correctly identifies a known keyword from the retrieved artifact content.
 
     Flow:
-    1. get_large_dataset always embeds ORBITER_DATASET_KEYWORD_2024 in the first few lines.
+    1. get_large_dataset always embeds EXO_DATASET_KEYWORD_2024 in the first few lines.
     2. After offloading, the agent calls retrieve_artifact to access the full content.
     3. The agent inspects the content for the keyword and returns a structured response.
     4. We assert contains_keyword == True.
     """
-    from orbiter._internal.output_parser import (  # pyright: ignore[reportMissingImports]
+    from exo._internal.output_parser import (  # pyright: ignore[reportMissingImports]
         parse_structured_output,
     )
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     mcp_config = MCPServerConfig(
         name="test-server",

@@ -1,11 +1,11 @@
 # MCP (Model Context Protocol)
 
-The `orbiter-mcp` package provides client-side MCP integration, allowing agents to discover and use tools from MCP servers. It supports stdio, SSE, and streamable HTTP transports, multi-server management, tool namespace mapping, and automatic conversion of MCP tools into Orbiter `Tool` instances.
+The `exo-mcp` package provides client-side MCP integration, allowing agents to discover and use tools from MCP servers. It supports stdio, SSE, and streamable HTTP transports, multi-server management, tool namespace mapping, and automatic conversion of MCP tools into Exo `Tool` instances.
 
 ## Basic Usage
 
 ```python
-from orbiter.mcp import MCPClient, MCPServerConfig, MCPTransport
+from exo.mcp import MCPClient, MCPServerConfig, MCPTransport
 
 # Configure an MCP server
 config = MCPServerConfig(
@@ -35,7 +35,7 @@ await client.cleanup()
 `MCPServerConfig` defines how to connect to an MCP server:
 
 ```python
-from orbiter.mcp import MCPServerConfig, MCPTransport
+from exo.mcp import MCPServerConfig, MCPTransport
 
 # Stdio transport (spawns a subprocess)
 stdio_config = MCPServerConfig(
@@ -97,23 +97,23 @@ result = await client.call_tool("database", "query", {"sql": "SELECT 1"})
 await client.cleanup()
 ```
 
-## Converting MCP Tools to Orbiter Tools
+## Converting MCP Tools to Exo Tools
 
-Use `MCPToolWrapper` to convert MCP tools into Orbiter `Tool` instances that agents can use:
+Use `MCPToolWrapper` to convert MCP tools into Exo `Tool` instances that agents can use:
 
 ```python
-from orbiter.mcp import load_tools_from_client
+from exo.mcp import load_tools_from_client
 
-# Convert all MCP tools to Orbiter Tools
-orbiter_tools = await load_tools_from_client(client)
+# Convert all MCP tools to Exo Tools
+exo_tools = await load_tools_from_client(client)
 
 # Pass directly to an agent
-from orbiter.agent import Agent
+from exo.agent import Agent
 
 agent = Agent(
     name="assistant",
     model="openai:gpt-4o",
-    tools=orbiter_tools,
+    tools=exo_tools,
 )
 ```
 
@@ -122,7 +122,7 @@ agent = Agent(
 When loading tools from multiple servers, tool names are namespaced to avoid collisions:
 
 ```python
-from orbiter.mcp.tools import namespace_tool_name, parse_namespaced_name
+from exo.mcp.tools import namespace_tool_name, parse_namespaced_name
 
 # Namespace: "server_name__tool_name"
 namespaced = namespace_tool_name("filesystem", "read_file")
@@ -138,7 +138,7 @@ print(server, tool)  # "filesystem", "read_file"
 Use `MCPToolFilter` to include or exclude specific tools:
 
 ```python
-from orbiter.mcp import MCPToolFilter
+from exo.mcp import MCPToolFilter
 
 # Only load specific tools
 filter = MCPToolFilter(include=["read_file", "write_file"])
@@ -154,7 +154,7 @@ tools = await load_tools_from_connection(connection, filter=filter)
 Load MCP server configurations from a `mcp.json` file:
 
 ```python
-from orbiter.mcp import load_mcp_config, load_mcp_client
+from exo.mcp import load_mcp_config, load_mcp_client
 
 # mcp.json format:
 # {
@@ -176,10 +176,10 @@ Environment variables in the config are automatically substituted using `substit
 
 ## Creating MCP Servers
 
-Use the `@mcp_server` decorator to expose an Orbiter class as an MCP server:
+Use the `@mcp_server` decorator to expose an Exo class as an MCP server:
 
 ```python
-from orbiter.mcp import mcp_server
+from exo.mcp import mcp_server
 
 @mcp_server(name="calculator", description="Math operations")
 class CalculatorServer:
@@ -199,7 +199,7 @@ The decorator uses FastMCP to convert the class methods into MCP tools and creat
 Tool calls include automatic retry with exponential backoff:
 
 ```python
-from orbiter.mcp.execution import call_tool_with_retry
+from exo.mcp.execution import call_tool_with_retry
 
 result = await call_tool_with_retry(
     connection,
@@ -219,7 +219,7 @@ Add servers at runtime based on project configuration:
 ```python
 import json
 
-with open(".orbiter.yaml") as f:
+with open(".exo.yaml") as f:
     config = yaml.safe_load(f)
 
 client = MCPClient()
@@ -234,7 +234,7 @@ await client.connect_all()
 Inspect tool schemas before passing them to agents:
 
 ```python
-from orbiter.mcp.tools import extract_schema
+from exo.mcp.tools import extract_schema
 
 tools = await client.list_tools("filesystem")
 for tool in tools:
@@ -244,11 +244,11 @@ for tool in tools:
 
 ### Mixing MCP and Native Tools
 
-Combine MCP tools with native Orbiter function tools:
+Combine MCP tools with native Exo function tools:
 
 ```python
-from orbiter.tool import tool
-from orbiter.mcp import load_tools_from_client
+from exo.tool import tool
+from exo.mcp import load_tools_from_client
 
 @tool
 def local_calculator(expression: str) -> str:
@@ -265,15 +265,15 @@ agent = Agent(name="assistant", tools=all_tools)
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `MCPClient` | `orbiter.mcp` | Multi-server MCP client with caching |
-| `MCPServerConfig` | `orbiter.mcp` | Server connection configuration |
-| `MCPTransport` | `orbiter.mcp` | Enum: `STDIO`, `SSE`, `STREAMABLE_HTTP` |
-| `MCPServerConnection` | `orbiter.mcp.client` | Single server connection lifecycle |
-| `MCPToolWrapper` | `orbiter.mcp.tools` | Wraps MCP tool as Orbiter `Tool` |
-| `MCPToolFilter` | `orbiter.mcp.tools` | Include/exclude filter for tool loading |
-| `mcp_server` | `orbiter.mcp` | Decorator to create MCP servers from classes |
-| `load_tools_from_client` | `orbiter.mcp.tools` | Convert all client tools to Orbiter `Tool`s |
-| `load_tools_from_connection` | `orbiter.mcp.tools` | Convert one connection's tools |
-| `load_mcp_config` | `orbiter.mcp.execution` | Load `MCPServerConfig`s from `mcp.json` |
-| `load_mcp_client` | `orbiter.mcp.execution` | Load and connect an `MCPClient` from config |
-| `call_tool_with_retry` | `orbiter.mcp.execution` | Tool call with exponential backoff retry |
+| `MCPClient` | `exo.mcp` | Multi-server MCP client with caching |
+| `MCPServerConfig` | `exo.mcp` | Server connection configuration |
+| `MCPTransport` | `exo.mcp` | Enum: `STDIO`, `SSE`, `STREAMABLE_HTTP` |
+| `MCPServerConnection` | `exo.mcp.client` | Single server connection lifecycle |
+| `MCPToolWrapper` | `exo.mcp.tools` | Wraps MCP tool as Exo `Tool` |
+| `MCPToolFilter` | `exo.mcp.tools` | Include/exclude filter for tool loading |
+| `mcp_server` | `exo.mcp` | Decorator to create MCP servers from classes |
+| `load_tools_from_client` | `exo.mcp.tools` | Convert all client tools to Exo `Tool`s |
+| `load_tools_from_connection` | `exo.mcp.tools` | Convert one connection's tools |
+| `load_mcp_config` | `exo.mcp.execution` | Load `MCPServerConfig`s from `mcp.json` |
+| `load_mcp_client` | `exo.mcp.execution` | Load and connect an `MCPClient` from config |
+| `call_tool_with_retry` | `exo.mcp.execution` | Tool call with exponential backoff retry |

@@ -13,9 +13,9 @@ Then visit:
     http://localhost:8000/docs                     — interactive API docs
 """
 
-from orbiter import Agent, tool
-from orbiter.a2a.server import A2AServer, AgentExecutor  # pyright: ignore[reportMissingImports]
-from orbiter.a2a.types import AgentSkill, ServingConfig  # pyright: ignore[reportMissingImports]
+from exo import Agent, tool
+from exo.a2a.server import A2AServer, AgentExecutor  # pyright: ignore[reportMissingImports]
+from exo.a2a.types import AgentSkill, ServingConfig  # pyright: ignore[reportMissingImports]
 
 # --- Define the agent and its tools ------------------------------------------
 

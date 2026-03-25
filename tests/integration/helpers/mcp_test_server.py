@@ -15,7 +15,7 @@ import asyncio
 
 from mcp.server.fastmcp import Context as FastMCPContext  # pyright: ignore[reportMissingImports]
 
-from orbiter.mcp import mcp_server  # pyright: ignore[reportMissingImports]
+from exo.mcp import mcp_server  # pyright: ignore[reportMissingImports]
 
 # Known capitals and populations for testing
 _CAPITALS: dict[str, str] = {
@@ -90,14 +90,14 @@ class TestServer:
 
         Returns:
             A large dataset string containing data about the topic.
-            Always includes ORBITER_DATASET_KEYWORD_2024 for test verification.
+            Always includes EXO_DATASET_KEYWORD_2024 for test verification.
         """
-        keyword = "ORBITER_DATASET_KEYWORD_2024"
+        keyword = "EXO_DATASET_KEYWORD_2024"
         header = (
             f"=== LARGE DATASET: {topic.upper()} ===\n"
             f"IDENTIFICATION_KEYWORD: {keyword}\n"
             f"This dataset contains comprehensive information about {topic}.\n"
-            "It is intentionally large to test workspace offloading in the Orbiter framework.\n\n"
+            "It is intentionally large to test workspace offloading in the Exo framework.\n\n"
         )
         # Pad to exactly 15 KB (15360 bytes) with data entries
         target_bytes = 15 * 1024

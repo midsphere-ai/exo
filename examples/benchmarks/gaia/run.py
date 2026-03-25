@@ -1,7 +1,7 @@
-"""GAIA benchmark runner for Orbiter agents.
+"""GAIA benchmark runner for Exo agents.
 
 GAIA (General AI Assistants) evaluates multi-step reasoning with tool use.
-This runner loads GAIA dataset questions, runs them through an Orbiter agent,
+This runner loads GAIA dataset questions, runs them through an Exo agent,
 and scores the agent's answers against ground truth.
 
 Usage:
@@ -23,7 +23,7 @@ import string
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +237,7 @@ async def run_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run GAIA benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run GAIA benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("GAIA_DATASET_PATH", ""),

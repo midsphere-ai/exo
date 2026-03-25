@@ -1,8 +1,8 @@
-"""OSWorld benchmark runner for Orbiter agents.
+"""OSWorld benchmark runner for Exo agents.
 
 OSWorld evaluates AI agents on real-world computer tasks involving desktop OS
 interactions (file management, web browsing, office apps, system settings).
-This runner loads OSWorld task configs, runs them through an Orbiter agent,
+This runner loads OSWorld task configs, runs them through an Exo agent,
 and scores based on task completion.
 
 Usage:
@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +261,7 @@ async def run_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run OSWorld benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run OSWorld benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("OSWORLD_DATASET_PATH", ""),

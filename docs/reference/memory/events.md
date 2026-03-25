@@ -1,11 +1,11 @@
-# orbiter.memory.events
+# exo.memory.events
 
 Memory event integration for async processing pipelines.
 
 ## Module Path
 
 ```python
-from orbiter.memory.events import (
+from exo.memory.events import (
     MemoryEventEmitter,
     MEMORY_ADDED,
     MEMORY_SEARCHED,
@@ -97,8 +97,8 @@ Clear and emit `memory:cleared` event with `count=count, metadata=metadata`.
 
 ```python
 import asyncio
-from orbiter.events import EventBus
-from orbiter.memory import (
+from exo.events import EventBus
+from exo.memory import (
     ShortTermMemory, HumanMemory, MemoryMetadata,
     MemoryEventEmitter, MEMORY_ADDED, MEMORY_SEARCHED,
 )

@@ -8,20 +8,20 @@ Prerequisites:
     docker run -p 6379:6379 redis:7
 
     # Terminal 2 — start a worker
-    export ORBITER_REDIS_URL=redis://localhost:6379
-    orbiter start worker
+    export EXO_REDIS_URL=redis://localhost:6379
+    exo start worker
 
 Usage:
     export OPENAI_API_KEY=sk-...
-    export ORBITER_REDIS_URL=redis://localhost:6379
+    export EXO_REDIS_URL=redis://localhost:6379
     uv run python examples/distributed/simple_chat.py
 """
 
 import asyncio
 
-from orbiter import Agent, tool
-from orbiter.distributed import distributed  # pyright: ignore[reportMissingImports]
-from orbiter.types import (
+from exo import Agent, tool
+from exo.distributed import distributed  # pyright: ignore[reportMissingImports]
+from exo.types import (
     ErrorEvent,
     StatusEvent,
     StepEvent,

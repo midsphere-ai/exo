@@ -1,9 +1,9 @@
-# orbiter_server.streaming
+# exo_server.streaming
 
-WebSocket and SSE streaming for Orbiter Server. Provides real-time streaming of agent output via WebSocket and Server-Sent Events (SSE) as a fallback for non-WebSocket clients.
+WebSocket and SSE streaming for Exo Server. Provides real-time streaming of agent output via WebSocket and Server-Sent Events (SSE) as a fallback for non-WebSocket clients.
 
 ```python
-from orbiter_server.streaming import stream_router
+from exo_server.streaming import stream_router
 ```
 
 ---

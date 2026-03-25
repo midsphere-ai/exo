@@ -1,12 +1,12 @@
 # Running Agents
 
-The `orbiter.runner` module provides the primary API for executing agents: `run()` (async), `run.sync()` (blocking), and `run.stream()` (async generator). These functions handle provider resolution, state tracking, loop detection, and multi-turn conversations.
+The `exo.runner` module provides the primary API for executing agents: `run()` (async), `run.sync()` (blocking), and `run.stream()` (async generator). These functions handle provider resolution, state tracking, loop detection, and multi-turn conversations.
 
 ## Basic Usage
 
 ```python
-from orbiter.agent import Agent
-from orbiter.runner import run
+from exo.agent import Agent
+from exo.runner import run
 
 agent = Agent(name="assistant", model="openai:gpt-4o")
 
@@ -45,7 +45,7 @@ async def run(
 | `max_retries` | `int` | `3` | Retry attempts for transient LLM errors |
 | `loop_threshold` | `int` | `3` | Consecutive identical tool-call patterns before raising a loop error |
 
-When `provider` is `None`, Orbiter attempts to auto-resolve a provider from the agent's model string using the model registry (see [Model Providers](models.md)).
+When `provider` is `None`, Exo attempts to auto-resolve a provider from the agent's model string using the model registry (see [Model Providers](models.md)).
 
 If you pass a `Swarm` instead of an `Agent`, `run()` delegates to the swarm's own `run()` method.
 
@@ -90,8 +90,8 @@ async def run.stream(
 **Usage:**
 
 ```python
-from orbiter.runner import run
-from orbiter.types import TextEvent, ToolCallEvent
+from exo.runner import run
+from exo.types import TextEvent, ToolCallEvent
 
 async for event in run.stream(agent, "Tell me about quantum computing"):
     if isinstance(event, TextEvent):
@@ -132,7 +132,7 @@ When tool calls are detected during streaming, tools are executed and the LLM is
 This means hook-based features -- token budgets, logging, [memory auto-persistence](memory.md#auto-persistence) -- work identically regardless of which execution method you use.
 
 ```python
-from orbiter.hooks import HookPoint
+from exo.hooks import HookPoint
 
 async def log_step(**data):
     response = data.get("response")
@@ -179,7 +179,7 @@ print(result2.output)  # "Your name is Alice."
 The runner detects endless loops where the agent repeatedly produces the same tool calls without making progress. When the same set of tool calls (by name and arguments) repeats `loop_threshold` consecutive times, a `CallRunnerError` is raised:
 
 ```python
-from orbiter._internal.call_runner import CallRunnerError
+from exo._internal.call_runner import CallRunnerError
 
 try:
     result = await run(agent, "Do something", loop_threshold=3)
@@ -195,7 +195,7 @@ When no `provider` is passed, `run()` attempts to auto-resolve one:
 2. It calls `get_provider(provider_name)` from the model registry
 3. If resolution fails, the agent's own `run()` method raises `AgentError`
 
-To use auto-resolution, install the `orbiter-models` package and ensure your API key is configured:
+To use auto-resolution, install the `exo-models` package and ensure your API key is configured:
 
 ```python
 import os
@@ -209,11 +209,11 @@ result = await run(agent, "Hello!")  # provider auto-resolved
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `run()` | `orbiter.runner` | Async agent execution |
-| `run.sync()` | `orbiter.runner` | Blocking agent execution |
-| `run.stream()` | `orbiter.runner` | Streaming agent execution |
-| `RunResult` | `orbiter.types` | Return type of `run()` |
-| `TextEvent` | `orbiter.types` | Streaming text chunk event |
-| `ToolCallEvent` | `orbiter.types` | Streaming tool call event |
-| `StreamEvent` | `orbiter.types` | Union of `TextEvent \| ToolCallEvent` |
-| `Usage` | `orbiter.types` | Token usage statistics |
+| `run()` | `exo.runner` | Async agent execution |
+| `run.sync()` | `exo.runner` | Blocking agent execution |
+| `run.stream()` | `exo.runner` | Streaming agent execution |
+| `RunResult` | `exo.types` | Return type of `run()` |
+| `TextEvent` | `exo.types` | Streaming text chunk event |
+| `ToolCallEvent` | `exo.types` | Streaming tool call event |
+| `StreamEvent` | `exo.types` | Union of `TextEvent \| ToolCallEvent` |
+| `Usage` | `exo.types` | Token usage statistics |

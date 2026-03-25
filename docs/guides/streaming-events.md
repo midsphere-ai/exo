@@ -1,11 +1,11 @@
 # Streaming Events
 
-Orbiter provides a rich streaming event system that gives real-time visibility into agent execution. Events are emitted via `run.stream()` and can be consumed as an async iterator.
+Exo provides a rich streaming event system that gives real-time visibility into agent execution. Events are emitted via `run.stream()` and can be consumed as an async iterator.
 
 ## Quick Start
 
 ```python
-from orbiter import Agent, run
+from exo import Agent, run
 
 agent = Agent(name="assistant", model="gpt-4o", instructions="You are helpful.")
 
@@ -286,7 +286,7 @@ Available type strings for filtering: `"text"`, `"tool_call"`, `"step"`, `"tool_
 When streaming a `Swarm`, all events include the correct `agent_name` of the sub-agent that produced them. Additional `StatusEvent` events are emitted for agent transitions:
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", model="gpt-4o", instructions="Research topics.")
 writer = Agent(name="writer", model="gpt-4o", instructions="Write articles.")
@@ -322,7 +322,7 @@ Stream events to a frontend via Server-Sent Events:
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from orbiter import Agent, run
+from exo import Agent, run
 
 app = FastAPI()
 agent = Agent(name="assistant", model="gpt-4o", instructions="You are helpful.")
@@ -364,7 +364,7 @@ async def chat(message: str):
 
 ```python
 from django.http import StreamingHttpResponse
-from orbiter import Agent, run
+from exo import Agent, run
 import asyncio
 
 agent = Agent(name="assistant", model="gpt-4o", instructions="You are helpful.")
@@ -489,7 +489,7 @@ The `type` field acts as a discriminator for deserializing events back to the co
 
 ```python
 import json
-from orbiter.types import (
+from exo.types import (
     TextEvent, ToolCallEvent, StepEvent, ToolResultEvent,
     ReasoningEvent, ErrorEvent, StatusEvent, UsageEvent,
 )
@@ -516,10 +516,10 @@ event = deserialize_event(raw)  # TextEvent(type='text', text='Hello', agent_nam
 
 ## Distributed Streaming
 
-When using distributed execution via `orbiter-distributed`, events are published to Redis and can be consumed in real-time or replayed:
+When using distributed execution via `exo-distributed`, events are published to Redis and can be consumed in real-time or replayed:
 
 ```python
-from orbiter.distributed import distributed
+from exo.distributed import distributed
 
 # Submit task and stream events
 handle = await distributed(agent, "Hello", redis_url="redis://localhost", detailed=True)
@@ -546,7 +546,7 @@ The `inject_message()` method on `Agent` lets external code push additional user
 
 ```python
 import asyncio
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 @tool
 def slow_search(query: str) -> str:
@@ -581,9 +581,9 @@ async for event in run.stream(agent, "Search for Python tutorials"):
             print(f"\n[Injected: {event.content}]")
 ```
 
-### HTTP Injection via orbiter-server
+### HTTP Injection via exo-server
 
-The `orbiter-server` provides a `POST /inject` endpoint for pushing messages into a running agent over HTTP:
+The `exo-server` provides a `POST /inject` endpoint for pushing messages into a running agent over HTTP:
 
 ```bash
 # Inject a message into the default agent

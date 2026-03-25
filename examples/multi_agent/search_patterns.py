@@ -9,7 +9,7 @@ Usage:
     uv run python examples/multi_agent/search_patterns.py
 """
 
-from orbiter import Agent, ParallelGroup, Swarm, run
+from exo import Agent, ParallelGroup, Swarm, run
 
 # --- Fan-out: parallel search agents query different sources ---------------
 

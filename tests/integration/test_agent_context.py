@@ -21,12 +21,12 @@ async def test_history_rounds_bounds_messages(
     beyond the context window.  On turn 7, the agent should be unable to recall the
     secret because only the last 2 non-system messages are visible after windowing.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     # A unique token the LLM cannot plausibly guess
     secret_code = "CTXTEST-ALPHA-7B4F"
@@ -97,12 +97,12 @@ async def test_context_mode_pilot_disables_windowing(
     agent should still recall the secret because pilot mode sets history_rounds=100,
     so all 4 turns (8 messages) remain within the window.
     """
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.context.config import make_config  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.context.config import make_config  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.sqlite import (  # pyright: ignore[reportMissingImports]
         SQLiteMemoryStore,
     )
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     # A unique token the LLM cannot plausibly guess
     secret_code = "PILOTTEST-BETA-3C8E"

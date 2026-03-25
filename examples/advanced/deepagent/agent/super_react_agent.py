@@ -1,8 +1,8 @@
-"""Super ReAct Agent — composition-based orchestrator using Orbiter primitives.
+"""Super ReAct Agent — composition-based orchestrator using Exo primitives.
 
 Enhanced ReAct Agent with custom context management, plan tracking,
 reasoning-model integration, and sub-agent delegation.  Composes around
-``orbiter.agent.Agent`` (via ``super_factory``) rather than extending a
+``exo.agent.Agent`` (via ``super_factory``) rather than extending a
 framework base class.
 """
 
@@ -23,13 +23,13 @@ from agent.tool_call_handler import ToolCallHandler
 from llm.openrouter_llm import ContextLimitError, OpenRouterLLM
 from mcp import StdioServerParameters
 
-from orbiter.mcp.client import (  # pyright: ignore[reportMissingImports]
+from exo.mcp.client import (  # pyright: ignore[reportMissingImports]
     MCPServerConfig,
     MCPServerConnection,
     MCPTransport,
 )
-from orbiter.models.types import ModelResponse  # pyright: ignore[reportMissingImports]
-from orbiter.tool import FunctionTool, Tool
+from exo.models.types import ModelResponse  # pyright: ignore[reportMissingImports]
+from exo.tool import FunctionTool, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -123,14 +123,14 @@ def _normalize_mcp_server_config(
     raise ValueError(f"MCP server_path is required for client_type '{client_type}'")
 
 class SuperReActAgent:
-    """Composition-based ReAct orchestrator using Orbiter primitives.
+    """Composition-based ReAct orchestrator using Exo primitives.
 
     Wraps an OpenRouterLLM provider with custom context management,
     plan tracking, QA hint extraction, MCP tool registration, and
-    sub-agent delegation.  Uses ``orbiter.tool.Tool`` for the tool
-    interface and ``orbiter.models.types.ModelResponse`` for LLM output.
+    sub-agent delegation.  Uses ``exo.tool.Tool`` for the tool
+    interface and ``exo.models.types.ModelResponse`` for LLM output.
 
-    The companion ``super_factory.py`` constructs ``orbiter.agent.Agent``
+    The companion ``super_factory.py`` constructs ``exo.agent.Agent``
     instances from the same ``SuperAgentConfig``; this class provides
     the full orchestration loop (``invoke``) with GAIA-specific input
     processing, context-limit retry, and reasoning-model final-answer
@@ -248,7 +248,7 @@ class SuperReActAgent:
         """Register an MCP server and create FunctionTool wrappers for its tools.
 
         Connects to the MCP server, discovers available tools, and wraps each
-        as an orbiter FunctionTool with the correct JSON Schema parameters.
+        as an exo FunctionTool with the correct JSON Schema parameters.
 
         Args:
             server_name: Name of the MCP server.
@@ -373,7 +373,7 @@ class SuperReActAgent:
         # Build tool schemas from self._tools (replaces runtime.get_tool_info)
         tool_schemas = [t.to_schema() for t in self._tools.values()]
 
-        # Call LLM via the Orbiter ModelProvider.complete() interface
+        # Call LLM via the Exo ModelProvider.complete() interface
         llm = self._get_llm()
         llm_output = await llm.complete(messages, tools=tool_schemas)  # type: ignore[arg-type]
 

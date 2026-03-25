@@ -9,20 +9,20 @@ Prerequisites:
     docker run -p 6379:6379 redis:7
 
     # Terminal 2 — start a worker
-    export ORBITER_REDIS_URL=redis://localhost:6379
-    orbiter start worker
+    export EXO_REDIS_URL=redis://localhost:6379
+    exo start worker
 
 Usage:
     export OPENAI_API_KEY=sk-...
-    export ORBITER_REDIS_URL=redis://localhost:6379
+    export EXO_REDIS_URL=redis://localhost:6379
     uv run python examples/distributed/multi_agent.py
 """
 
 import asyncio
 
-from orbiter import Agent, Swarm
-from orbiter.distributed import distributed  # pyright: ignore[reportMissingImports]
-from orbiter.types import StatusEvent, StepEvent, TextEvent
+from exo import Agent, Swarm
+from exo.distributed import distributed  # pyright: ignore[reportMissingImports]
+from exo.types import StatusEvent, StepEvent, TextEvent
 
 # -- Define a three-stage workflow Swarm -----------------------------------
 

@@ -1,4 +1,4 @@
-"""Use MCP (Model Context Protocol) tools with an agent — Orbiter quickstart.
+"""Use MCP (Model Context Protocol) tools with an agent — Exo quickstart.
 
 Shows how to connect to an MCP server, load its tools, and pass
 them to an Agent for function-calling.
@@ -10,9 +10,9 @@ Usage:
 
 import asyncio
 
-from orbiter import Agent, run
-from orbiter.mcp.client import MCPClient, MCPServerConfig  # pyright: ignore[reportMissingImports]
-from orbiter.mcp.tools import load_tools_from_client  # pyright: ignore[reportMissingImports]
+from exo import Agent, run
+from exo.mcp.client import MCPClient, MCPServerConfig  # pyright: ignore[reportMissingImports]
+from exo.mcp.tools import load_tools_from_client  # pyright: ignore[reportMissingImports]
 
 
 async def main() -> None:

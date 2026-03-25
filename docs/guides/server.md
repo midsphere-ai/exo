@@ -1,12 +1,12 @@
 # Server
 
-The `orbiter-server` package provides an HTTP server for exposing agents as web services. Built on FastAPI, it supports REST endpoints for chat, agent management, session persistence, and real-time streaming via Server-Sent Events (SSE) and WebSocket.
+The `exo-server` package provides an HTTP server for exposing agents as web services. Built on FastAPI, it supports REST endpoints for chat, agent management, session persistence, and real-time streaming via Server-Sent Events (SSE) and WebSocket.
 
 ## Basic Usage
 
 ```python
-from orbiter_server import create_app, register_agent
-from orbiter.agent import Agent
+from exo_server import create_app, register_agent
+from exo.agent import Agent
 
 # Create an agent
 agent = Agent(
@@ -31,7 +31,7 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 The `create_app()` factory builds a FastAPI application with all routes:
 
 ```python
-from orbiter_server import create_app
+from exo_server import create_app
 
 app = create_app()
 # Includes:
@@ -47,8 +47,8 @@ app = create_app()
 Register agents before creating the app:
 
 ```python
-from orbiter_server import register_agent
-from orbiter.agent import Agent
+from exo_server import register_agent
+from exo.agent import Agent
 
 # Register multiple agents
 register_agent("assistant", Agent(name="assistant", model="openai:gpt-4o"))
@@ -67,7 +67,7 @@ POST /chat
 ### Request
 
 ```python
-from orbiter_server.app import ChatRequest
+from exo_server.app import ChatRequest
 
 # Request body
 request = ChatRequest(
@@ -321,7 +321,7 @@ Add authentication or logging middleware:
 
 ```python
 from fastapi import Request
-from orbiter_server import create_app
+from exo_server import create_app
 
 app = create_app()
 
@@ -339,7 +339,7 @@ async def auth_middleware(request: Request, call_next):
 Deploy multiple agents on a single server:
 
 ```python
-from orbiter_server import create_app, register_agent
+from exo_server import create_app, register_agent
 
 # Register specialized agents
 register_agent("general", general_agent)
@@ -366,10 +366,10 @@ async def health():
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `create_app` | `orbiter_server` | FastAPI app factory |
-| `register_agent` | `orbiter_server` | Register an agent with the server |
-| `ChatRequest` | `orbiter_server.app` | Chat request model: `agent_name`, `input`, `session_id`, `stream` |
-| `ChatResponse` | `orbiter_server.app` | Chat response model: `output`, `agent_name`, `session_id` |
-| `agent_router` | `orbiter_server.agents` | Router for `/agents` endpoints |
-| `session_router` | `orbiter_server.sessions` | Router for `/sessions` endpoints |
-| `stream_router` | `orbiter_server.streaming` | Router for `/stream` and `/ws/chat` endpoints |
+| `create_app` | `exo_server` | FastAPI app factory |
+| `register_agent` | `exo_server` | Register an agent with the server |
+| `ChatRequest` | `exo_server.app` | Chat request model: `agent_name`, `input`, `session_id`, `stream` |
+| `ChatResponse` | `exo_server.app` | Chat response model: `output`, `agent_name`, `session_id` |
+| `agent_router` | `exo_server.agents` | Router for `/agents` endpoints |
+| `session_router` | `exo_server.sessions` | Router for `/sessions` endpoints |
+| `stream_router` | `exo_server.streaming` | Router for `/stream` and `/ws/chat` endpoints |

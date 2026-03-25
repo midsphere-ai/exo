@@ -1,11 +1,11 @@
-# orbiter.skills
+# exo.skills
 
 Multi-source skill registry for loading skills from local paths and GitHub repositories.
 
-**Module:** `orbiter.skills`
+**Module:** `exo.skills`
 
 ```python
-from orbiter.skills import (
+from exo.skills import (
     Skill,
     SkillRegistry,
     SkillError,
@@ -22,10 +22,10 @@ from orbiter.skills import (
 ## SkillError
 
 ```python
-class SkillError(OrbiterError)
+class SkillError(ExoError)
 ```
 
-Raised for skill loading or registry errors (missing directories, duplicate skills with raise strategy, etc.). Inherits from `OrbiterError`.
+Raised for skill loading or registry errors (missing directories, duplicate skills with raise strategy, etc.). Inherits from `ExoError`.
 
 ---
 
@@ -52,7 +52,7 @@ How to handle duplicate skill names across sources.
 ### DEFAULT_CACHE_DIR
 
 ```python
-DEFAULT_CACHE_DIR = Path.home() / ".orbiter" / "skills"
+DEFAULT_CACHE_DIR = Path.home() / ".exo" / "skills"
 ```
 
 Default directory for caching GitHub repository clones.
@@ -116,7 +116,7 @@ def __init__(
 ### Example
 
 ```python
-from orbiter.skills import Skill
+from exo.skills import Skill
 
 skill = Skill(
     name="web_search",
@@ -152,7 +152,7 @@ def __init__(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `conflict` | `ConflictStrategy \| str` | `ConflictStrategy.KEEP_FIRST` | Strategy for handling duplicate skill names. |
-| `cache_dir` | `Path \| None` | `None` | Directory for caching GitHub clones. Defaults to `~/.orbiter/skills/`. |
+| `cache_dir` | `Path \| None` | `None` | Directory for caching GitHub clones. Defaults to `~/.exo/skills/`. |
 
 ### Properties
 
@@ -242,7 +242,7 @@ Return all loaded skill names.
 ### Example
 
 ```python
-from orbiter.skills import SkillRegistry, ConflictStrategy
+from exo.skills import SkillRegistry, ConflictStrategy
 
 reg = SkillRegistry(conflict=ConflictStrategy.KEEP_LAST)
 
@@ -288,7 +288,7 @@ Dict with keys `owner`, `repo`, `branch`, `subdir`, or `None` if the URL is not 
 ### Example
 
 ```python
-from orbiter.skills import parse_github_url
+from exo.skills import parse_github_url
 
 result = parse_github_url("https://github.com/user/repo/tree/main/skills")
 # {"owner": "user", "repo": "repo", "branch": "main", "subdir": "skills"}
@@ -323,7 +323,7 @@ Tuple of `(front_matter_dict, body_string)`. Front-matter keys are lowercased. T
 ### Example
 
 ```python
-from orbiter.skills import extract_front_matter
+from exo.skills import extract_front_matter
 
 text = """---
 name: my_skill

@@ -1,13 +1,13 @@
-# orbiter.swarm
+# exo.swarm
 
 Multi-agent orchestration with flow DSL, supporting workflow, handoff, and team execution modes.
 
-**Module:** `orbiter.swarm`
+**Module:** `exo.swarm`
 
 ```python
-from orbiter.swarm import Swarm, SwarmError
+from exo.swarm import Swarm, SwarmError
 # or
-from orbiter import Swarm
+from exo import Swarm
 ```
 
 ---
@@ -15,10 +15,10 @@ from orbiter import Swarm
 ## SwarmError
 
 ```python
-class SwarmError(OrbiterError)
+class SwarmError(ExoError)
 ```
 
-Raised for swarm-level errors (invalid flow, missing agents, duplicate agents, unsupported mode, max handoffs exceeded, etc.). Inherits from `OrbiterError`.
+Raised for swarm-level errors (invalid flow, missing agents, duplicate agents, unsupported mode, max handoffs exceeded, etc.). Inherits from `ExoError`.
 
 ---
 
@@ -136,7 +136,7 @@ The flow DSL uses `>>` to denote sequential dependency and `(x | y)` for paralle
 ### Example: Workflow Mode
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 researcher = Agent(name="researcher", instructions="Research the topic.")
 writer = Agent(name="writer", instructions="Write an article based on the research.")
@@ -155,7 +155,7 @@ print(result.output)
 ### Example: Handoff Mode
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 triage = Agent(name="triage", instructions="Route to the right specialist.")
 billing = Agent(name="billing", instructions="Handle billing questions.")
@@ -180,7 +180,7 @@ result = run.sync(swarm, "I was charged twice for my subscription")
 ### Example: Team Mode
 
 ```python
-from orbiter import Agent, Swarm, run
+from exo import Agent, Swarm, run
 
 lead = Agent(name="lead", instructions="You are the team lead. Delegate tasks.")
 coder = Agent(name="coder", instructions="Write Python code.")

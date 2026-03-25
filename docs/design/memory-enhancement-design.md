@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter's `orbiter-memory` package provides a solid foundation:
+Exo's `exo-memory` package provides a solid foundation:
 
 - **MemoryStore protocol** — async `add`, `get`, `search`, `clear` with pluggable backends.
 - **Typed item hierarchy** — `MemoryItem` base with `SystemMemory`, `HumanMemory`,
@@ -27,18 +27,18 @@ Orbiter's `orbiter-memory` package provides a solid foundation:
 However, it lacks several capabilities found in agent-core (`openjiuwen/core/memory/`):
 
 1. **Memory type taxonomy** — agent-core distinguishes USER_PROFILE, SEMANTIC_MEMORY,
-   EPISODIC_MEMORY, VARIABLE, and SUMMARY as first-class types. Orbiter's `memory_type`
+   EPISODIC_MEMORY, VARIABLE, and SUMMARY as first-class types. Exo's `memory_type`
    is an untyped string with only conversation-role subtypes (system/human/ai/tool).
 2. **Encryption at rest** — agent-core provides AES-256 encryption (nonce + tag +
-   ciphertext). Orbiter has Fernet encryption for API keys but nothing for memory items.
+   ciphertext). Exo has Fernet encryption for API keys but nothing for memory items.
 3. **Intelligent deduplication** — agent-core's `MemUpdateChecker` uses LLM-based
    semantic comparison (top-5 similarity @ 0.75 threshold) to decide ADD/DELETE/MERGE.
-   Orbiter's LongTermMemory only checks exact content+type matches.
+   Exo's LongTermMemory only checks exact content+type matches.
 4. **Schema migration system** — agent-core has pluggable migration registries for SQL,
-   vector store, and KV store backends with version tracking. Orbiter backends create
+   vector store, and KV store backends with version tracking. Exo backends create
    tables on init but have no migration path for schema changes.
 
-This document proposes adding four enhancement areas to `orbiter-memory`, all as
+This document proposes adding four enhancement areas to `exo-memory`, all as
 additive changes with zero modifications to existing APIs.
 
 ---
@@ -181,7 +181,7 @@ class EncryptedMemoryStore:
   Vector search still works if embeddings are computed pre-encryption.
 - Fernet uses AES-128-CBC. Agent-core uses AES-256. Fernet is simpler, well-tested,
   and sufficient for at-rest encryption. The `cryptography` package is already an
-  indirect dependency via orbiter-web.
+  indirect dependency via exo-web.
 
 ---
 
@@ -332,7 +332,7 @@ separate migration strategy can be added.
 
 ## 6. File Layout
 
-All changes are within `packages/orbiter-memory/`:
+All changes are within `packages/exo-memory/`:
 
 | Addition | Location |
 |----------|----------|
@@ -423,7 +423,7 @@ The `category` filter is supported but rarely used for short-term data.
 
 ## 9. Dependencies
 
-- **cryptography** — already an indirect dependency via orbiter-web's Fernet usage.
+- **cryptography** — already an indirect dependency via exo-web's Fernet usage.
   `EncryptedMemoryStore` uses the same `cryptography.fernet.Fernet` class. No new
   dependency added.
 - No other new dependencies.

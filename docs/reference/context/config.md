@@ -1,11 +1,11 @@
-# orbiter.context.config
+# exo.context.config
 
 Context configuration with automation modes, history windowing, summarization, and retrieval settings.
 
 ## Module Path
 
 ```python
-from orbiter.context.config import ContextConfig, AutomationMode, make_config
+from exo.context.config import ContextConfig, AutomationMode, make_config
 ```
 
 ---
@@ -67,7 +67,7 @@ ContextConfig(
 ### Example
 
 ```python
-from orbiter.context.config import ContextConfig, AutomationMode
+from exo.context.config import ContextConfig, AutomationMode
 
 # Default copilot config
 config = ContextConfig()
@@ -120,7 +120,7 @@ def make_config(
 ### Example
 
 ```python
-from orbiter.context.config import make_config
+from exo.context.config import make_config
 
 # Preset navigator config
 config = make_config("navigator")

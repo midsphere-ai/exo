@@ -1,6 +1,6 @@
 # WebSocket Protocol Reference
 
-Orbiter Web uses WebSocket connections for all real-time features. This document covers the multiplexed WebSocket endpoint and the dedicated per-feature WebSocket endpoints.
+Exo Web uses WebSocket connections for all real-time features. This document covers the multiplexed WebSocket endpoint and the dedicated per-feature WebSocket endpoints.
 
 ## Endpoints
 
@@ -19,12 +19,12 @@ Orbiter Web uses WebSocket connections for all real-time features. This document
 
 ## Connection and Authentication
 
-All WebSocket endpoints authenticate via the `orbiter_session` cookie. The browser sends this cookie automatically with the WebSocket upgrade request.
+All WebSocket endpoints authenticate via the `exo_session` cookie. The browser sends this cookie automatically with the WebSocket upgrade request.
 
 ### Connection Flow
 
 1. Client initiates WebSocket upgrade (cookie sent automatically)
-2. Server extracts `orbiter_session` cookie and validates against the `sessions` table
+2. Server extracts `exo_session` cookie and validates against the `sessions` table
 3. If valid and not expired: server calls `websocket.accept()`
 4. If invalid or missing: server closes with code `4001` and reason `"Unauthorized"`
 
@@ -122,10 +122,10 @@ Server responds:
 ### Client-Side API
 
 ```typescript
-import { orbiterSocket } from "./utils/websocket";
+import { exoSocket } from "./utils/websocket";
 
 // Subscribe — returns an unsubscribe function
-const unsubscribe = orbiterSocket.subscribe("notifications", (message) => {
+const unsubscribe = exoSocket.subscribe("notifications", (message) => {
   console.log("Received:", message.type, message.payload);
 });
 
@@ -169,7 +169,7 @@ Note: The pong message is a bare JSON object without the channel envelope.
 
 ## Reconnection Strategy
 
-The TypeScript client (`OrbiterSocket`) implements exponential backoff:
+The TypeScript client (`ExoSocket`) implements exponential backoff:
 
 | Parameter | Value |
 |-----------|-------|
@@ -193,7 +193,7 @@ The TypeScript client (`OrbiterSocket`) implements exponential backoff:
 - Reconnection is triggered automatically on any unintentional close
 - On reconnect, the client re-subscribes to all active channels
 - Messages sent while disconnected are queued and flushed on reconnect
-- Calling `orbiterSocket.close()` sets an intentional close flag and disables reconnection
+- Calling `exoSocket.close()` sets an intentional close flag and disables reconnection
 
 ### Connection States
 
@@ -204,7 +204,7 @@ type ConnectionState = "connecting" | "connected" | "disconnected" | "reconnecti
 Monitor state changes:
 
 ```typescript
-orbiterSocket.onConnectionChange((state) => {
+exoSocket.onConnectionChange((state) => {
   console.log("Connection state:", state);
 });
 ```
@@ -506,7 +506,7 @@ Sent on the dedicated chat WebSocket:
 ### Broadcasting to Users
 
 ```python
-from orbiter_web.websocket import manager
+from exo_web.websocket import manager
 
 # Send to all of a user's connections subscribed to a channel
 sent_count = await manager.broadcast_to_user(
@@ -536,7 +536,7 @@ await manager.send_to_connection(
 ### Authentication Helper
 
 ```python
-from orbiter_web.websocket import get_ws_user
+from exo_web.websocket import get_ws_user
 
 user = await get_ws_user(websocket)
 if user is None:
@@ -551,10 +551,10 @@ if user is None:
 
 | File | Description |
 |------|-------------|
-| `src/orbiter_web/websocket.py` | Multiplexed WebSocket manager, heartbeat, message dispatcher |
-| `src/orbiter_web/routes/playground.py` | Chat WebSocket endpoint with streaming and takeover |
-| `src/orbiter_web/routes/logs.py` | Dedicated log streaming WebSocket |
-| `src/orbiter_web/routes/workflow_runs.py` | Workflow run stream and debug WebSocket |
-| `src/orbiter_web/routes/crews.py` | Crew run stream WebSocket |
-| `src/orbiter_web/routes/runs.py` | Agent run stream WebSocket |
-| `src/utils/websocket.ts` | Client-side `OrbiterSocket` singleton |
+| `src/exo_web/websocket.py` | Multiplexed WebSocket manager, heartbeat, message dispatcher |
+| `src/exo_web/routes/playground.py` | Chat WebSocket endpoint with streaming and takeover |
+| `src/exo_web/routes/logs.py` | Dedicated log streaming WebSocket |
+| `src/exo_web/routes/workflow_runs.py` | Workflow run stream and debug WebSocket |
+| `src/exo_web/routes/crews.py` | Crew run stream WebSocket |
+| `src/exo_web/routes/runs.py` | Agent run stream WebSocket |
+| `src/utils/websocket.ts` | Client-side `ExoSocket` singleton |

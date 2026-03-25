@@ -1,13 +1,13 @@
-# orbiter._internal.graph
+# exo._internal.graph
 
 Graph utilities for agent execution ordering. Provides a simple directed graph, topological sort (Kahn's algorithm), cycle detection, and a flow DSL parser for defining agent pipelines.
 
 > **Internal API** -- subject to change without notice.
 
-**Module:** `orbiter._internal.graph`
+**Module:** `exo._internal.graph`
 
 ```python
-from orbiter._internal.graph import Graph, GraphError, parse_flow_dsl, topological_sort
+from exo._internal.graph import Graph, GraphError, parse_flow_dsl, topological_sort
 ```
 
 ---
@@ -18,7 +18,7 @@ from orbiter._internal.graph import Graph, GraphError, parse_flow_dsl, topologic
 class GraphError(Exception)
 ```
 
-Raised for graph-related errors (cycles, invalid DSL, unknown nodes, etc.). Note: this inherits from `Exception`, not `OrbiterError`.
+Raised for graph-related errors (cycles, invalid DSL, unknown nodes, etc.). Note: this inherits from `Exception`, not `ExoError`.
 
 ---
 
@@ -113,7 +113,7 @@ Return all edges as `(source, target)` tuples.
 ### Example
 
 ```python
-from orbiter._internal.graph import Graph
+from exo._internal.graph import Graph
 
 g = Graph()
 g.add_edge("a", "b")
@@ -153,7 +153,7 @@ Ordered list of node names. Nodes with no dependencies come first.
 ### Example
 
 ```python
-from orbiter._internal.graph import Graph, topological_sort
+from exo._internal.graph import Graph, topological_sort
 
 g = Graph()
 g.add_edge("a", "b")
@@ -212,7 +212,7 @@ A `Graph` with appropriate nodes and edges.
 ### Examples
 
 ```python
-from orbiter._internal.graph import parse_flow_dsl, topological_sort
+from exo._internal.graph import parse_flow_dsl, topological_sort
 
 # Linear chain
 g = parse_flow_dsl("a >> b >> c")

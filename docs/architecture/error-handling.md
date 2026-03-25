@@ -1,33 +1,33 @@
 # Error Handling
 
-Orbiter uses a structured exception hierarchy rooted at `OrbiterError`. This document describes the error types, their semantics, and how errors propagate through the system.
+Exo uses a structured exception hierarchy rooted at `ExoError`. This document describes the error types, their semantics, and how errors propagate through the system.
 
 ## Exception Hierarchy
 
 ```
 Exception
-  +-- OrbiterError                  Base for all Orbiter errors (orbiter.types)
-  |     +-- AgentError              Agent-level failures (orbiter.agent)
-  |     +-- ToolError               Tool execution failures (orbiter.tool)
-  |     +-- CallRunnerError         Call runner failures (orbiter._internal.call_runner)
-  |     +-- SwarmError              Swarm orchestration failures (orbiter.swarm)
-  |     +-- RegistryError           Registry lookup/duplicate failures (orbiter.registry)
-  |     +-- OutputParseError        LLM output parsing failures (orbiter._internal.output_parser)
-  |     +-- ModelError              LLM provider failures (orbiter.models.types)
-  +-- GraphError                    Graph/flow DSL failures (orbiter._internal.graph)
+  +-- ExoError                  Base for all Exo errors (exo.types)
+  |     +-- AgentError              Agent-level failures (exo.agent)
+  |     +-- ToolError               Tool execution failures (exo.tool)
+  |     +-- CallRunnerError         Call runner failures (exo._internal.call_runner)
+  |     +-- SwarmError              Swarm orchestration failures (exo.swarm)
+  |     +-- RegistryError           Registry lookup/duplicate failures (exo.registry)
+  |     +-- OutputParseError        LLM output parsing failures (exo._internal.output_parser)
+  |     +-- ModelError              LLM provider failures (exo.models.types)
+  +-- GraphError                    Graph/flow DSL failures (exo._internal.graph)
 ```
 
 ### Error Types in Detail
 
-**`OrbiterError`** (`orbiter.types`)
-The root exception for all Orbiter errors. Catching this catches everything Orbiter can raise (except `GraphError` which is intentionally separate as a low-level utility).
+**`ExoError`** (`exo.types`)
+The root exception for all Exo errors. Catching this catches everything Exo can raise (except `GraphError` which is intentionally separate as a low-level utility).
 
 ```python
-class OrbiterError(Exception):
-    """Base exception for all Orbiter errors."""
+class ExoError(Exception):
+    """Base exception for all Exo errors."""
 ```
 
-**`AgentError`** (`orbiter.agent`)
+**`AgentError`** (`exo.agent`)
 Raised for agent-level problems: duplicate tools, missing provider, retry exhaustion, context length overflow.
 
 ```python
@@ -41,11 +41,11 @@ AgentError("Agent 'researcher' failed after 3 retries: ConnectionError(...)")
 AgentError("Context length exceeded on agent 'researcher': ...")
 ```
 
-**`ToolError`** (`orbiter.tool`)
+**`ToolError`** (`exo.tool`)
 Raised when a tool's `execute()` method fails. The tool name is always included.
 
 ```python
-class ToolError(OrbiterError):
+class ToolError(ExoError):
     """Raised when a tool execution fails."""
 ```
 
@@ -63,7 +63,7 @@ async def execute(self, **kwargs):
         raise ToolError(f"Tool '{self.name}' failed: {exc}") from exc
 ```
 
-**`CallRunnerError`** (`orbiter._internal.call_runner`)
+**`CallRunnerError`** (`exo._internal.call_runner`)
 Raised by the call runner for loop detection or agent execution failures.
 
 ```python
@@ -74,10 +74,10 @@ CallRunnerError("Endless loop detected: same tool calls repeated 3 times (thresh
 CallRunnerError("Call runner failed for agent 'researcher': ...")
 ```
 
-**`SwarmError`** (`orbiter.swarm`)
+**`SwarmError`** (`exo.swarm`)
 Raised for swarm configuration and execution problems: empty agent list, duplicate names, invalid flow DSL, cycle detection, max handoffs exceeded.
 
-**`OutputParseError`** (`orbiter._internal.output_parser`)
+**`OutputParseError`** (`exo._internal.output_parser`)
 Raised when LLM output cannot be parsed: invalid JSON in tool arguments, structured output validation failure.
 
 ```python
@@ -88,10 +88,10 @@ OutputParseError("Invalid JSON in arguments for tool 'search': Expecting value: 
 OutputParseError("Structured output failed ResearchReport validation: ...")
 ```
 
-**`ModelError`** (`orbiter.models.types`)
+**`ModelError`** (`exo.models.types`)
 Raised by LLM providers for API errors, authentication failures, rate limits, etc.
 
-**`RegistryError`** (`orbiter.registry`)
+**`RegistryError`** (`exo.registry`)
 Raised when a registry operation fails: duplicate registration, missing lookup.
 
 ```python
@@ -186,8 +186,8 @@ except Exception as exc:
 ### In Tools
 
 ```python
-from orbiter import tool
-from orbiter.tool import ToolError
+from exo import tool
+from exo.tool import ToolError
 
 @tool
 async def query_database(sql: str) -> str:
@@ -203,7 +203,7 @@ async def query_database(sql: str) -> str:
 ### In Hooks
 
 ```python
-from orbiter.hooks import HookPoint
+from exo.hooks import HookPoint
 
 async def validate_tool_call(agent, tool_name, arguments):
     """Hook that validates tool calls before execution."""
@@ -221,16 +221,16 @@ agent = Agent(
 ### In User Code
 
 ```python
-from orbiter import run
-from orbiter.types import OrbiterError
-from orbiter.agent import AgentError
+from exo import run
+from exo.types import ExoError
+from exo.agent import AgentError
 
 try:
     result = await run(agent, "Delete everything")
 except AgentError as e:
     print(f"Agent failed: {e}")
     # e.__cause__ has the original exception
-except OrbiterError as e:
+except ExoError as e:
     print(f"Framework error: {e}")
 ```
 

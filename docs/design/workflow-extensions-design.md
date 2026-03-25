@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-Orbiter's `Swarm` provides clean multi-agent orchestration with three modes:
+Exo's `Swarm` provides clean multi-agent orchestration with three modes:
 
 - **Workflow** — agents execute in topological order, chaining output→input.
 - **Handoff** — agent-driven delegation via declared handoff targets.
@@ -26,7 +26,7 @@ fan-out/fan-in patterns.  However, it cannot express:
 
 Agent-core (`openjiuwen/core/workflow/components/`) addresses these with
 `LoopComponent`, `BranchComponent`, `SubWorkflowComponent`, and a safe
-expression evaluator.  This document designs equivalent extensions for Orbiter's
+expression evaluator.  This document designs equivalent extensions for Exo's
 Swarm that preserve full backward compatibility.
 
 ---
@@ -92,7 +92,7 @@ duck-typing pattern used by `ParallelGroup`, `SerialGroup`, and `SwarmNode`:
 ### 3.2 New Components
 
 ```
-orbiter/_internal/
+exo/_internal/
 ├── expression.py          # Safe expression evaluator (~200 lines)
 ├── branch_node.py         # BranchNode for conditional routing (~150 lines)
 ├── loop_node.py           # LoopNode for iteration (~200 lines)
@@ -129,7 +129,7 @@ A simple mutable dict that flows through all nodes during workflow execution,
 enabling inter-node data passing.
 
 ```python
-# orbiter/_internal/workflow_state.py
+# exo/_internal/workflow_state.py
 
 from __future__ import annotations
 from typing import Any
@@ -195,7 +195,7 @@ A sandboxed evaluator for conditions in branches and loops.  Uses Python's
 `ast.parse(mode='eval')` — **never** calls `eval()`.
 
 ```python
-# orbiter/_internal/expression.py
+# exo/_internal/expression.py
 
 import ast
 from typing import Any
@@ -256,11 +256,11 @@ expressions, assignment expressions (`:=`).
 Three loop modes matching agent-core's `LoopComponent`:
 
 ```python
-# orbiter/_internal/loop_node.py
+# exo/_internal/loop_node.py
 
 from __future__ import annotations
 from typing import Any
-from orbiter.types import RunResult
+from exo.types import RunResult
 
 class LoopNode:
     """Iterates an inner agent with three loop modes.
@@ -358,11 +358,11 @@ while i < max_iterations:
 ### 4.4 BranchNode — Conditional Routing
 
 ```python
-# orbiter/_internal/branch_node.py
+# exo/_internal/branch_node.py
 
 from __future__ import annotations
 from typing import Any
-from orbiter.types import RunResult
+from exo.types import RunResult
 
 class BranchNode:
     """Conditional routing between two agents.
@@ -431,7 +431,7 @@ else:
 
 ### 4.5 Sub-Workflows (Already Supported)
 
-Orbiter already has `SwarmNode` for nested swarms.  The only enhancement needed:
+Exo already has `SwarmNode` for nested swarms.  The only enhancement needed:
 
 1. **State forwarding** — optionally pass parent `WorkflowState` to inner swarm
    (currently uses context isolation, which remains the default).
@@ -581,7 +581,7 @@ Allowed AST node types:
 
 ## 8. Comparison with Agent-Core
 
-| Feature | Agent-Core | Orbiter (Proposed) |
+| Feature | Agent-Core | Exo (Proposed) |
 |---------|-----------|-------------------|
 | Loop types | count, items, condition, always_true | count, items, condition (always_true = `condition="True"`) |
 | Break control | `[BREAK]` in output | Same |
@@ -595,9 +595,9 @@ Allowed AST node types:
 | DSL | Component-based config | Flow DSL + Python node types |
 
 **Key difference:** Agent-core uses a Pregel graph engine where components are
-registered as graph vertices with channel-based communication.  Orbiter uses a
+registered as graph vertices with channel-based communication.  Exo uses a
 simpler sequential execution model where special nodes (loop, branch) handle
-their own internal complexity.  This is simpler and sufficient — Orbiter's
+their own internal complexity.  This is simpler and sufficient — Exo's
 ParallelGroup already handles fan-out, and the topological sort handles DAGs.
 
 ---

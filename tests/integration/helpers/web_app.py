@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-app = FastAPI(title="Orbiter Integration Test App")
+app = FastAPI(title="Exo Integration Test App")
 
 # ---------------------------------------------------------------------------
 # In-memory stores (module-level, shared across requests in same process)
@@ -169,14 +169,14 @@ async def run_agent(
     import os
     import sys
 
-    from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-    from orbiter.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
-    from orbiter.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.mcp import MCPServerConfig  # pyright: ignore[reportMissingImports]
+    from exo.memory.backends.vector import (  # pyright: ignore[reportMissingImports]
         ChromaVectorMemoryStore,
         SentenceTransformerEmbeddingProvider,
     )
-    from orbiter.memory.base import AIMemory  # pyright: ignore[reportMissingImports]
-    from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
+    from exo.memory.base import AIMemory  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
 
     provider = get_provider(agent_config["model"])
     agent = Agent(
@@ -246,7 +246,7 @@ async def stream_agent(
     """Stream an agent run as Server-Sent Events (SSE).
 
     Each event is emitted as ``data: {json}\\n\\n``.  Event JSON has a
-    ``type`` field matching the orbiter stream event types: ``text``,
+    ``type`` field matching the exo stream event types: ``text``,
     ``tool_call``, ``usage``.
     """
     agent_config = _agents.get(agent_id)
@@ -256,10 +256,10 @@ async def stream_agent(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     async def _event_generator():
-        from orbiter.agent import Agent  # pyright: ignore[reportMissingImports]
-        from orbiter.models import get_provider  # pyright: ignore[reportMissingImports]
-        from orbiter.runner import run  # pyright: ignore[reportMissingImports]
-        from orbiter.tool import tool  # pyright: ignore[reportMissingImports]
+        from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+        from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+        from exo.runner import run  # pyright: ignore[reportMissingImports]
+        from exo.tool import tool  # pyright: ignore[reportMissingImports]
 
         @tool
         def get_greeting(name: str) -> str:

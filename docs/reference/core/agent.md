@@ -1,11 +1,11 @@
-# orbiter.agent
+# exo.agent
 
-The Agent class -- the core autonomous LLM-powered unit in Orbiter.
+The Agent class -- the core autonomous LLM-powered unit in Exo.
 
-**Module:** `orbiter.agent`
+**Module:** `exo.agent`
 
 ```python
-from orbiter.agent import Agent, AgentError
+from exo.agent import Agent, AgentError
 ```
 
 ---
@@ -13,10 +13,10 @@ from orbiter.agent import Agent, AgentError
 ## AgentError
 
 ```python
-class AgentError(OrbiterError)
+class AgentError(ExoError)
 ```
 
-Raised for agent-level errors (duplicate tools, invalid config, missing provider, context length exceeded, retries exhausted, etc.). Inherits from `OrbiterError`.
+Raised for agent-level errors (duplicate tools, invalid config, missing provider, context length exceeded, retries exhausted, etc.). Inherits from `ExoError`.
 
 ---
 
@@ -26,7 +26,7 @@ Raised for agent-level errors (duplicate tools, invalid config, missing provider
 class Agent
 ```
 
-An autonomous LLM-powered agent with tools and lifecycle hooks. Agents are the core building block in Orbiter. Each agent wraps an LLM model, a set of tools, optional handoff targets, and lifecycle hooks.
+An autonomous LLM-powered agent with tools and lifecycle hooks. Agents are the core building block in Exo. Each agent wraps an LLM model, a set of tools, optional handoff targets, and lifecycle hooks.
 
 All parameters are keyword-only; only `name` is required.
 
@@ -172,9 +172,9 @@ Return a readable string representation, e.g. `Agent(name='bot', model='openai:g
 
 ```python
 import asyncio
-from orbiter.agent import Agent
-from orbiter.tool import tool
-from orbiter.hooks import HookPoint
+from exo.agent import Agent
+from exo.tool import tool
+from exo.hooks import HookPoint
 
 @tool
 def search(query: str) -> str:

@@ -5,7 +5,7 @@ Processors are event-driven hooks that run at specific points in the agent lifec
 ## Basic Usage
 
 ```python
-from orbiter.context import ContextProcessor, ProcessorPipeline, Context, ContextConfig
+from exo.context import ContextProcessor, ProcessorPipeline, Context, ContextConfig
 
 # Create a pipeline
 pipeline = ProcessorPipeline()
@@ -42,7 +42,7 @@ The pipeline supports four lifecycle events:
 Subclass `ContextProcessor` and implement the `process` method:
 
 ```python
-from orbiter.context import ContextProcessor
+from exo.context import ContextProcessor
 
 class EntityExtractor(ContextProcessor):
     event = "post_llm_call"
@@ -77,7 +77,7 @@ Key rules:
 Fires on `pre_llm_call`. Checks if the conversation history exceeds the `summary_threshold` from `ContextConfig` and, if so, summarizes older messages to reduce token usage:
 
 ```python
-from orbiter.context import SummarizeProcessor
+from exo.context import SummarizeProcessor
 
 processor = SummarizeProcessor()
 # event = "pre_llm_call"
@@ -91,7 +91,7 @@ The processor reads `config.summary_threshold` from the context to decide when t
 Fires on `post_tool_call`. When a tool result exceeds `max_size` characters, it stores the full result in the workspace and replaces the message content with a reference:
 
 ```python
-from orbiter.context import ToolResultOffloader
+from exo.context import ToolResultOffloader
 
 processor = ToolResultOffloader(max_size=5000)
 # event = "post_tool_call"
@@ -210,12 +210,12 @@ class ResultArchiver(ContextProcessor):
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `ContextProcessor` | `orbiter.context` | ABC with `event`, `name`, `process(ctx, payload)` |
-| `ProcessorPipeline` | `orbiter.context` | Manages and fires processors by event |
+| `ContextProcessor` | `exo.context` | ABC with `event`, `name`, `process(ctx, payload)` |
+| `ProcessorPipeline` | `exo.context` | Manages and fires processors by event |
 | `ProcessorPipeline.register(processor)` | | Add a processor to the pipeline |
 | `ProcessorPipeline.unregister(name)` | | Remove a processor by name |
 | `ProcessorPipeline.fire(event, ctx, payload)` | | Run all processors for an event |
 | `ProcessorPipeline.has_processors(event)` | | Check if any processors are registered for an event |
 | `ProcessorPipeline.list_processors(event)` | | List processor names for an event |
-| `SummarizeProcessor` | `orbiter.context` | Built-in: summarizes history on `pre_llm_call` |
-| `ToolResultOffloader` | `orbiter.context` | Built-in: offloads large tool results on `post_tool_call` |
+| `SummarizeProcessor` | `exo.context` | Built-in: summarizes history on `pre_llm_call` |
+| `ToolResultOffloader` | `exo.context` | Built-in: offloads large tool results on `post_tool_call` |

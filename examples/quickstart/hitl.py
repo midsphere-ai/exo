@@ -8,8 +8,8 @@ Usage:
     uv run python examples/quickstart/hitl.py
 """
 
-from orbiter import Agent, run
-from orbiter.human import HumanInputTool
+from exo import Agent, run
+from exo.human import HumanInputTool
 
 agent = Agent(
     name="assistant",

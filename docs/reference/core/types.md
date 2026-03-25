@@ -1,12 +1,12 @@
-# orbiter.types
+# exo.types
 
-Core message types, agent I/O models, run results, and streaming events for the Orbiter framework.
+Core message types, agent I/O models, run results, and streaming events for the Exo framework.
 
-**Module:** `orbiter.types`
+**Module:** `exo.types`
 
 ```python
-from orbiter.types import (
-    OrbiterError,
+from exo.types import (
+    ExoError,
     UserMessage,
     SystemMessage,
     AssistantMessage,
@@ -26,20 +26,20 @@ from orbiter.types import (
 
 ---
 
-## OrbiterError
+## ExoError
 
 ```python
-class OrbiterError(Exception)
+class ExoError(Exception)
 ```
 
-Base exception for all Orbiter errors. All framework-specific exceptions inherit from this class.
+Base exception for all Exo errors. All framework-specific exceptions inherit from this class.
 
 ```python
-from orbiter.types import OrbiterError
+from exo.types import ExoError
 
 try:
-    raise OrbiterError("something went wrong")
-except OrbiterError as e:
+    raise ExoError("something went wrong")
+except ExoError as e:
     print(e)
 ```
 
@@ -63,7 +63,7 @@ A message from the user. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import UserMessage
+from exo.types import UserMessage
 
 msg = UserMessage(content="What is the weather today?")
 print(msg.role)     # "user"
@@ -90,7 +90,7 @@ A system instruction message. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import SystemMessage
+from exo.types import SystemMessage
 
 msg = SystemMessage(content="You are a helpful assistant.")
 print(msg.role)     # "system"
@@ -118,7 +118,7 @@ A request from the LLM to invoke a tool. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import ToolCall
+from exo.types import ToolCall
 
 tc = ToolCall(id="call_1", name="get_weather", arguments='{"city": "Tokyo"}')
 print(tc.name)       # "get_weather"
@@ -146,7 +146,7 @@ A response from the LLM assistant. May contain text content, tool calls, or both
 ### Example
 
 ```python
-from orbiter.types import AssistantMessage, ToolCall
+from exo.types import AssistantMessage, ToolCall
 
 # Text-only response
 msg = AssistantMessage(content="The weather in Tokyo is sunny.")
@@ -181,7 +181,7 @@ The result of executing a tool call. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import ToolResult
+from exo.types import ToolResult
 
 # Successful result
 result = ToolResult(
@@ -229,7 +229,7 @@ Token usage statistics from an LLM call. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import Usage
+from exo.types import Usage
 
 usage = Usage(input_tokens=100, output_tokens=50, total_tokens=150)
 print(usage.total_tokens)  # 150
@@ -255,7 +255,7 @@ Normalized input for an agent run. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import AgentInput, UserMessage
+from exo.types import AgentInput, UserMessage
 
 inp = AgentInput(
     query="What is the weather?",
@@ -284,7 +284,7 @@ Output from a single LLM call within a run. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import AgentOutput, Usage
+from exo.types import AgentOutput, Usage
 
 output = AgentOutput(
     text="Here is your answer.",
@@ -313,7 +313,7 @@ A parsed tool action ready for execution. Unlike `ToolCall` where `arguments` is
 ### Example
 
 ```python
-from orbiter.types import ActionModel
+from exo.types import ActionModel
 
 action = ActionModel(
     tool_call_id="call_1",
@@ -344,7 +344,7 @@ Return type of `run()` -- the final result of an agent execution. Immutable (fro
 ### Example
 
 ```python
-from orbiter.types import RunResult, Usage
+from exo.types import RunResult, Usage
 
 result = RunResult(
     output="The weather in Tokyo is sunny.",
@@ -376,7 +376,7 @@ Streaming event for a text delta. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import TextEvent
+from exo.types import TextEvent
 
 event = TextEvent(text="Hello", agent_name="assistant")
 print(event.type)  # "text"
@@ -405,7 +405,7 @@ Streaming event for a tool call notification. Immutable (frozen Pydantic model).
 ### Example
 
 ```python
-from orbiter.types import ToolCallEvent
+from exo.types import ToolCallEvent
 
 event = ToolCallEvent(
     tool_name="get_weather",
@@ -435,7 +435,7 @@ Streaming event emitted when a message is injected into a running agent via `age
 ### Example
 
 ```python
-from orbiter.types import MessageInjectedEvent
+from exo.types import MessageInjectedEvent
 
 event = MessageInjectedEvent(content="Also check the docs", agent_name="researcher")
 print(event.type)     # "message_injected"

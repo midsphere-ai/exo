@@ -1,4 +1,4 @@
-"""Create and use local tools — Orbiter quickstart.
+"""Create and use local tools — Exo quickstart.
 
 Demonstrates three ways to define tools:
 
@@ -13,7 +13,7 @@ Usage:
 
 from typing import Any, ClassVar
 
-from orbiter import Agent, FunctionTool, Tool, run, tool
+from exo import Agent, FunctionTool, Tool, run, tool
 
 # --- 1. @tool decorator (simplest) ------------------------------------------
 
@@ -68,7 +68,7 @@ class GreetTool(Tool):
 
     async def execute(self, **kwargs: Any) -> str:
         person = kwargs.get("name", "World")
-        return f"Hello, {person}! Welcome to Orbiter."
+        return f"Hello, {person}! Welcome to Exo."
 
 
 # --- Agent with all three tools ----------------------------------------------

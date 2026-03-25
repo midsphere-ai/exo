@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""OpenRouter LLM provider for Orbiter framework.
+"""OpenRouter LLM provider for Exo framework.
 
 Implements the ``ModelProvider`` protocol using the OpenRouter API,
 which is OpenAI-compatible. Supports cache control, provider routing,
@@ -16,14 +16,14 @@ import tiktoken  # pyright: ignore[reportMissingImports]
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict
 
-from orbiter.config import ModelConfig  # pyright: ignore[reportMissingImports]
-from orbiter.models.provider import ModelProvider  # pyright: ignore[reportMissingImports]
-from orbiter.models.types import (  # pyright: ignore[reportMissingImports]
+from exo.config import ModelConfig  # pyright: ignore[reportMissingImports]
+from exo.models.provider import ModelProvider  # pyright: ignore[reportMissingImports]
+from exo.models.types import (  # pyright: ignore[reportMissingImports]
     ModelError,
     ModelResponse,
     StreamChunk,
 )
-from orbiter.types import (  # pyright: ignore[reportMissingImports]
+from exo.types import (  # pyright: ignore[reportMissingImports]
     AssistantMessage,
     Message,
     SystemMessage,
@@ -100,10 +100,10 @@ def _map_finish_reason(raw: str | None) -> str:
 
 
 def _to_openai_messages(messages: list[Message] | list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert Orbiter ``Message`` objects or raw dicts to OpenAI chat message dicts.
+    """Convert Exo ``Message`` objects or raw dicts to OpenAI chat message dicts.
 
     Args:
-        messages: Orbiter message sequence or raw message dicts.
+        messages: Exo message sequence or raw message dicts.
 
     Returns:
         List of dicts suitable for the OpenAI ``messages`` parameter.
@@ -149,7 +149,7 @@ def _to_openai_messages(messages: list[Message] | list[dict[str, Any]]) -> list[
 
 
 class OpenRouterLLM(ModelProvider):
-    """OpenRouter LLM provider implementing the Orbiter ``ModelProvider`` protocol.
+    """OpenRouter LLM provider implementing the Exo ``ModelProvider`` protocol.
 
     Wraps the OpenAI-compatible OpenRouter API with support for cache control,
     provider routing preferences, token usage tracking, and context limit
@@ -173,8 +173,8 @@ class OpenRouterLLM(ModelProvider):
         timeout: int = 600,
         **kwargs: Any,
     ):
-        # Build Orbiter ModelConfig for the parent ABC
-        orbiter_config = ModelConfig(
+        # Build Exo ModelConfig for the parent ABC
+        exo_config = ModelConfig(
             provider="openrouter",
             model_name=model_name,
             api_key=api_key,
@@ -182,7 +182,7 @@ class OpenRouterLLM(ModelProvider):
             max_retries=max_retries,
             timeout=float(timeout),
         )
-        super().__init__(orbiter_config)
+        super().__init__(exo_config)
 
         # OpenRouter-specific config (pricing, cache control, provider prefs)
         self.or_config = OpenRouterConfig(
@@ -221,11 +221,11 @@ class OpenRouterLLM(ModelProvider):
     ) -> ModelResponse:
         """Send a completion request to OpenRouter and return the full response.
 
-        Converts Orbiter ``Message`` objects to OpenAI format, applies cache
+        Converts Exo ``Message`` objects to OpenAI format, applies cache
         control if enabled, and normalizes the response to ``ModelResponse``.
 
         Args:
-            messages: Conversation history as Orbiter message objects.
+            messages: Conversation history as Exo message objects.
             tools: JSON-schema tool definitions in OpenAI format.
             temperature: Sampling temperature override.
             max_tokens: Maximum output tokens override.
@@ -299,7 +299,7 @@ class OpenRouterLLM(ModelProvider):
         Full streaming support can be added in a future iteration.
 
         Args:
-            messages: Conversation history as Orbiter message objects.
+            messages: Conversation history as Exo message objects.
             tools: JSON-schema tool definitions in OpenAI format.
             temperature: Sampling temperature override.
             max_tokens: Maximum output tokens override.

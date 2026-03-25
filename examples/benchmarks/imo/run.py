@@ -1,8 +1,8 @@
-"""IMO benchmark runner for Orbiter agents.
+"""IMO benchmark runner for Exo agents.
 
 IMO (International Mathematical Olympiad) evaluates advanced mathematical
 reasoning and proof generation. This runner loads IMO problems from a JSONL
-dataset, runs them through an Orbiter agent with a guard/review loop, and
+dataset, runs them through an Exo agent with a guard/review loop, and
 scores the agent's responses.
 
 Usage:
@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from orbiter import Agent, run, tool
+from exo import Agent, run, tool
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +252,7 @@ async def run_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run IMO benchmark with Orbiter")
+    parser = argparse.ArgumentParser(description="Run IMO benchmark with Exo")
     parser.add_argument(
         "--dataset",
         default=os.environ.get("IMO_DATASET_PATH", ""),

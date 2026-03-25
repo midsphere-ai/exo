@@ -1,4 +1,4 @@
-# Example YAML agent/swarm configuration for Orbiter.
+# Example YAML agent/swarm configuration for Exo.
 #
 # Variable substitution:
 #   ${ENV_VAR}  — resolved from environment variables

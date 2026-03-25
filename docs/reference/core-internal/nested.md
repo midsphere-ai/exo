@@ -1,15 +1,15 @@
-# orbiter._internal.nested
+# exo._internal.nested
 
 Support for nested swarms -- using a Swarm as a node in another Swarm.
 
-> **Internal API** -- `SwarmNode` is re-exported as public API from `orbiter.__init__`.
+> **Internal API** -- `SwarmNode` is re-exported as public API from `exo.__init__`.
 
-**Module:** `orbiter._internal.nested`
+**Module:** `exo._internal.nested`
 
 ```python
-from orbiter._internal.nested import SwarmNode, NestedSwarmError
+from exo._internal.nested import SwarmNode, NestedSwarmError
 # or (public API)
-from orbiter import SwarmNode
+from exo import SwarmNode
 ```
 
 ---
@@ -17,10 +17,10 @@ from orbiter import SwarmNode
 ## NestedSwarmError
 
 ```python
-class NestedSwarmError(OrbiterError)
+class NestedSwarmError(ExoError)
 ```
 
-Raised for nested swarm errors (invalid swarm instance). Inherits from `OrbiterError`.
+Raised for nested swarm errors (invalid swarm instance). Inherits from `ExoError`.
 
 ---
 
@@ -109,7 +109,7 @@ E.g. `SwarmNode(name='inner_pipeline', inner=Swarm(...))`.
 ### Example
 
 ```python
-from orbiter import Agent, Swarm, SwarmNode, run
+from exo import Agent, Swarm, SwarmNode, run
 
 # Build an inner pipeline
 researcher = Agent(name="researcher", instructions="Research the topic.")

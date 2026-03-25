@@ -1,15 +1,15 @@
-# orbiter._internal.agent_group
+# exo._internal.agent_group
 
 Parallel and serial agent group primitives for expressing concurrent-then-sequential execution patterns within a Swarm flow.
 
-> **Internal API** -- `ParallelGroup` and `SerialGroup` are re-exported as public API from `orbiter.__init__`.
+> **Internal API** -- `ParallelGroup` and `SerialGroup` are re-exported as public API from `exo.__init__`.
 
-**Module:** `orbiter._internal.agent_group`
+**Module:** `exo._internal.agent_group`
 
 ```python
-from orbiter._internal.agent_group import ParallelGroup, SerialGroup, GroupError
+from exo._internal.agent_group import ParallelGroup, SerialGroup, GroupError
 # or (public API)
-from orbiter import ParallelGroup, SerialGroup
+from exo import ParallelGroup, SerialGroup
 ```
 
 ---
@@ -17,10 +17,10 @@ from orbiter import ParallelGroup, SerialGroup
 ## GroupError
 
 ```python
-class GroupError(OrbiterError)
+class GroupError(ExoError)
 ```
 
-Raised for agent group errors (empty agent list). Inherits from `OrbiterError`.
+Raised for agent group errors (empty agent list). Inherits from `ExoError`.
 
 ---
 
@@ -106,7 +106,7 @@ Return a summary of the group's configuration.
 ### Example
 
 ```python
-from orbiter import Agent, Swarm, ParallelGroup
+from exo import Agent, Swarm, ParallelGroup
 
 researcher = Agent(name="researcher", instructions="Research the topic.")
 analyst = Agent(name="analyst", instructions="Analyze the data.")
@@ -128,7 +128,7 @@ swarm = Swarm(
 ### Custom Aggregation
 
 ```python
-from orbiter.types import RunResult
+from exo.types import RunResult
 
 def pick_best(results: list[RunResult]) -> str:
     """Pick the longest output as the 'best' result."""
@@ -217,7 +217,7 @@ Return a summary of the group's configuration.
 ### Example
 
 ```python
-from orbiter import Agent, Swarm, SerialGroup
+from exo import Agent, Swarm, SerialGroup
 
 drafter = Agent(name="drafter", instructions="Write a first draft.")
 reviewer = Agent(name="reviewer", instructions="Review and improve the draft.")

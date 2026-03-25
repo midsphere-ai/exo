@@ -1,11 +1,11 @@
-# orbiter.context.neuron
+# exo.context.neuron
 
 Modular prompt composition components. A Neuron is a composable unit that produces a prompt fragment from context, ordered by priority.
 
 ## Module Path
 
 ```python
-from orbiter.context.neuron import Neuron, neuron_registry
+from exo.context.neuron import Neuron, neuron_registry
 ```
 
 ---
@@ -246,8 +246,8 @@ EntityNeuron(name: str = "entity", *, priority: int = 60)
 ## Custom Neuron Example
 
 ```python
-from orbiter.context.neuron import Neuron, neuron_registry
-from orbiter.context.context import Context
+from exo.context.neuron import Neuron, neuron_registry
+from exo.context.context import Context
 
 class WeatherNeuron(Neuron):
     def __init__(self):

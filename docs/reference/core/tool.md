@@ -1,11 +1,11 @@
-# orbiter.tool
+# exo.tool
 
 Tool system: abstract base class, decorator, schema generation, and execution.
 
-**Module:** `orbiter.tool`
+**Module:** `exo.tool`
 
 ```python
-from orbiter.tool import Tool, FunctionTool, tool, ToolError
+from exo.tool import Tool, FunctionTool, tool, ToolError
 ```
 
 ---
@@ -13,15 +13,15 @@ from orbiter.tool import Tool, FunctionTool, tool, ToolError
 ## ToolError
 
 ```python
-class ToolError(OrbiterError)
+class ToolError(ExoError)
 ```
 
-Raised when a tool execution fails. Inherits from `OrbiterError`.
+Raised when a tool execution fails. Inherits from `ExoError`.
 
 Use this in custom tool implementations to signal tool-specific errors that the agent can recover from.
 
 ```python
-from orbiter.tool import ToolError
+from exo.tool import ToolError
 
 raise ToolError("Failed to fetch data from API")
 ```
@@ -85,7 +85,7 @@ Return the tool schema in OpenAI function-calling format.
 ### Example: Custom Tool Subclass
 
 ```python
-from orbiter.tool import Tool
+from exo.tool import Tool
 
 class DatabaseQueryTool(Tool):
     def __init__(self):
@@ -171,7 +171,7 @@ Execute the wrapped function.
 ### Example
 
 ```python
-from orbiter.tool import FunctionTool
+from exo.tool import FunctionTool
 
 def calculate_sum(a: int, b: int) -> int:
     """Calculate the sum of two numbers.
@@ -258,7 +258,7 @@ A `FunctionTool` instance, or a decorator that produces one.
 ### Full Example
 
 ```python
-from orbiter.tool import tool
+from exo.tool import tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -284,6 +284,6 @@ async def fetch_data(url: str) -> str:
     return f"Data from {url}"
 
 # Use with an Agent
-from orbiter.agent import Agent
+from exo.agent import Agent
 agent = Agent(name="bot", tools=[get_weather, fetch_data])
 ```

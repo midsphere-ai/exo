@@ -1,6 +1,6 @@
-# Orbiter Web — System Architecture
+# Exo Web — System Architecture
 
-This document describes the architecture of **Orbiter Web**, the full-stack AI agent platform built as a single deployable unit combining an Astro 5.x frontend with a FastAPI backend.
+This document describes the architecture of **Exo Web**, the full-stack AI agent platform built as a single deployable unit combining an Astro 5.x frontend with a FastAPI backend.
 
 ## High-Level Architecture
 
@@ -49,8 +49,8 @@ This document describes the architecture of **Orbiter Web**, the full-stack AI a
     │  └──────────────────────────────────────────┘  │
     │                                                 │
     │  ┌──────────────────────────────────────────┐  │
-    │  │         Orbiter Framework Bridge          │  │
-    │  │  orbiter-core · orbiter-models            │  │
+    │  │         Exo Framework Bridge          │  │
+    │  │  exo-core · exo-models            │  │
     │  │  (Agent, Tool, ModelProvider)             │  │
     │  └──────────────────────────────────────────┘  │
     └─────────────────────────────────────────────────┘
@@ -100,7 +100,7 @@ src/pages/
 
 ## Backend: FastAPI
 
-The backend is a Python FastAPI application (`orbiter_web.app:app`) run via uvicorn.
+The backend is a Python FastAPI application (`exo_web.app:app`) run via uvicorn.
 
 ### Application Lifecycle
 
@@ -128,30 +128,30 @@ Middleware is applied in reverse order (last added = first executed):
 | 2 | `CSRFMiddleware` | Validates `X-CSRF-Token` on POST/PUT/DELETE |
 | 3 | `RateLimitMiddleware` | Sliding-window rate limiting per IP/endpoint |
 | 4 | `SecurityHeadersMiddleware` | CSP, X-Content-Type-Options, X-Frame-Options |
-| 5 | `CORSMiddleware` | Cross-origin requests (if `ORBITER_CORS_ORIGINS` set) |
+| 5 | `CORSMiddleware` | Cross-origin requests (if `EXO_CORS_ORIGINS` set) |
 
 ### Configuration
 
-All settings are loaded from environment variables via `orbiter_web.config.Settings`:
+All settings are loaded from environment variables via `exo_web.config.Settings`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ORBITER_DATABASE_URL` | `sqlite+aiosqlite:///orbiter.db` | Database connection string |
-| `ORBITER_SECRET_KEY` | `change-me-in-production` | Encryption key for API keys and sessions |
-| `ORBITER_DEBUG` | `false` | Debug mode |
-| `ORBITER_SESSION_EXPIRY_HOURS` | `72` | Session lifetime |
-| `ORBITER_RATE_LIMIT_AUTH` | `5` | Auth endpoint rate limit (per minute) |
-| `ORBITER_RATE_LIMIT_GENERAL` | `60` | General API rate limit (per minute) |
-| `ORBITER_RATE_LIMIT_AGENT` | `10` | Agent execution rate limit (per minute) |
-| `ORBITER_MAX_UPLOAD_MB` | `50` | Maximum file upload size |
-| `ORBITER_UPLOAD_DIR` | `data/uploads/` | Upload storage directory |
-| `ORBITER_ARTIFACT_DIR` | `data/artifacts/` | Artifact storage directory |
-| `ORBITER_CLEANUP_INTERVAL_HOURS` | `6` | Cleanup task interval |
-| `ORBITER_CORS_ORIGINS` | (empty) | Comma-separated allowed origins |
+| `EXO_DATABASE_URL` | `sqlite+aiosqlite:///exo.db` | Database connection string |
+| `EXO_SECRET_KEY` | `change-me-in-production` | Encryption key for API keys and sessions |
+| `EXO_DEBUG` | `false` | Debug mode |
+| `EXO_SESSION_EXPIRY_HOURS` | `72` | Session lifetime |
+| `EXO_RATE_LIMIT_AUTH` | `5` | Auth endpoint rate limit (per minute) |
+| `EXO_RATE_LIMIT_GENERAL` | `60` | General API rate limit (per minute) |
+| `EXO_RATE_LIMIT_AGENT` | `10` | Agent execution rate limit (per minute) |
+| `EXO_MAX_UPLOAD_MB` | `50` | Maximum file upload size |
+| `EXO_UPLOAD_DIR` | `data/uploads/` | Upload storage directory |
+| `EXO_ARTIFACT_DIR` | `data/artifacts/` | Artifact storage directory |
+| `EXO_CLEANUP_INTERVAL_HOURS` | `6` | Cleanup task interval |
+| `EXO_CORS_ORIGINS` | (empty) | Comma-separated allowed origins |
 
 ## Database Schema
 
-Orbiter Web uses **SQLite** with WAL (Write-Ahead Logging) mode and foreign keys enabled, accessed via `aiosqlite`.
+Exo Web uses **SQLite** with WAL (Write-Ahead Logging) mode and foreign keys enabled, accessed via `aiosqlite`.
 
 ### Schema Overview (Mermaid ER Diagram)
 
@@ -274,7 +274,7 @@ erDiagram
 
 ### Migration System
 
-Migrations are sequential `.sql` files in `orbiter_web/migrations/`:
+Migrations are sequential `.sql` files in `exo_web/migrations/`:
 ```
 001_create_users.sql
 002_create_projects.sql
@@ -317,7 +317,7 @@ Messages follow a typed envelope format:
 Client                                Server
   │                                      │
   │─── WebSocket connect ──────────────→│
-  │    (orbiter_session cookie)          │
+  │    (exo_session cookie)          │
   │                                      │ Validate session
   │                                      │ Auto-subscribe to "system"
   │←── {system, connected, user_id} ────│
@@ -334,11 +334,11 @@ Client                                Server
 
 ### Authentication
 
-WebSocket authentication extracts the `orbiter_session` cookie manually (no FastAPI `Depends()` for WebSocket). Unauthorized connections receive close code `4001`.
+WebSocket authentication extracts the `exo_session` cookie manually (no FastAPI `Depends()` for WebSocket). Unauthorized connections receive close code `4001`.
 
 ## Agent Runtime Bridge (AgentService)
 
-The `AgentService` in `services/agent_runtime.py` bridges database agent configurations to live Orbiter framework objects:
+The `AgentService` in `services/agent_runtime.py` bridges database agent configurations to live Exo framework objects:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -363,12 +363,12 @@ The `AgentService` in `services/agent_runtime.py` bridges database agent configu
 │     → Create FunctionTool wrappers           │
 │                                              │
 │  4. Agent(name=..., model=..., tools=...)    │
-│     → Return configured orbiter.Agent        │
+│     → Return configured exo.Agent        │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
 ┌──────────────────────────────────────────────┐
-│            orbiter.Agent.run()                │
+│            exo.Agent.run()                │
 │  → ModelProvider.complete() or .stream()     │
 │  → Tool execution loop                       │
 │  → Return ModelResponse / StreamChunk        │
@@ -379,7 +379,7 @@ The `AgentService` in `services/agent_runtime.py` bridges database agent configu
 
 | Method | Description |
 |--------|-------------|
-| `build_agent(agent_id)` | Construct an `orbiter.Agent` from DB config |
+| `build_agent(agent_id)` | Construct an `exo.Agent` from DB config |
 | `run_agent(agent_id, messages)` | Execute a single agent turn, return `ModelResponse` |
 | `stream_agent(agent_id, messages)` | Stream agent execution, yield `StreamChunk` events |
 
@@ -391,7 +391,7 @@ The `AgentService` in `services/agent_runtime.py` bridges database agent configu
 1. POST /api/v1/auth/login {email, password}
    → Verify bcrypt hash
    → Create session row with UUID + CSRF token
-   → Set orbiter_session HttpOnly cookie (SameSite=Lax)
+   → Set exo_session HttpOnly cookie (SameSite=Lax)
    → Return UserResponse
 
 2. Subsequent requests:
@@ -437,20 +437,20 @@ data/
 └── artifacts/       # Agent-generated artifacts
     └── <uuid>/      # Per-artifact versioned files
 
-orbiter.db           # SQLite database (WAL mode)
+exo.db           # SQLite database (WAL mode)
 ```
 
-- Uploads handled by `handle_upload()` from `orbiter_web/upload.py`
+- Uploads handled by `handle_upload()` from `exo_web/upload.py`
 - Artifacts versioned in `artifacts` + `artifact_versions` tables
-- Configurable via `ORBITER_UPLOAD_DIR` and `ORBITER_ARTIFACT_DIR`
+- Configurable via `EXO_UPLOAD_DIR` and `EXO_ARTIFACT_DIR`
 
 ## Service Layer
 
-Business logic is separated from routes into `orbiter_web/services/`:
+Business logic is separated from routes into `exo_web/services/`:
 
 | Service | Responsibility |
 |---------|---------------|
-| `agent_runtime.py` | Bridge DB configs to live Orbiter Agent objects |
+| `agent_runtime.py` | Bridge DB configs to live Exo Agent objects |
 | `scheduler.py` | Cron-based workflow scheduling via `croniter` |
 | `run_queue.py` | Concurrent run limiting and queue processing |
 | `memory.py` | Agent conversation memory (conversation, sliding_window, summary strategies) |
@@ -477,7 +477,7 @@ Three background services start/stop with the application lifespan:
 
 ## Route Organization
 
-All routes use the `/api/v1/` prefix (except the unversioned `/api/health` endpoint). Routes are organized by domain in `orbiter_web/routes/`:
+All routes use the `/api/v1/` prefix (except the unversioned `/api/health` endpoint). Routes are organized by domain in `exo_web/routes/`:
 
 ```
 routes/
