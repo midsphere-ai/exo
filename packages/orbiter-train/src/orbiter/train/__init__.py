@@ -10,6 +10,26 @@ from orbiter.train.evolution import (  # pyright: ignore[reportMissingImports]
     EvolutionState,
     EvolutionStrategy,
 )
+from orbiter.train.operator_trainer import (  # pyright: ignore[reportMissingImports]
+    FileCheckpointStore,
+    OperatorTrainConfig,
+    OperatorTrainer,
+)
+from orbiter.train.optimizer import (  # pyright: ignore[reportMissingImports]
+    InstructionOptimizer,
+    ToolOptimizer,
+)
+from orbiter.train.operator import (  # pyright: ignore[reportMissingImports]
+    LLMCallOperator,
+    LLMCallTrace,
+    MemoryCallOperator,
+    MemoryCallTrace,
+    Operator,
+    ToolCallOperator,
+    ToolCallTrace,
+    TunableKind,
+    TunableSpec,
+)
 from orbiter.train.synthesis import (  # pyright: ignore[reportMissingImports]
     DataSynthesiser,
     SynthesisConfig,
@@ -35,6 +55,7 @@ from orbiter.train.trajectory import (  # pyright: ignore[reportMissingImports]
     DefaultStrategy,
     TrajectoryDataset,
     TrajectoryError,
+    TrajectoryExtractor,
     TrajectoryItem,
     TrajectoryStrategy,
 )
@@ -48,6 +69,7 @@ from orbiter.train.verl import (  # pyright: ignore[reportMissingImports]
 __all__ = [
     "DataSynthesiser",
     "DefaultStrategy",
+    "FileCheckpointStore",
     "EpochResult",
     "EvolutionConfig",
     "EvolutionError",
@@ -56,6 +78,14 @@ __all__ = [
     "EvolutionResult",
     "EvolutionState",
     "EvolutionStrategy",
+    "InstructionOptimizer",
+    "LLMCallOperator",
+    "LLMCallTrace",
+    "MemoryCallOperator",
+    "MemoryCallTrace",
+    "Operator",
+    "OperatorTrainConfig",
+    "OperatorTrainer",
     "RewardSpec",
     "SynthesisConfig",
     "SynthesisError",
@@ -63,6 +93,9 @@ __all__ = [
     "SynthesisResult",
     "SynthesisStrategy",
     "TemplateSynthesiser",
+    "ToolCallOperator",
+    "ToolCallTrace",
+    "ToolOptimizer",
     "TrainConfig",
     "TrainMetrics",
     "Trainer",
@@ -70,8 +103,11 @@ __all__ = [
     "TrainerState",
     "TrajectoryDataset",
     "TrajectoryError",
+    "TrajectoryExtractor",
     "TrajectoryItem",
     "TrajectoryStrategy",
+    "TunableKind",
+    "TunableSpec",
     "VeRLAlgorithm",
     "VeRLConfig",
     "VeRLTrainer",

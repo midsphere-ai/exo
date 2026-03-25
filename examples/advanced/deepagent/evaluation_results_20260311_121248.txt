@@ -1,0 +1,51 @@
+Evaluation Results - 2026-03-11 12:12:48
+================================================================================
+
+Query #1
+--------------------------------------------------------------------------------
+Question: In the version of NumPy where the numpy.msort function was deprecated, which attribute was added to the numpy.polynomial package's polynomial classes?
+File: None
+Result Type: error
+
+Prediction:
+Information not available
+
+Ground Truth:
+?
+
+Status: ✗ WRONG
+
+Main agent context messages: 2
+Browsing sub-agent context messages: 0
+Coding sub-agent context messages: 0
+
+================================================================================
+
+Query #2
+--------------------------------------------------------------------------------
+Question: In the first RSAI journal issue from the month that oganesson was officially named, what was the email given to contact the female author of the second article?
+File: None
+Result Type: error
+
+Prediction:
+Unknown
+
+Ground Truth:
+?
+
+Status: ✗ WRONG
+
+Main agent context messages: 2
+Browsing sub-agent context messages: 0
+Coding sub-agent context messages: 0
+
+================================================================================
+
+
+================================================================================
+SUMMARY
+================================================================================
+Total queries: 2
+Correct: 0
+Wrong: 2
+Accuracy: 0.00%

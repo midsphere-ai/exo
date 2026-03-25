@@ -1,0 +1,39 @@
+[project]
+name = "orbiter-perplexica"
+version = "0.1.0"
+description = "AI-powered search engine with deep research, citations, and multi-turn chat"
+license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "orbiter-core>=0.1.0",
+    "orbiter-models>=0.1.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.100", "uvicorn>=0.20"]
+embeddings = ["google-genai>=1.0"]
+
+[project.scripts]
+orbiter-perplexica = "orbiter.perplexica.__main__:main"
+
+[tool.uv.sources]
+orbiter-core = { workspace = true }
+orbiter-models = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orbiter"]

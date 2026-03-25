@@ -1,0 +1,48 @@
+[project]
+name = "deepagent-example"
+version = "0.1.0"
+description = "DeepAgent — multi-agent ReAct research system built on Orbiter"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # --- Orbiter framework packages ---
+    # orbiter-core: Agent, Swarm, Tool, Runner, HookManager — the agent execution backbone
+    "orbiter-core",
+    # orbiter-models: ModelProvider protocol, model registry, streaming — LLM abstraction layer
+    "orbiter-models",
+    # orbiter-mcp: MCPServerConnection, MCPToolWrapper — MCP server client and tool integration
+    "orbiter-mcp",
+    # --- Third-party dependencies ---
+    "aiohttp==3.11.12",
+    "mcp>=1.24.0",
+    "pydantic>=2.11.7",
+    "python-dateutil==2.9.0.post0",
+    "openai==1.108.0",
+    "cacheout==0.16.0",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[dependency-groups]
+dev = [
+    "autodoc-pydantic==2.2.0",
+    "coverage==7.7.1",
+    "pytest==8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-html>=4.1.1",
+    "pytest-mock==3.14.0",
+    "ruff==0.11.2",
+]
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-v", "--html=report/index.html", "--self-contained-html"]
+
+[project.optional-dependencies]
+pulsar = ["pulsar-client==3.5.0"]
