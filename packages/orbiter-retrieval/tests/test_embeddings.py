@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -13,7 +12,6 @@ from orbiter.retrieval.http_embeddings import HTTPEmbeddings, _get_nested
 from orbiter.retrieval.openai_embeddings import OpenAIEmbeddings
 from orbiter.retrieval.types import RetrievalError
 from orbiter.retrieval.vertex_embeddings import VertexEmbeddings
-
 
 # ---------------------------------------------------------------------------
 # Embeddings ABC

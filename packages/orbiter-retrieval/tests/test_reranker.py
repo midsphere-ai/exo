@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
 from orbiter.retrieval.reranker import LLMReranker, Reranker
 from orbiter.retrieval.types import Chunk, RetrievalResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers

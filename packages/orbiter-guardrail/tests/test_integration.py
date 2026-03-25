@@ -14,7 +14,6 @@ from orbiter.guardrail.llm_backend import LLMGuardrailBackend
 from orbiter.guardrail.types import (
     GuardrailBackend,
     GuardrailError,
-    GuardrailResult,
     RiskAssessment,
     RiskLevel,
 )

@@ -118,7 +118,7 @@ class ChromaVectorStore(VectorStore):
         if filter:
             if len(filter) == 1:
                 key, value = next(iter(filter.items()))
-                where = {f"chunk_metadata": {"$contains": json.dumps({key: value})[1:-1]}}
+                where = {"chunk_metadata": {"$contains": json.dumps({key: value})[1:-1]}}
             else:
                 where = {
                     "$and": [

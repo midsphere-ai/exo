@@ -37,7 +37,7 @@ async def run_search(
 
     if stream:
         from .pipeline import stream_search_pipeline
-        from .types import PipelineEvent, PerplexicaResponse
+        from .types import PerplexicaResponse, PipelineEvent
 
         print(f"\nSearching ({quality} mode)...\n")
 

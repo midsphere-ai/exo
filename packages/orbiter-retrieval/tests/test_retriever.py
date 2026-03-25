@@ -11,7 +11,6 @@ from orbiter.retrieval.retriever import Retriever, VectorRetriever
 from orbiter.retrieval.types import Chunk, RetrievalResult
 from orbiter.retrieval.vector_store import InMemoryVectorStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -17,7 +17,6 @@ from orbiter.retrieval.parsers import (
 )
 from orbiter.retrieval.types import Document
 
-
 # ---------------------------------------------------------------------------
 # Parser ABC
 # ---------------------------------------------------------------------------

@@ -100,9 +100,8 @@ async def search_stream_endpoint(
     async def event_stream() -> AsyncIterator[str]:
         from .agents.classifier import classify
         from .agents.researcher import research
-        from .agents.writer import write_answer
         from .agents.suggestion_generator import generate_suggestions
-        from .types import Source
+        from .agents.writer import write_answer
 
         # Step 1: Classify
         yield f"event: status\ndata: {json.dumps({'stage': 'classifier', 'status': 'starting'})}\n\n"

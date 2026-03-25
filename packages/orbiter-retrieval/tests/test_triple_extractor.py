@@ -10,7 +10,6 @@ import pytest
 from orbiter.retrieval.triple_extractor import Triple, TripleExtractor
 from orbiter.retrieval.types import Chunk
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

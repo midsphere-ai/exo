@@ -15,7 +15,6 @@ from orbiter.guardrail.llm_backend import (
 )
 from orbiter.guardrail.types import (
     GuardrailBackend,
-    RiskAssessment,
     RiskLevel,
 )
 from orbiter.models.types import ModelResponse  # pyright: ignore[reportMissingImports]

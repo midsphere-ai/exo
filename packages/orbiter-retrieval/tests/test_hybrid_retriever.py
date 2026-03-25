@@ -10,7 +10,6 @@ from orbiter.retrieval.hybrid_retriever import HybridRetriever
 from orbiter.retrieval.retriever import Retriever
 from orbiter.retrieval.types import Chunk, RetrievalResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

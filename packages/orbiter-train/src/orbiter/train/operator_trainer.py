@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -24,7 +24,6 @@ from orbiter.train.trainer import (  # pyright: ignore[reportMissingImports]
     TrainerState,
     TrainMetrics,
 )
-
 
 # ---------------------------------------------------------------------------
 # Checkpoint store

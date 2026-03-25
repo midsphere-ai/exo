@@ -11,7 +11,6 @@ from orbiter.retrieval.retriever import Retriever
 from orbiter.retrieval.triple_extractor import Triple
 from orbiter.retrieval.types import Chunk, RetrievalResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

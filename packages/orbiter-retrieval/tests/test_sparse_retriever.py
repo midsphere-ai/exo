@@ -10,7 +10,6 @@ from orbiter.retrieval.retriever import Retriever
 from orbiter.retrieval.sparse_retriever import SparseRetriever
 from orbiter.retrieval.types import Chunk, RetrievalResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

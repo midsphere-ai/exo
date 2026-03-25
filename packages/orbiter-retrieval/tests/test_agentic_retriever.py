@@ -12,7 +12,6 @@ from orbiter.retrieval.query_rewriter import QueryRewriter
 from orbiter.retrieval.retriever import Retriever
 from orbiter.retrieval.types import Chunk, RetrievalResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

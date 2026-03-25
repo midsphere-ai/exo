@@ -2,8 +2,8 @@
 
 from .classifier import classify
 from .researcher import research, stream_research
-from .writer import write_answer, stream_write_answer
 from .suggestion_generator import generate_suggestions
+from .writer import stream_write_answer, write_answer
 
 __all__ = [
     "classify",

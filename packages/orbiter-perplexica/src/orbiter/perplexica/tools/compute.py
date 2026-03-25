@@ -98,7 +98,7 @@ def _safe_eval(expression: str) -> float:
     namespace.update(_SAFE_CONSTANTS)
 
     code = compile(tree, "<expression>", "eval")
-    result = eval(code, {"__builtins__": {}}, namespace)  # noqa: S307
+    result = eval(code, {"__builtins__": {}}, namespace)
     return result
 
 

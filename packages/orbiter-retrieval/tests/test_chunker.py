@@ -16,7 +16,6 @@ from orbiter.retrieval.chunker import (
 )
 from orbiter.retrieval.types import Chunk, Document
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
