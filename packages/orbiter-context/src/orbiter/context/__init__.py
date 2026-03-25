@@ -19,7 +19,10 @@ from orbiter.context.neuron import (  # pyright: ignore[reportMissingImports]
 )
 from orbiter.context.processor import (  # pyright: ignore[reportMissingImports]
     ContextProcessor,
+    DialogueCompressor,
+    MessageOffloader,
     ProcessorPipeline,
+    RoundWindowProcessor,
     SummarizeProcessor,
     ToolResultOffloader,
 )
@@ -51,9 +54,12 @@ __all__ = [
     "ContextError",
     "ContextProcessor",
     "ContextState",
+    "DialogueCompressor",
+    "MessageOffloader",
     "Neuron",
     "ProcessorPipeline",
     "PromptBuilder",
+    "RoundWindowProcessor",
     "SummarizeProcessor",
     "TokenTracker",
     "ToolResultOffloader",
