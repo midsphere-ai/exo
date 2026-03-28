@@ -105,7 +105,10 @@ def _to_google_contents(messages: list[Message]) -> tuple[list[dict[str, Any]], 
                     parts.extend(content_blocks_to_google(msg.content))
             for tc in msg.tool_calls:
                 args = json.loads(tc.arguments) if tc.arguments else {}
-                parts.append({"function_call": {"name": tc.name, "args": args}})
+                fc_part: dict[str, Any] = {"function_call": {"name": tc.name, "args": args}}
+                if tc.thought_signature is not None:
+                    fc_part["thought_signature"] = tc.thought_signature
+                parts.append(fc_part)
             if not parts:
                 parts.append({"text": ""})
             contents.append({"role": "model", "parts": parts})
@@ -213,16 +216,18 @@ def _parse_response(raw: Any, model_name: str) -> ModelResponse:
 
     for i, part in enumerate(candidate.content.parts):
         text = getattr(part, "text", None)
-        if text:
+        if text and not getattr(part, "thought", False):
             content_parts.append(text)
         fc = getattr(part, "function_call", None)
         if fc:
             call_id = getattr(fc, "id", None) or f"call_{i}"
+            thought_sig = getattr(part, "thought_signature", None)
             tool_calls.append(
                 ToolCall(
                     id=call_id,
                     name=fc.name,
                     arguments=json.dumps(fc.args) if fc.args else "{}",
+                    thought_signature=thought_sig,
                 )
             )
 
@@ -271,17 +276,19 @@ def _parse_stream_chunk(chunk: Any) -> StreamChunk:
 
     for i, part in enumerate(candidate.content.parts):
         text = getattr(part, "text", None)
-        if text:
+        if text and not getattr(part, "thought", False):
             text_parts.append(text)
         fc = getattr(part, "function_call", None)
         if fc:
             call_id = getattr(fc, "id", None) or f"call_{i}"
+            thought_sig = getattr(part, "thought_signature", None)
             tool_call_deltas.append(
                 ToolCallDelta(
                     index=i,
                     id=call_id,
                     name=fc.name,
                     arguments=json.dumps(fc.args) if fc.args else "{}",
+                    thought_signature=thought_sig,
                 )
             )
 

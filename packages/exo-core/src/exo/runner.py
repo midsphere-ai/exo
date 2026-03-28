@@ -427,7 +427,7 @@ async def _stream(
             # Accumulate text and tool call deltas from the stream
             text_parts: list[str] = []
             # dict of index -> accumulated tool call data
-            tc_acc: dict[int, dict[str, str]] = {}
+            tc_acc: dict[int, dict[str, Any]] = {}
             step_usage = Usage()
 
             await agent.hook_manager.run(HookPoint.PRE_LLM_CALL, agent=agent, messages=msg_list)
@@ -449,12 +449,14 @@ async def _stream(
                 for tcd in chunk.tool_call_deltas:
                     idx = tcd.index
                     if idx not in tc_acc:
-                        tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                        tc_acc[idx] = {"id": "", "name": "", "arguments": "", "thought_signature": None}
                     if tcd.id is not None:
                         tc_acc[idx]["id"] = tcd.id
                     if tcd.name is not None:
                         tc_acc[idx]["name"] = tcd.name
                     tc_acc[idx]["arguments"] += tcd.arguments
+                    if getattr(tcd, "thought_signature", None) is not None:
+                        tc_acc[idx]["thought_signature"] = tcd.thought_signature
 
                 # Capture usage from final chunk
                 if chunk.usage and chunk.usage.total_tokens > 0:
@@ -480,6 +482,7 @@ async def _stream(
                     id=data["id"],
                     name=data["name"],
                     arguments=data["arguments"],
+                    thought_signature=data.get("thought_signature"),
                 )
                 for data in tc_acc.values()
                 if data["id"]

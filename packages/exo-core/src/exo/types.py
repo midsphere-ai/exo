@@ -115,6 +115,8 @@ class ToolCall(BaseModel):
         id: Unique identifier for this tool call.
         name: Name of the tool to invoke.
         arguments: JSON-encoded string of the tool arguments.
+        thought_signature: Opaque signature from thinking models (e.g. Gemini)
+            that must be echoed back in conversation history.
     """
 
     model_config = {"frozen": True}
@@ -122,6 +124,7 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: str = ""
+    thought_signature: bytes | None = None
 
 
 class AssistantMessage(BaseModel):

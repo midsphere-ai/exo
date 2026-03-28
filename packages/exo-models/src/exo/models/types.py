@@ -91,6 +91,8 @@ class ToolCallDelta(BaseModel):
         id: Tool call ID, present only in the first chunk.
         name: Tool name, present only in the first chunk.
         arguments: Incremental JSON fragment of arguments.
+        thought_signature: Opaque signature from thinking models (e.g. Gemini)
+            that must be echoed back in conversation history.
     """
 
     model_config = {"frozen": True}
@@ -99,6 +101,7 @@ class ToolCallDelta(BaseModel):
     id: str | None = None
     name: str | None = None
     arguments: str = ""
+    thought_signature: bytes | None = None
 
 
 class StreamChunk(BaseModel):
