@@ -168,7 +168,7 @@ async def fetch_multiple_pages(urls_json: str) -> str:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     sections: list[str] = []
-    for url, result in zip(urls, results):
+    for url, result in zip(urls, results, strict=True):
         sections.append(f"=== {url} ===")
         if isinstance(result, Exception):
             sections.append(f"Error fetching {url}: {result}")
@@ -191,7 +191,7 @@ async def scrape_url(urls: list[str]) -> str:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     sections = []
-    for url, result in zip(urls, results):
+    for url, result in zip(urls, results, strict=True):
         if isinstance(result, Exception):
             sections.append(f"Error fetching {url}: {result}")
         else:

@@ -89,7 +89,7 @@ async def run_search_pipeline(
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
     # Start suggestions early (independent of enrichment and writing)
-    suggest_task = asyncio.create_task(generate_suggestions(history + [(query, "")], cfg))
+    suggest_task = asyncio.create_task(generate_suggestions([*history, (query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
@@ -207,7 +207,7 @@ async def stream_search_pipeline(
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
 
     # Start suggestions concurrently (independent of enrichment and writing)
-    suggest_task = asyncio.create_task(generate_suggestions(history + [(query, "")], cfg))
+    suggest_task = asyncio.create_task(generate_suggestions([*history, (query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
     enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)

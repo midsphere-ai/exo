@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ResearchMode(str, Enum):
+class ResearchMode(StrEnum):
     """Research quality modes matching Exo Search."""
 
     SPEED = "speed"
