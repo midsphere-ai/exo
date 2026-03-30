@@ -220,16 +220,29 @@ def _build_config(src: UIConfigRequest | dict) -> SearchConfig:
         src = UIConfigRequest(**src)
 
     # Side-effect: inject provider credentials into env so the model layer picks
-    # them up automatically.
+    # them up automatically.  We need to cover *both* the main model and the
+    # fast model because they may use different providers (e.g. openai + gemini).
     if src.api_key:
-        parts = src.model.split(":", 1) if src.model else ["openai"]
-        provider = parts[0] if len(parts) > 1 else "openai"
-        env_var = _PROVIDER_ENV_MAP.get(provider, "OPENAI_API_KEY")
-        os.environ[env_var] = src.api_key
+        providers_seen: set[str] = set()
+        for model_str in (src.model, src.fast_model):
+            if not model_str:
+                continue
+            parts = model_str.split(":", 1)
+            provider = parts[0] if len(parts) > 1 else "openai"
+            if provider not in providers_seen:
+                providers_seen.add(provider)
+                env_var = _PROVIDER_ENV_MAP.get(provider, "OPENAI_API_KEY")
+                os.environ[env_var] = src.api_key
+
+        # If no models specified, default to openai
+        if not providers_seen:
+            os.environ["OPENAI_API_KEY"] = src.api_key
 
     if src.base_url:
         os.environ["OPENAI_BASE_URL"] = src.base_url
 
+    # Build the config — SearchConfig.__post_init__ will also read env vars
+    # for any fields left empty, so the user's env defaults still apply.
     return SearchConfig(
         serper_api_key=src.serper_api_key,
         jina_api_key=src.jina_api_key,
