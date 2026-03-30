@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -327,7 +328,8 @@ class GeminiProvider(ModelProvider):
 
     def __init__(self, config: ModelConfig) -> None:
         super().__init__(config)
-        self._client = genai.Client(api_key=config.api_key or "dummy")
+        api_key = config.api_key or os.environ.get("GEMINI_API_KEY", "")
+        self._client = genai.Client(api_key=api_key or "dummy")
 
     async def complete(
         self,
