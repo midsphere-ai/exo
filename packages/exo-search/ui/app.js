@@ -115,6 +115,20 @@ document.getElementById('settingsBtnSidebar').addEventListener('click', openSett
 document.getElementById('settingsCancel').addEventListener('click', closeSettings);
 document.getElementById('settingsClose').addEventListener('click', closeSettings);
 
+// Password visibility toggles
+document.querySelectorAll('.password-toggle').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var input = document.getElementById(btn.getAttribute('data-target'));
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.classList.add('visible');
+    } else {
+      input.type = 'password';
+      btn.classList.remove('visible');
+    }
+  });
+});
+
 // Click on overlay (outside modal) closes settings
 document.getElementById('settingsModal').addEventListener('click', function(e) {
   if (e.target === this) closeSettings();

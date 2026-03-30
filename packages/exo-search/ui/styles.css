@@ -997,6 +997,37 @@ body {
   color: var(--zen-muted);
 }
 
+.input-password-wrap {
+  position: relative;
+}
+
+.input-password-wrap .settings-input {
+  padding-right: 38px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  opacity: 0.4;
+  transition: opacity var(--transition);
+  line-height: 1;
+}
+
+.password-toggle:hover {
+  opacity: 0.7;
+}
+
+.password-toggle.visible {
+  opacity: 0.7;
+}
+
 .settings-row {
   display: flex;
   gap: 10px;
