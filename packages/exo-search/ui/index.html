@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>exo search</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script>
+    (function() {
+      var stored = localStorage.getItem('theme');
+      var preferred = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', preferred);
+    })();
+  </script>
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="logo">exo<span>search</span></div>
+      <button class="new-search-btn" id="newSearchBtn">+ New Search</button>
+      <div class="history-list" id="historyList"></div>
+      <div class="sidebar-footer">
+        <button class="icon-btn" id="themeToggleSidebar" title="Toggle theme">&#9728;</button>
+        <button class="icon-btn" id="settingsBtnSidebar" title="Settings">&#9881;</button>
+      </div>
+    </aside>
+
+    <!-- Main Panel -->
+    <div class="main">
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="logo">exo<span>search</span></div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <button class="icon-btn" id="themeToggle" title="Toggle theme">&​#9728;</button>
+          <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
+        </div>
+      </div>
+
+      <!-- Landing View -->
+      <div class="landing" id="landingView">
+        <div class="landing-inner">
+          <h1>What do you want to know?</h1>
+          <p class="subtitle">AI-powered deep research with cited sources</p>
+
+          <form class="search-bar" id="landingSearchBar">
+            <input id="landingInput" type="text" placeholder="Ask anything..." autocomplete="off" />
+            <div class="mode-selector" id="landingModeSelector">
+              <button class="mode-btn" type="button" data-mode="speed">&#9889; speed</button>
+              <button class="mode-btn active" type="button" data-mode="balanced">&#9878; balanced</button>
+              <button class="mode-btn" type="button" data-mode="quality">&#128300; quality</button>
+            </div>
+            <button class="submit-btn" type="submit">&rarr;</button>
+          </form>
+
+          <div class="suggestions" id="landingSuggestions">
+            <button class="suggestion-chip">How does CRISPR gene editing work?</button>
+            <button class="suggestion-chip">Latest developments in quantum computing</button>
+            <button class="suggestion-chip">Compare React vs Svelte for web apps</button>
+            <button class="suggestion-chip">Explain transformer architecture in AI</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results View -->
+      <div class="results-view" id="resultsView">
+        <div class="results-header">
+          <div class="query-title" id="queryTitle"></div>
+          <div class="mode-selector" id="resultsModeSelector">
+            <button class="mode-btn" type="button" data-mode="speed">&#9889;</button>
+            <button class="mode-btn active" type="button" data-mode="balanced">&#9878;</button>
+            <button class="mode-btn" type="button" data-mode="quality">&#128300;</button>
+          </div>
+        </div>
+        <div class="answer-area" id="answerArea">
+          <div class="answer-content" id="answerContent"></div>
+        </div>
+        <div class="bottom-input">
+          <form class="search-bar" id="followUpBar">
+            <input id="followUpInput" type="text" placeholder="Ask a follow-up..." autocomplete="off" />
+            <button class="submit-btn" type="submit">&rarr;</button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <h2>Settings</h2>
+
+      <!-- Search Backend -->
+      <h3>Search Backend</h3>
+      <div class="radio-group" id="searchBackendToggle">
+        <button class="radio-btn active" type="button" data-value="serper">Serper</button>
+        <button class="radio-btn" type="button" data-value="searxng">SearXNG</button>
+      </div>
+      <div id="serperFields">
+        <div class="form-group">
+          <label>Serper API Key</label>
+          <input id="serperApiKey" type="password" />
+        </div>
+      </div>
+      <div id="searxngFields" style="display:none">
+        <div class="form-group">
+          <label>SearXNG URL</label>
+          <input id="searxngUrl" type="text" placeholder="http://localhost:8888" />
+        </div>
+      </div>
+
+      <!-- Content Enrichment -->
+      <h3>Content Enrichment</h3>
+      <div class="radio-group" id="enrichmentToggle">
+        <button class="radio-btn active" type="button" data-value="jina-cloud">Jina Cloud</button>
+        <button class="radio-btn" type="button" data-value="jina-self">Self-hosted Jina</button>
+      </div>
+      <div id="jinaCloudFields">
+        <div class="form-group">
+          <label>Jina API Key</label>
+          <input id="jinaApiKey" type="password" />
+        </div>
+      </div>
+      <div id="jinaSelfFields" style="display:none">
+        <div class="form-group">
+          <label>Jina Reader URL</label>
+          <input id="jinaReaderUrl" type="text" placeholder="http://127.0.0.1:3000" />
+        </div>
+      </div>
+
+      <!-- LLM Configuration -->
+      <h3>LLM Configuration</h3>
+      <div class="form-group">
+        <label>Model</label>
+        <input id="modelInput" type="text" placeholder="openai:gpt-4o" />
+        <span class="hint">Format: provider:model (e.g. openai:gpt-4o, anthropic:claude-sonnet-4-20250514, gemini:gemini-2.5-pro)</span>
+      </div>
+      <div class="form-group">
+        <label>Fast Model</label>
+        <input id="fastModelInput" type="text" placeholder="openai:gpt-4o-mini" />
+        <span class="hint">Used for speed mode and classifier</span>
+      </div>
+      <div class="form-group">
+        <label>API Key</label>
+        <input id="llmApiKey" type="password" placeholder="Provider API key" />
+      </div>
+      <div class="form-group">
+        <label>Base URL (optional)</label>
+        <input id="baseUrl" type="text" placeholder="https://api.openai.com/v1" />
+        <span class="hint">For custom or self-hosted endpoints</span>
+      </div>
+      <div class="form-group">
+        <label>Embedding Model</label>
+        <input id="embeddingModel" type="text" placeholder="text-embedding-3-small" />
+      </div>
+
+      <!-- Modal Actions -->
+      <div class="modal-actions">
+        <button class="btn-secondary" id="settingsCancel" type="button">Cancel</button>
+        <button class="btn-primary" id="settingsSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
