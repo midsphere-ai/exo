@@ -224,7 +224,14 @@ var currentSessionId = null;
 function showLanding() {
   document.getElementById('landingView').style.display = '';
   document.getElementById('resultsView').classList.remove('active');
-  document.getElementById('sidebar').classList.remove('open');
+  // Keep sidebar open if there's history, otherwise hide it
+  var hasHistory = loadHistory().length > 0;
+  if (hasHistory) {
+    document.getElementById('sidebar').classList.add('open');
+    renderHistoryList();
+  } else {
+    document.getElementById('sidebar').classList.remove('open');
+  }
   var landingInput = document.getElementById('landingInput');
   landingInput.value = '';
   landingInput.focus();
@@ -636,5 +643,8 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeSettings();
 });
 
-// Render history on load
+// Render history on load and show sidebar if history exists
 renderHistoryList();
+if (loadHistory().length > 0) {
+  document.getElementById('sidebar').classList.add('open');
+}
