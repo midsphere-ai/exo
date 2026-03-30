@@ -3,6 +3,8 @@ name: exo:context
 description: "Use when configuring Exo context management — automation modes (pilot/copilot/navigator), ContextConfig, history windowing, summarization, offloading, neurons, fork/merge, budget awareness, token tracking. Triggers on: context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Context — Context Management
 
 ## When To Use This Skill

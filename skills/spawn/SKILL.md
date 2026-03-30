@@ -3,6 +3,8 @@ name: exo:spawn
 description: "Use when an Exo agent needs to dynamically spawn copies of itself for parallel sub-tasks — allow_self_spawn, spawn_self() tool, max_spawn_depth, depth guards, memory isolation, context forking. Triggers on: spawn_self, allow_self_spawn, self spawn, max_spawn_depth, parallel sub-task, agent clone, dynamic sub-agent."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Spawn — Self-Spawning Agents
 
 ## When To Use This Skill

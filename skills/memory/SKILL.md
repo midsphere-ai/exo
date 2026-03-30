@@ -3,6 +3,8 @@ name: exo:memory
 description: "Use when configuring Exo agent memory — AgentMemory, ShortTermMemory, LongTermMemory, memory backends (SQLiteMemoryStore, ChromaVectorMemoryStore), MemoryPersistence, conversation_id scoping, embeddings, memory search, summarization. Triggers on: agent memory, ShortTermMemory, LongTermMemory, memory store, SQLite memory, ChromaDB, vector memory, conversation_id, memory persistence, memory search, embeddings."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Memory — Memory System
 
 ## When To Use This Skill

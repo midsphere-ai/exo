@@ -3,6 +3,8 @@ name: exo:swarms
 description: "Use when building multi-agent systems with Exo — Swarm orchestration, flow DSL, workflow/handoff/team modes, ParallelGroup, SerialGroup, BranchNode, LoopNode, agent delegation. Triggers on: swarm, multi-agent, workflow, handoff, team mode, flow DSL, ParallelGroup, SerialGroup, agent pipeline, delegation."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Swarms — Multi-Agent Orchestration
 
 ## When To Use This Skill

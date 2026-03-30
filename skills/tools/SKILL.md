@@ -3,6 +3,8 @@ name: exo:tools
 description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, injected_tool_args, large_output, structured output (output_type), or MCP server integration. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, injected_tool_args, large_output, output_type, add_mcp_server, structured output."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Tools — Advanced Tool Creation
 
 ## When To Use This Skill

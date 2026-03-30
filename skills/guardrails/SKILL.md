@@ -3,6 +3,8 @@ name: exo:guardrails
 description: "Use when adding security guardrails to Exo agents — BaseGuardrail, UserInputGuardrail, PatternBackend, LLMGuardrailBackend, Rail ABC, RailManager, RailAction (CONTINUE/SKIP/RETRY/ABORT), prompt injection detection, content filtering. Triggers on: guardrail, security, prompt injection, jailbreak, content filter, rail, RailAction, safety, risk detection, BaseGuardrail."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Guardrails — Security Guardrails
 
 ## When To Use This Skill

@@ -3,6 +3,8 @@ name: exo:hooks
 description: "Use when intercepting Exo agent lifecycle events — HookPoint, HookManager, pre/post LLM/tool hooks, error hooks, runtime mutation (add_tool, remove_tool, add_handoff, add_mcp_server, inject_message). Triggers on: hook, HookPoint, lifecycle, pre_llm_call, post_tool_call, agent hook, runtime mutation, add_tool, inject_message, dynamic tool."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Hooks — Lifecycle Hooks & Runtime Mutation
 
 ## When To Use This Skill

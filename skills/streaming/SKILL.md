@@ -3,6 +3,8 @@ name: exo:streaming
 description: "Use when consuming Exo agent output via streaming — run.stream(), StreamEvent types (TextEvent, ToolCallEvent, StepEvent, ToolResultEvent, UsageEvent, StatusEvent, ErrorEvent, ContextEvent, MCPProgressEvent, ReasoningEvent, MessageInjectedEvent), event filtering, detailed mode. Triggers on: run.stream, streaming, TextEvent, ToolCallEvent, StepEvent, stream events, event_types, detailed, real-time output."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Streaming — Streaming Execution & Events
 
 ## When To Use This Skill

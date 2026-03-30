@@ -3,6 +3,8 @@ name: exo:testing
 description: "Use when writing tests for Exo agents, tools, swarms, or streaming — MockProvider patterns, async test configuration, asyncio_mode auto, FakeStreamChunk, test fixtures, tool testing, swarm testing, streaming event testing. Triggers on: test exo, mock provider, MockProvider, test agent, test swarm, test streaming, pytest exo, test tool, async test."
 ---
 
+> **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
+
 # Exo Testing — Test Patterns & MockProvider
 
 ## When To Use This Skill
