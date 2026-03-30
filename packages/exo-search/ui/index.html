@@ -48,11 +48,11 @@
 
           <form class="search-bar" id="landingSearchBar">
             <input id="landingInput" type="text" placeholder="Ask anything..." autocomplete="off" />
-            <div class="mode-selector" id="landingModeSelector">
-              <button class="mode-btn" type="button" data-mode="speed">&#9889; speed</button>
-              <button class="mode-btn active" type="button" data-mode="balanced">&#9878; balanced</button>
-              <button class="mode-btn" type="button" data-mode="quality">&#128300; quality</button>
-            </div>
+            <select class="mode-select" id="modeSelect">
+              <option value="speed">&#9889; Speed</option>
+              <option value="balanced" selected>&#9878; Balanced</option>
+              <option value="quality">&#128300; Quality</option>
+            </select>
             <button class="submit-btn" type="submit">&rarr;</button>
           </form>
 
@@ -69,11 +69,7 @@
       <div class="results-view" id="resultsView">
         <div class="results-header">
           <div class="query-title" id="queryTitle"></div>
-          <div class="mode-selector" id="resultsModeSelector">
-            <button class="mode-btn" type="button" data-mode="speed">&#9889;</button>
-            <button class="mode-btn active" type="button" data-mode="balanced">&#9878;</button>
-            <button class="mode-btn" type="button" data-mode="quality">&#128300;</button>
-          </div>
+          <div class="mode-badge" id="modeBadge">&#9878; Balanced</div>
         </div>
         <div class="answer-area" id="answerArea">
           <div class="answer-content" id="answerContent"></div>
@@ -81,6 +77,11 @@
         <div class="bottom-input">
           <form class="search-bar" id="followUpBar">
             <input id="followUpInput" type="text" placeholder="Ask a follow-up..." autocomplete="off" />
+            <select class="mode-select" id="modeSelectFollowUp">
+              <option value="speed">&#9889; Speed</option>
+              <option value="balanced" selected>&#9878; Balanced</option>
+              <option value="quality">&#128300; Quality</option>
+            </select>
             <button class="submit-btn" type="submit">&rarr;</button>
           </form>
         </div>
@@ -92,76 +93,85 @@
   <!-- Settings Modal -->
   <div class="modal-overlay" id="settingsModal">
     <div class="modal">
-      <h2>Settings</h2>
-
-      <!-- Search Backend -->
-      <h3>Search Backend</h3>
-      <div class="radio-group" id="searchBackendToggle">
-        <button class="radio-btn active" type="button" data-value="serper">Serper</button>
-        <button class="radio-btn" type="button" data-value="searxng">SearXNG</button>
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button type="button" class="modal-close" id="settingsClose">&#10005;</button>
       </div>
-      <div id="serperFields">
-        <div class="form-group">
-          <label>Serper API Key</label>
-          <input id="serperApiKey" type="password" />
+      <div class="modal-subtitle">Configure your search backends and AI models</div>
+
+      <div class="modal-body">
+        <!-- Web Search Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-icon" style="background: color-mix(in srgb, var(--zen-blue) 12%, var(--zen-paper));">&#128269;</div>
+            <div class="settings-card-title">Web Search</div>
+          </div>
+          <div class="toggle-pills" id="searchBackendToggle">
+            <button type="button" class="pill active" data-value="serper">Serper</button>
+            <button type="button" class="pill" data-value="searxng">SearXNG</button>
+          </div>
+          <div id="serperFields">
+            <input type="password" class="settings-input" id="serperApiKey" placeholder="Serper API Key">
+          </div>
+          <div id="searxngFields" style="display:none;">
+            <input type="text" class="settings-input" id="searxngUrl" placeholder="http://localhost:8888">
+          </div>
+        </div>
+
+        <!-- Page Reader Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-icon" style="background: color-mix(in srgb, var(--zen-green) 12%, var(--zen-paper));">&#128196;</div>
+            <div class="settings-card-title">Page Reader</div>
+          </div>
+          <div class="toggle-pills" id="enrichmentToggle">
+            <button type="button" class="pill active" data-value="jina-cloud">Jina Cloud</button>
+            <button type="button" class="pill" data-value="jina-self">Self-hosted</button>
+          </div>
+          <div id="jinaCloudFields">
+            <input type="password" class="settings-input" id="jinaApiKey" placeholder="Jina API Key">
+          </div>
+          <div id="jinaSelfFields" style="display:none;">
+            <input type="text" class="settings-input" id="jinaReaderUrl" placeholder="http://127.0.0.1:3000">
+          </div>
+        </div>
+
+        <!-- AI Models Card -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-icon" style="background: color-mix(in srgb, var(--zen-coral) 12%, var(--zen-paper));">&#129504;</div>
+            <div class="settings-card-title">AI Models</div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-field">
+              <label class="settings-label">Model</label>
+              <input type="text" class="settings-input" id="modelInput" placeholder="openai:gpt-4o">
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Fast Model</label>
+              <input type="text" class="settings-input" id="fastModelInput" placeholder="openai:gpt-4o-mini">
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">API Key</label>
+            <input type="password" class="settings-input" id="llmApiKey" placeholder="Provider API key">
+          </div>
+          <div class="settings-row">
+            <div class="settings-field">
+              <label class="settings-label">Base URL <span style="color:var(--zen-muted);font-weight:400">(optional)</span></label>
+              <input type="text" class="settings-input" id="baseUrl" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Embedding Model</label>
+              <input type="text" class="settings-input" id="embeddingModel" placeholder="text-embedding-3-small">
+            </div>
+          </div>
         </div>
       </div>
-      <div id="searxngFields" style="display:none">
-        <div class="form-group">
-          <label>SearXNG URL</label>
-          <input id="searxngUrl" type="text" placeholder="http://localhost:8888" />
-        </div>
-      </div>
 
-      <!-- Content Enrichment -->
-      <h3>Content Enrichment</h3>
-      <div class="radio-group" id="enrichmentToggle">
-        <button class="radio-btn active" type="button" data-value="jina-cloud">Jina Cloud</button>
-        <button class="radio-btn" type="button" data-value="jina-self">Self-hosted Jina</button>
-      </div>
-      <div id="jinaCloudFields">
-        <div class="form-group">
-          <label>Jina API Key</label>
-          <input id="jinaApiKey" type="password" />
-        </div>
-      </div>
-      <div id="jinaSelfFields" style="display:none">
-        <div class="form-group">
-          <label>Jina Reader URL</label>
-          <input id="jinaReaderUrl" type="text" placeholder="http://127.0.0.1:3000" />
-        </div>
-      </div>
-
-      <!-- LLM Configuration -->
-      <h3>LLM Configuration</h3>
-      <div class="form-group">
-        <label>Model</label>
-        <input id="modelInput" type="text" placeholder="openai:gpt-4o" />
-        <span class="hint">Format: provider:model (e.g. openai:gpt-4o, anthropic:claude-sonnet-4-20250514, gemini:gemini-2.5-pro)</span>
-      </div>
-      <div class="form-group">
-        <label>Fast Model</label>
-        <input id="fastModelInput" type="text" placeholder="openai:gpt-4o-mini" />
-        <span class="hint">Used for speed mode and classifier</span>
-      </div>
-      <div class="form-group">
-        <label>API Key</label>
-        <input id="llmApiKey" type="password" placeholder="Provider API key" />
-      </div>
-      <div class="form-group">
-        <label>Base URL (optional)</label>
-        <input id="baseUrl" type="text" placeholder="https://api.openai.com/v1" />
-        <span class="hint">For custom or self-hosted endpoints</span>
-      </div>
-      <div class="form-group">
-        <label>Embedding Model</label>
-        <input id="embeddingModel" type="text" placeholder="text-embedding-3-small" />
-      </div>
-
-      <!-- Modal Actions -->
-      <div class="modal-actions">
-        <button class="btn-secondary" id="settingsCancel" type="button">Cancel</button>
-        <button class="btn-primary" id="settingsSave" type="button">Save</button>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="settingsCancel">Cancel</button>
+        <button type="button" class="btn-primary" id="settingsSave">Save</button>
       </div>
     </div>
   </div>

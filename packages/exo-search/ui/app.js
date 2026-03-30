@@ -69,7 +69,7 @@ function populateSettingsForm() {
 
 function setRadioGroupValue(groupId, value) {
   const group = document.getElementById(groupId);
-  group.querySelectorAll('.radio-btn').forEach(function(btn) {
+  group.querySelectorAll('.pill').forEach(function(btn) {
     if (btn.getAttribute('data-value') === value) {
       btn.classList.add('active');
     } else {
@@ -80,7 +80,7 @@ function setRadioGroupValue(groupId, value) {
 
 function toggleFieldVisibility(groupId) {
   const group = document.getElementById(groupId);
-  const activeBtn = group.querySelector('.radio-btn.active');
+  const activeBtn = group.querySelector('.pill.active');
   const activeValue = activeBtn ? activeBtn.getAttribute('data-value') : '';
 
   if (groupId === 'searchBackendToggle') {
@@ -97,11 +97,11 @@ function toggleFieldVisibility(groupId) {
 }
 
 // Radio group click delegation
-document.querySelectorAll('.radio-group').forEach(function(group) {
+document.querySelectorAll('.toggle-pills').forEach(function(group) {
   group.addEventListener('click', function(e) {
-    var btn = e.target.closest('.radio-btn');
+    var btn = e.target.closest('.pill');
     if (!btn) return;
-    group.querySelectorAll('.radio-btn').forEach(function(b) {
+    group.querySelectorAll('.pill').forEach(function(b) {
       b.classList.remove('active');
     });
     btn.classList.add('active');
@@ -113,6 +113,7 @@ document.querySelectorAll('.radio-group').forEach(function(group) {
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
 document.getElementById('settingsBtnSidebar').addEventListener('click', openSettings);
 document.getElementById('settingsCancel').addEventListener('click', closeSettings);
+document.getElementById('settingsClose').addEventListener('click', closeSettings);
 
 // Click on overlay (outside modal) closes settings
 document.getElementById('settingsModal').addEventListener('click', function(e) {
@@ -122,9 +123,9 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
 // Save handler
 document.getElementById('settingsSave').addEventListener('click', function() {
   var searchGroup = document.getElementById('searchBackendToggle');
-  var searchActive = searchGroup.querySelector('.radio-btn.active');
+  var searchActive = searchGroup.querySelector('.pill.active');
   var enrichGroup = document.getElementById('enrichmentToggle');
-  var enrichActive = enrichGroup.querySelector('.radio-btn.active');
+  var enrichActive = enrichGroup.querySelector('.pill.active');
 
   var settings = {
     searchBackend: searchActive ? searchActive.getAttribute('data-value') : 'serper',
@@ -180,26 +181,24 @@ document.getElementById('themeToggleSidebar').addEventListener('click', toggleTh
 updateThemeIcons();
 
 // ============================================================
-// 3. Mode Selector
+// 3. Mode Selector (Dropdown)
 // ============================================================
 
 var currentMode = 'balanced';
 
-// Sync all mode selectors when any mode button is clicked
-document.querySelectorAll('.mode-selector').forEach(function(selector) {
-  selector.addEventListener('click', function(e) {
-    var btn = e.target.closest('.mode-btn');
-    if (!btn) return;
-    currentMode = btn.getAttribute('data-mode');
-    // Sync ALL mode buttons across all selectors
-    document.querySelectorAll('.mode-btn').forEach(function(b) {
-      if (b.getAttribute('data-mode') === currentMode) {
-        b.classList.add('active');
-      } else {
-        b.classList.remove('active');
-      }
-    });
-  });
+function syncModeSelects(value) {
+  currentMode = value;
+  document.getElementById('modeSelect').value = value;
+  document.getElementById('modeSelectFollowUp').value = value;
+  var labels = { speed: '\u26A1 Speed', balanced: '\u2696 Balanced', quality: '\uD83D\uDD2C Quality' };
+  document.getElementById('modeBadge').textContent = labels[value] || value;
+}
+
+document.getElementById('modeSelect').addEventListener('change', function() {
+  syncModeSelects(this.value);
+});
+document.getElementById('modeSelectFollowUp').addEventListener('change', function() {
+  syncModeSelects(this.value);
 });
 
 // ============================================================
