@@ -576,12 +576,20 @@ async function submitSearch(query) {
     addToHistory(currentSessionId, query, answerText, sourcesData, suggestionsData, currentMode);
   });
 
-  es.addEventListener('error', function() {
+  // Backend sends a typed "error" event with a message when the pipeline fails
+  es.addEventListener('error', function(e) {
     es.close();
     activeEventSource = null;
+    var msg = 'Connection error \u2014 check settings and try again';
+    if (e.data) {
+      try {
+        var data = JSON.parse(e.data);
+        msg = data.error || msg;
+      } catch (_) {}
+    }
     var statusEl = document.getElementById('statusText');
     if (statusEl) {
-      statusEl.textContent = 'Error \u2014 check settings and try again';
+      statusEl.textContent = msg;
     }
     var dot = status.querySelector('.dot');
     if (dot) {

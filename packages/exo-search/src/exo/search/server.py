@@ -331,29 +331,38 @@ async def ui_search_stream_endpoint(
 
         from .types import PipelineEvent, SearchResponse
 
-        async for event in stream_search_pipeline(
-            query=q,
-            chat_history=history,
-            mode=mode,
-            config=cfg,
-        ):
-            if isinstance(event, PipelineEvent):
-                yield (
-                    f"event: status\n"
-                    f"data: {json.dumps({'stage': event.stage, 'status': event.status, 'message': event.message})}\n\n"
-                )
-            elif isinstance(event, TextEvent):
-                yield f"event: token\ndata: {json.dumps({'text': event.text})}\n\n"
-            elif isinstance(event, SearchResponse):
-                sources_data = [
-                    {"title": s.title, "url": s.url, "content": s.content} for s in event.sources
-                ]
-                yield f"event: sources\ndata: {json.dumps({'sources': sources_data})}\n\n"
-                yield f"event: suggestions\ndata: {json.dumps({'suggestions': event.suggestions})}\n\n"
-                yield f"event: done\ndata: {json.dumps({'status': 'complete'})}\n\n"
+        try:
+            async for event in stream_search_pipeline(
+                query=q,
+                chat_history=history,
+                mode=mode,
+                config=cfg,
+            ):
+                if isinstance(event, PipelineEvent):
+                    yield (
+                        f"event: status\n"
+                        f"data: {json.dumps({'stage': event.stage, 'status': event.status, 'message': event.message})}\n\n"
+                    )
+                elif isinstance(event, TextEvent):
+                    yield f"event: token\ndata: {json.dumps({'text': event.text})}\n\n"
+                elif isinstance(event, SearchResponse):
+                    sources_data = [
+                        {"title": s.title, "url": s.url, "content": s.content}
+                        for s in event.sources
+                    ]
+                    yield f"event: sources\ndata: {json.dumps({'sources': sources_data})}\n\n"
+                    yield f"event: suggestions\ndata: {json.dumps({'suggestions': event.suggestions})}\n\n"
+                    yield f"event: done\ndata: {json.dumps({'status': 'complete'})}\n\n"
 
-                # Persist conversation turn
-                conversation.add_turn(q, event.answer)
+                    # Persist conversation turn
+                    conversation.add_turn(q, event.answer)
+        except Exception as exc:
+            _log.error("stream pipeline error: %s", exc)
+            # Extract a human-readable message from the exception chain
+            msg = str(exc)
+            if exc.__cause__:
+                msg = str(exc.__cause__)
+            yield f"event: error\ndata: {json.dumps({'error': msg})}\n\n"
 
     return StreamingResponse(
         event_stream(),
