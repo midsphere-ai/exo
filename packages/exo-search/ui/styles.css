@@ -436,24 +436,16 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  position: relative;
 }
 
 .results-view.active {
   display: flex;
 }
 
-/* Results — header */
+/* Results — header (hidden — query shown inline in answer area) */
 .results-header {
-  padding: 20px 24px 12px;
-  flex-shrink: 0;
-}
-
-.query-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--zen-dark);
-  margin-bottom: 10px;
+  display: none;
 }
 
 /* Results — scrollable answer area */
@@ -461,6 +453,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 24px 40px;
+  padding-bottom: 100px; /* space for floating input */
 }
 
 .answer-content {
@@ -468,35 +461,84 @@ body {
   margin: 0 auto;
 }
 
+/* User query displayed inline above the answer */
+.user-query {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--zen-dark);
+  margin-bottom: 16px;
+}
+
 /* ============================================================
    SOURCE CARDS
    ============================================================ */
-.source-cards {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 8px;
+/* Sources container — shows count, expands to show cards */
+.sources-section {
   margin-bottom: 20px;
-  scrollbar-width: none;
 }
 
-.source-cards::-webkit-scrollbar {
+.sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--zen-dark) 8%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--zen-dark) 3%, var(--zen-paper));
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zen-dark);
+  transition: all var(--transition);
+}
+
+.sources-toggle:hover {
+  border-color: color-mix(in srgb, var(--zen-dark) 18%, transparent);
+}
+
+.sources-toggle .sources-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--zen-muted);
+}
+
+.sources-toggle .chevron {
+  font-size: 10px;
+  color: var(--zen-muted);
+  transition: transform var(--transition);
+}
+
+.sources-section.open .sources-toggle .chevron {
+  transform: rotate(180deg);
+}
+
+.source-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
   display: none;
+}
+
+.sources-section.open .source-cards {
+  display: flex;
 }
 
 .source-card {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid color-mix(in srgb, var(--zen-dark) 8%, transparent);
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--zen-dark) 3%, var(--zen-paper));
   cursor: pointer;
   transition: border-color var(--transition);
   text-decoration: none;
   color: inherit;
+  font-size: 12px;
 }
 
 .source-card:hover {
@@ -805,13 +847,20 @@ body {
    BOTTOM INPUT  (pinned at bottom of results view)
    ============================================================ */
 .bottom-input {
-  flex-shrink: 0;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   padding: 16px 40px 20px;
+  background: linear-gradient(transparent, var(--zen-paper) 30%);
+  pointer-events: none;
 }
 
 .bottom-input .search-bar {
   max-width: 720px;
   margin: 0 auto;
+  pointer-events: all;
+  box-shadow: 0 -2px 20px color-mix(in srgb, var(--zen-dark) 8%, transparent);
 }
 
 /* ============================================================

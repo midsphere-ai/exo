@@ -335,30 +335,26 @@ function loadSession(sessionId) {
   if (!session) return;
 
   currentSessionId = sessionId;
-  var firstUserMsg = session.messages.find(function(m) { return m.role === 'user'; });
-  showResults(firstUserMsg ? firstUserMsg.content : session.title);
+  showResults('');
 
   var container = document.getElementById('answerContent');
   container.innerHTML = '';
 
   // Replay message pairs (user + assistant turns)
-  var turnIndex = 0;
   for (var i = 0; i < session.messages.length; i += 2) {
     var userMsg = session.messages[i];
     var assistantMsg = session.messages[i + 1];
     if (!assistantMsg) break;
 
-    // Turn divider for follow-up turns
-    if (turnIndex > 0) {
-      var divider = document.createElement('div');
-      divider.className = 'turn-divider';
-      divider.textContent = userMsg.content;
-      container.appendChild(divider);
-    }
+    // User query heading
+    var queryEl = document.createElement('div');
+    queryEl.className = 'user-query';
+    queryEl.textContent = userMsg.content;
+    container.appendChild(queryEl);
 
-    // Source cards
+    // Source cards (collapsible)
     if (assistantMsg.sources && assistantMsg.sources.length > 0) {
-      container.appendChild(renderSourceCards(assistantMsg.sources));
+      container.appendChild(renderSourcesSection(assistantMsg.sources));
     }
 
     // Answer prose
@@ -367,12 +363,10 @@ function loadSession(sessionId) {
     prose.innerHTML = renderAnswer(assistantMsg.content, assistantMsg.sources || []);
     container.appendChild(prose);
 
-    // Related suggestions
-    if (assistantMsg.suggestions && assistantMsg.suggestions.length > 0) {
+    // Only show related suggestions for the LAST turn
+    if (i + 2 >= session.messages.length && assistantMsg.suggestions && assistantMsg.suggestions.length > 0) {
       container.appendChild(renderRelatedSection(assistantMsg.suggestions));
     }
-
-    turnIndex++;
   }
 
   renderHistoryList();
@@ -384,7 +378,20 @@ function loadSession(sessionId) {
 
 var SOURCE_COLORS = ['#6287f5', '#f76f53', '#63f78b', '#6287f5', '#f76f53', '#63f78b'];
 
-function renderSourceCards(sources) {
+function renderSourcesSection(sources) {
+  var section = document.createElement('div');
+  section.className = 'sources-section';
+
+  // Toggle button with count
+  var toggle = document.createElement('button');
+  toggle.className = 'sources-toggle';
+  toggle.innerHTML = '<span class="sources-count">' + sources.length + ' sources</span><span class="chevron">▼</span>';
+  toggle.addEventListener('click', function() {
+    section.classList.toggle('open');
+  });
+  section.appendChild(toggle);
+
+  // Source cards (hidden until expanded)
   var row = document.createElement('div');
   row.className = 'source-cards';
 
@@ -415,18 +422,14 @@ function renderSourceCards(sources) {
     domainSpan.className = 'source-domain';
     domainSpan.textContent = domain;
 
-    var title = document.createElement('span');
-    title.className = 'source-title';
-    title.textContent = source.title || domain;
-
     a.appendChild(num);
     a.appendChild(favicon);
     a.appendChild(domainSpan);
-    a.appendChild(title);
     row.appendChild(a);
   });
 
-  return row;
+  section.appendChild(row);
+  return section;
 }
 
 function renderAnswer(markdown, sources) {
@@ -495,18 +498,19 @@ async function submitSearch(query) {
 
   if (!currentSessionId) currentSessionId = crypto.randomUUID();
 
-  showResults(query);
+  showResults('');
 
   var container = document.getElementById('answerContent');
 
-  // Turn divider for follow-ups
-  if (container.children.length > 0) {
-    var divider = document.createElement('div');
-    divider.className = 'turn-divider';
-    divider.textContent = query;
-    container.appendChild(divider);
-    document.getElementById('queryTitle').textContent = query;
-  }
+  // Remove previous related section (only latest turn gets suggestions)
+  var oldRelated = container.querySelector('.related-section');
+  if (oldRelated) oldRelated.remove();
+
+  // User query heading
+  var queryEl = document.createElement('div');
+  queryEl.className = 'user-query';
+  queryEl.textContent = query;
+  container.appendChild(queryEl);
 
   // Pipeline status indicator
   var status = document.createElement('div');
@@ -564,9 +568,9 @@ async function submitSearch(query) {
   es.addEventListener('sources', function(e) {
     var data = JSON.parse(e.data);
     sourcesData = data.sources;
-    var newCards = renderSourceCards(sourcesData);
-    sourceCardsEl.replaceWith(newCards);
-    sourceCardsEl = newCards;
+    var newSection = renderSourcesSection(sourcesData);
+    sourceCardsEl.replaceWith(newSection);
+    sourceCardsEl = newSection;
     // Re-render answer with citation links now that sources are available
     proseEl.innerHTML = renderAnswer(answerText, sourcesData);
   });
