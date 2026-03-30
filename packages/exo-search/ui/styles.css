@@ -795,7 +795,7 @@ body {
   color: var(--zen-muted);
 }
 
-.pipeline-dot {
+.pipeline-status .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -847,7 +847,7 @@ body {
   transition: opacity var(--transition);
 }
 
-.modal-overlay.active {
+.modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
 }

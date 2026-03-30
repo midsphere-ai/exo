@@ -34,12 +34,12 @@ function getConfig() {
 }
 
 function openSettings() {
-  document.getElementById('settingsModal').classList.add('active');
+  document.getElementById('settingsModal').classList.add('open');
   populateSettingsForm();
 }
 
 function closeSettings() {
-  document.getElementById('settingsModal').classList.remove('active');
+  document.getElementById('settingsModal').classList.remove('open');
 }
 
 function populateSettingsForm() {
@@ -366,7 +366,7 @@ var SOURCE_COLORS = ['#6287f5', '#f76f53', '#63f78b', '#6287f5', '#f76f53', '#63
 
 function renderSourceCards(sources) {
   var row = document.createElement('div');
-  row.className = 'sources';
+  row.className = 'source-cards';
 
   sources.forEach(function(source, idx) {
     var a = document.createElement('a');
@@ -381,13 +381,9 @@ function renderSourceCards(sources) {
 
     var color = SOURCE_COLORS[idx % SOURCE_COLORS.length];
 
-    var top = document.createElement('div');
-    top.className = 'source-card-top';
-
     var num = document.createElement('span');
     num.className = 'source-num';
-    num.style.background = color + '22';
-    num.style.color = color;
+    num.style.background = color;
     num.textContent = String(idx + 1);
 
     var favicon = document.createElement('img');
@@ -399,15 +395,13 @@ function renderSourceCards(sources) {
     domainSpan.className = 'source-domain';
     domainSpan.textContent = domain;
 
-    top.appendChild(num);
-    top.appendChild(favicon);
-    top.appendChild(domainSpan);
-
     var title = document.createElement('span');
     title.className = 'source-title';
     title.textContent = source.title || domain;
 
-    a.appendChild(top);
+    a.appendChild(num);
+    a.appendChild(favicon);
+    a.appendChild(domainSpan);
     a.appendChild(title);
     row.appendChild(a);
   });
@@ -497,7 +491,7 @@ async function submitSearch(query) {
   // Pipeline status indicator
   var status = document.createElement('div');
   status.className = 'pipeline-status';
-  status.innerHTML = '<span class="pipeline-dot"></span><span id="statusText">Starting...</span>';
+  status.innerHTML = '<span class="dot"></span><span id="statusText">Starting...</span>';
   container.appendChild(status);
 
   // Placeholders for source cards and answer prose
@@ -576,7 +570,7 @@ async function submitSearch(query) {
     if (statusEl) {
       statusEl.textContent = 'Error \u2014 check settings and try again';
     }
-    var dot = status.querySelector('.pipeline-dot');
+    var dot = status.querySelector('.dot');
     if (dot) {
       dot.style.background = 'var(--zen-coral)';
       dot.style.animation = 'none';
