@@ -23,6 +23,7 @@ members = [
     "packages/exo-guardrail",
     "packages/exo-retrieval",
     "packages/exo-search",
+    "packages/exo-skills",
     "packages/exo",
 ]
 
@@ -45,6 +46,7 @@ dev = [
     "exo-guardrail",
     "exo-retrieval",
     "exo-search",
+    "exo-skills",
     "exo-ai",
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
@@ -81,6 +83,7 @@ exo-web = { workspace = true }
 exo-guardrail = { workspace = true }
 exo-retrieval = { workspace = true }
 exo-search = { workspace = true }
+exo-skills = { workspace = true }
 exo-ai = { workspace = true }
 
 [tool.ruff]
@@ -92,7 +95,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["exo", "exo_cli", "exo_server", "exo_web"]
+known-first-party = ["exo", "exo_cli", "exo_server", "exo_skills", "exo_web"]
 
 [tool.pyright]
 pythonVersion = "3.11"

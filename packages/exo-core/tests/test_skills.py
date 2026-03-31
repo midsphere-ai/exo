@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from exo.events import EventBus
 from exo.skills import (
     ConflictStrategy,
+    DictToolResolver,
     Skill,
+    SkillChangeEvent,
     SkillError,
     SkillRegistry,
+    SkillSyncManager,
+    SkillWatcher,
+    ToolResolver,
     _collect_skills,
+    _skill_fingerprint,
     extract_front_matter,
     parse_github_url,
 )
@@ -436,3 +445,389 @@ class TestSkillRegistryGitHub:
             skills = reg.load_all()
 
         assert "sub_skill" in skills
+
+
+# ---------------------------------------------------------------------------
+# Helpers for hot-reload tests
+# ---------------------------------------------------------------------------
+
+
+class _MockTool:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _MockAgent:
+    def __init__(self) -> None:
+        self.name = "test-agent"
+        self.tools: dict[str, _MockTool] = {}
+        self.instructions = ""
+        self._add_tool_calls: list[_MockTool] = []
+        self._remove_tool_calls: list[str] = []
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
+    async def add_tool(self, tool: _MockTool) -> None:
+        self._add_tool_calls.append(tool)
+        self.tools[tool.name] = tool
+
+    def remove_tool(self, tool_name: str) -> None:
+        self._remove_tool_calls.append(tool_name)
+        if tool_name in self.tools:
+            del self.tools[tool_name]
+
+
+class _FakeWatcher(SkillWatcher):
+    def __init__(self, batches: list[list[SkillChangeEvent]]) -> None:
+        self._batches = batches
+        self._stopped = asyncio.Event()
+
+    async def watch(self):  # type: ignore[override]
+        for batch in self._batches:
+            if self._stopped.is_set():
+                return
+            yield batch
+
+    async def stop(self) -> None:
+        self._stopped.set()
+
+
+# ---------------------------------------------------------------------------
+# SkillChangeEvent
+# ---------------------------------------------------------------------------
+
+
+class TestSkillChangeEvent:
+    def test_construction(self) -> None:
+        skill = Skill(name="s1", description="desc")
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/a/b")
+        assert event.kind == "added"
+        assert event.skill_name == "s1"
+        assert event.skill is skill
+        assert event.source_path == "/a/b"
+
+    def test_frozen(self) -> None:
+        event = SkillChangeEvent(
+            kind="added",
+            skill_name="s1",
+            skill=Skill(name="s1"),
+            source_path="/a",
+        )
+        with pytest.raises(FrozenInstanceError):
+            event.kind = "removed"  # type: ignore[misc]
+
+    def test_removed_skill_none(self) -> None:
+        event = SkillChangeEvent(kind="removed", skill_name="old", skill=None, source_path="/x")
+        assert event.skill is None
+        assert event.kind == "removed"
+
+
+# ---------------------------------------------------------------------------
+# _skill_fingerprint
+# ---------------------------------------------------------------------------
+
+
+class TestSkillFingerprint:
+    def test_same_skill_same_fingerprint(self) -> None:
+        s1 = Skill(name="a", description="d", usage="u", skill_type="t", active=True)
+        s2 = Skill(name="a", description="d", usage="u", skill_type="t", active=True)
+        assert _skill_fingerprint(s1) == _skill_fingerprint(s2)
+
+    def test_different_description_different_fingerprint(self) -> None:
+        s1 = Skill(name="a", description="d1")
+        s2 = Skill(name="a", description="d2")
+        assert _skill_fingerprint(s1) != _skill_fingerprint(s2)
+
+
+# ---------------------------------------------------------------------------
+# DictToolResolver
+# ---------------------------------------------------------------------------
+
+
+class TestDictToolResolver:
+    def test_single_tool(self) -> None:
+        tool = _MockTool("t1")
+        resolver = DictToolResolver({"my_skill": tool})  # type: ignore[dict-item]
+        result = resolver.resolve(Skill(name="my_skill"))
+        assert result == [tool]
+
+    def test_list_of_tools(self) -> None:
+        t1, t2 = _MockTool("t1"), _MockTool("t2")
+        resolver = DictToolResolver({"sk": [t1, t2]})  # type: ignore[dict-item]
+        result = resolver.resolve(Skill(name="sk"))
+        assert result == [t1, t2]
+
+    def test_missing_skill(self) -> None:
+        resolver = DictToolResolver({})
+        result = resolver.resolve(Skill(name="nope"))
+        assert result == []
+
+    def test_implements_protocol(self) -> None:
+        resolver = DictToolResolver({})
+        assert isinstance(resolver, ToolResolver)
+
+
+# ---------------------------------------------------------------------------
+# SkillWatcher ABC
+# ---------------------------------------------------------------------------
+
+
+class TestSkillWatcherABC:
+    def test_cannot_instantiate(self) -> None:
+        with pytest.raises(TypeError):
+            SkillWatcher()  # type: ignore[abstract]
+
+
+# ---------------------------------------------------------------------------
+# SkillSyncManager
+# ---------------------------------------------------------------------------
+
+
+class TestSkillSyncManager:
+    async def test_added_event(self) -> None:
+        registry = SkillRegistry()
+        skill = Skill(name="s1", description="hello")
+        tool = _MockTool("tool_s1")
+        resolver = DictToolResolver({"s1": tool})  # type: ignore[dict-item]
+
+        mgr = SkillSyncManager(registry, resolver)
+        agent = _MockAgent()
+        mgr.bind_agent(agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        # Give the background task time to process
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        assert "s1" in registry._skills
+        assert registry._skills["s1"] is skill
+        assert len(agent._add_tool_calls) == 1
+        assert agent._add_tool_calls[0].name == "tool_s1"
+
+    async def test_modified_event(self) -> None:
+        registry = SkillRegistry()
+        old_skill = Skill(name="s1", description="old")
+        registry._skills["s1"] = old_skill
+
+        old_tool = _MockTool("old_tool")
+        new_tool = _MockTool("new_tool")
+        new_skill = Skill(name="s1", description="new")
+
+        resolver = DictToolResolver({"s1": new_tool})  # type: ignore[dict-item]
+        mgr = SkillSyncManager(registry, resolver)
+        mgr._skill_tools["s1"] = ["old_tool"]
+
+        agent = _MockAgent()
+        agent.tools["old_tool"] = old_tool  # type: ignore[assignment]
+        mgr.bind_agent(agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(
+            kind="modified", skill_name="s1", skill=new_skill, source_path="/p"
+        )
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        assert registry._skills["s1"] is new_skill
+        assert "old_tool" in agent._remove_tool_calls
+        assert any(t.name == "new_tool" for t in agent._add_tool_calls)
+
+    async def test_removed_event(self) -> None:
+        registry = SkillRegistry()
+        old_skill = Skill(name="s1", description="bye")
+        registry._skills["s1"] = old_skill
+
+        resolver = DictToolResolver({})
+        mgr = SkillSyncManager(registry, resolver)
+        mgr._skill_tools["s1"] = ["rm_tool"]
+
+        agent = _MockAgent()
+        agent.tools["rm_tool"] = _MockTool("rm_tool")  # type: ignore[assignment]
+        mgr.bind_agent(agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="removed", skill_name="s1", skill=None, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        assert "s1" not in registry._skills
+        assert "rm_tool" in agent._remove_tool_calls
+
+    async def test_event_bus_emissions(self) -> None:
+        registry = SkillRegistry()
+        resolver = DictToolResolver({})
+        bus = EventBus()
+
+        emitted: list[tuple[str, dict]] = []
+        original_emit = bus.emit
+
+        async def capture_emit(event: str, **kwargs: object) -> None:
+            emitted.append((event, kwargs))
+            await original_emit(event, **kwargs)
+
+        bus.emit = capture_emit  # type: ignore[assignment]
+
+        mgr = SkillSyncManager(registry, resolver, event_bus=bus)
+
+        skill = Skill(name="s1")
+        added = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/a")
+
+        new_skill = Skill(name="s1", description="v2")
+        modified = SkillChangeEvent(
+            kind="modified", skill_name="s1", skill=new_skill, source_path="/a"
+        )
+
+        removed = SkillChangeEvent(kind="removed", skill_name="s1", skill=None, source_path="/a")
+
+        watcher = _FakeWatcher([[added], [modified], [removed]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.1)
+        await mgr.stop()
+
+        event_names = [name for name, _ in emitted]
+        assert "skill:added" in event_names
+        assert "skill:modified" in event_names
+        assert "skill:removed" in event_names
+
+        # Verify payload keys
+        added_payload = next(kw for name, kw in emitted if name == "skill:added")
+        assert "skill" in added_payload
+
+        modified_payload = next(kw for name, kw in emitted if name == "skill:modified")
+        assert "old_skill" in modified_payload
+        assert "new_skill" in modified_payload
+
+        removed_payload = next(kw for name, kw in emitted if name == "skill:removed")
+        assert "skill" in removed_payload
+
+    async def test_instructions_builder(self) -> None:
+        registry = SkillRegistry()
+        skill = Skill(name="s1", description="desc")
+        tool = _MockTool("t1")
+        resolver = DictToolResolver({"s1": tool})  # type: ignore[dict-item]
+
+        def builder(skills: list[Skill]) -> str:
+            return "Skills: " + ", ".join(s.name for s in skills)
+
+        mgr = SkillSyncManager(registry, resolver, instructions_builder=builder)
+        agent = _MockAgent()
+        mgr.bind_agent(agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        assert "s1" in agent.instructions
+
+    async def test_bind_unbind_agent(self) -> None:
+        registry = SkillRegistry()
+        skill = Skill(name="s1")
+        tool = _MockTool("t1")
+        resolver = DictToolResolver({"s1": tool})  # type: ignore[dict-item]
+
+        mgr = SkillSyncManager(registry, resolver)
+        agent1 = _MockAgent()
+        agent2 = _MockAgent()
+        mgr.bind_agent(agent1)  # type: ignore[arg-type]
+        mgr.bind_agent(agent2)  # type: ignore[arg-type]
+        mgr.unbind_agent(agent2)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        # agent1 was bound, so it should have the tool
+        assert len(agent1._add_tool_calls) == 1
+        # agent2 was unbound, so it should not
+        assert len(agent2._add_tool_calls) == 0
+
+    async def test_context_manager(self) -> None:
+        registry = SkillRegistry()
+        resolver = DictToolResolver({})
+        mgr = SkillSyncManager(registry, resolver)
+
+        watcher = _FakeWatcher([])
+        mgr.add_watcher(watcher)
+
+        async with mgr as m:
+            assert m is mgr
+
+        # After exit, tasks should be cleaned up
+        assert mgr._tasks == []
+
+    async def test_dict_auto_wrapped(self) -> None:
+        registry = SkillRegistry()
+        skill = Skill(name="s1")
+        tool = _MockTool("t1")
+
+        # Pass a plain dict instead of a ToolResolver instance
+        mgr = SkillSyncManager(registry, {"s1": tool})  # type: ignore[arg-type]
+        assert isinstance(mgr._resolver, DictToolResolver)
+
+        agent = _MockAgent()
+        mgr.bind_agent(agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        assert len(agent._add_tool_calls) == 1
+        assert agent._add_tool_calls[0].name == "t1"
+
+    async def test_agent_error_resilience(self) -> None:
+        registry = SkillRegistry()
+        skill = Skill(name="s1")
+        tool = _MockTool("t1")
+        resolver = DictToolResolver({"s1": tool})  # type: ignore[dict-item]
+
+        mgr = SkillSyncManager(registry, resolver)
+
+        class _FailingAgent(_MockAgent):
+            async def add_tool(self, tool: _MockTool) -> None:
+                raise RuntimeError("agent broken")
+
+        failing_agent = _FailingAgent()
+        good_agent = _MockAgent()
+        mgr.bind_agent(failing_agent)  # type: ignore[arg-type]
+        mgr.bind_agent(good_agent)  # type: ignore[arg-type]
+
+        event = SkillChangeEvent(kind="added", skill_name="s1", skill=skill, source_path="/p")
+        watcher = _FakeWatcher([[event]])
+        mgr.add_watcher(watcher)
+
+        await mgr.start()
+        await asyncio.sleep(0.05)
+        await mgr.stop()
+
+        # The good agent should still have received the tool despite the
+        # failing agent raising an exception.
+        assert len(good_agent._add_tool_calls) == 1
+        assert good_agent._add_tool_calls[0].name == "t1"

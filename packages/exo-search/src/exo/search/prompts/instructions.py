@@ -40,6 +40,32 @@ NOTE: BY GENERAL KNOWLEDGE WE MEAN INFORMATION THAT IS OBVIOUS, WIDELY KNOWN, OR
    - Set it to true if the user's query involves mathematical calculations, conversions, or any computation-related tasks.
    - Set it to true for queries like "What is 25% of 80?" or "Convert 100 USD to EUR" or "Calculate the square root of 256" or "What is 2 * 3 + 5?" or other mathematical expressions.
    - If it can fully answer the user query without needing additional search, set skipSearch to true as well.
+8. requiresSequentialResearch (boolean): Set to true if answering this question requires
+   FINDING specific information first, then USING that found information to search for something else.
+   This is about DEPENDENT lookups — where what you need to search for in step 2 depends on what you find in step 1.
+
+   KEY TEST: "Do I need the ANSWER from search A to know WHAT to search for in search B? If yes -> true. If I can write all search queries right now without any search results -> false."
+
+   TRUE examples (dependent lookups — step 2 depends on step 1 results):
+   - "Who acquired company X, and what was their revenue?" (need to find acquirer name first, then search for their revenue)
+   - "List the items in [specific document] and check if each has been updated" (need to find and read the document first)
+   - Questions with "of those", "from that list", "based on the results", "for each of those" type logic
+   - Multi-step calculations where each step requires new information from the web
+
+   FALSE examples (parallel search — all queries can be written immediately):
+   - "Compare X vs Y" -> FALSE (can search X and Y independently in parallel)
+   - "Pros and cons of X" -> FALSE (single-topic, parallel search)
+   - "How does X compare to Y?" -> FALSE (search X and Y independently)
+   - "What is X and how is it used in Y?" -> FALSE (two independent topics)
+   - Any "X vs Y", "compare X and Y", "differences between X and Y" pattern -> FALSE
+   - Simple factual questions, even if complex-sounding -> FALSE
+
+   WHEN IN DOUBT, SET TO FALSE — the sub-questions mechanism already handles parallel multi-topic queries efficiently. Only set to true when you genuinely cannot formulate the second search without the first search's results.
+
+9. estimatedComplexity (string): Estimate the complexity of the research needed.
+   - "simple": Single fact lookup, one entity, straightforward question. Examples: "What is the capital of France?", "When was Python released?", "What is the current price of Bitcoin?"
+   - "moderate": Multi-faceted question, comparison of 2-3 things, requires 2-4 searches. Examples: "Compare PostgreSQL vs MySQL performance", "What are the pros and cons of remote work?", "How does React differ from Vue?"
+   - "complex": Deep multi-part research, 5+ searches needed, cross-referencing multiple sources, sequential research. Examples: "Trace the regulatory history of cryptocurrency in the EU and compare with US policy", "Analyze the impact of AI on healthcare across diagnosis, treatment, and drug discovery", "What companies has Berkshire Hathaway acquired in the last 5 years and how has each performed?"
 </labels>
 
 <standalone_followup>
@@ -78,6 +104,8 @@ You must respond in the following JSON format without any extra text, explanatio
     "showWeatherWidget": boolean,
     "showStockWidget": boolean,
     "showCalculationWidget": boolean,
+    "requiresSequentialResearch": boolean,
+    "estimatedComplexity": "simple" | "moderate" | "complex",
   }},
   "standaloneFollowUp": string,
   "subQuestions": [string, ...]
@@ -99,7 +127,7 @@ def get_researcher_prompt(action_desc: str, mode: str, iteration: int, max_itera
         if no_reasoning:
             return _get_balanced_no_reasoning_prompt(action_desc, today, iteration, max_iteration)
         return _get_balanced_prompt(action_desc, today, iteration, max_iteration)
-    elif base_mode == "quality":
+    elif base_mode in ("quality", "deep"):
         if no_reasoning:
             return _get_quality_no_reasoning_prompt(action_desc, today, iteration, max_iteration)
         return _get_quality_prompt(action_desc, today, iteration, max_iteration)
@@ -490,8 +518,9 @@ def get_writer_prompt(
     system_instructions: str = "",
     mode: str = "balanced",
     max_writer_words: int | None = None,
+    research_narrative: str = "",
 ) -> str:
-    if mode != "quality":
+    if mode not in ("quality", "deep"):
         quality_instruction = ""
     else:
         word_target = max_writer_words or 2000
@@ -508,6 +537,23 @@ def get_writer_prompt(
             f" FLAG AREAS WHERE SOURCES ARE AMBIGUOUS OR CONFLICTING —"
             f" DO NOT PAPER OVER UNCERTAINTY WITH CONFIDENT LANGUAGE."
         )
+    narrative_block = ""
+    if research_narrative:
+        narrative_block = f"""
+    ### Research Chain
+    The following is a verified chain of findings from sequential research steps.
+    Each step built on the previous step's findings. Use this as your PRIMARY source of
+    truth for the overall answer structure and key facts. Cross-reference with the raw
+    sources in <context> for citations.
+
+    IMPORTANT: The research chain has already done the hard work of finding and connecting
+    information across multiple searches. Your job is to synthesize these findings into a
+    clear, well-cited answer — NOT to redo the research or contradict the chain's findings
+    unless a raw source clearly shows different information.
+
+    {research_narrative}
+"""
+
     current_date = datetime.datetime.now(datetime.UTC).isoformat()
 
     return f"""
@@ -543,6 +589,24 @@ You are Vane, an AI model skilled in web search and crafting detailed, engaging,
     - Draw from across the full <context> where relevant — do not cluster citations from only the first few results. But only cite sources that genuinely support the claim. There is no minimum citation count; accuracy of citations matters far more than quantity.
     - For multi-part questions, each part should draw from relevant sources for that part. Do not force citations from unrelated sources just to increase citation diversity.
 
+    ### Source Content Types
+    - Sources marked `content_type="snippet"` contain only a brief search engine excerpt (~200 characters). You may ONLY cite them for claims that are directly and explicitly stated in the snippet text. Do NOT extrapolate, infer, or expand on snippet-only sources.
+    - Sources marked `content_type="full_page"` contain full page content and can be cited with more confidence.
+    - If a claim requires more detail than a snippet provides, note the limitation rather than filling in from your training data.
+
+    ### Anti-patterns (NEVER do these)
+    - Do NOT write "X was founded in 1999 [3]" when source [3] does not mention the year 1999
+    - Do NOT fill in specific dates, numbers, percentages, or names from your training data when sources are vague or silent
+    - Do NOT cite a source for background context you are providing from general knowledge
+    - If you want to state general knowledge, do so WITHOUT a citation number
+    - Do NOT "round out" a partial answer with plausible-sounding but unsourced details
+
+    ### Mandatory Self-Check
+    Before writing each [N] citation, mentally answer: "Can I point to the specific sentence
+    in result N that states this exact claim?" If not, remove the citation. After completing
+    your answer, re-read every [N] citation and verify the claim appears verbatim or very
+    closely paraphrased in that source. Remove any citation you cannot verify.
+
     ### Source Listing
     - After your answer, include a "## Sources" section listing every source you cited.
     - Format each source as: [number] Title — URL
@@ -574,6 +638,7 @@ You are Vane, an AI model skilled in web search and crafting detailed, engaging,
     ### Self-Check
     Before finalizing, verify: (1) Did you directly answer every part of the question? (2) Are facts based on confirmed outcomes, not proposals? (3) Did you include specific names, numbers, and dates? (4) Is word budget spent efficiently with no filler? (5) For every confident claim, is there a source that clearly supports it? If not, soften the language or remove the claim. (6) If sources conflict or are ambiguous, did you flag the uncertainty instead of picking a side?
 
+    {narrative_block}
     <context>
     {context}
     </context>
@@ -737,3 +802,166 @@ def get_web_search_prompt(mode: str) -> str:
     if mode == "balanced":
         return WEB_SEARCH_BALANCED_PROMPT
     return WEB_SEARCH_QUALITY_PROMPT
+
+
+def get_claim_extraction_prompt(context: str, query: str) -> str:
+    """Prompt for extracting structured claims from source content."""
+    return f"""\
+You are a precise fact extractor. Given a user query and a set of search result sources,
+extract ONLY factual claims that are EXPLICITLY stated in the sources.
+
+RULES:
+- Extract ONLY what is explicitly stated in the sources. Do NOT infer, generalize, or add
+  information from your own knowledge.
+- Each claim must be a single, verifiable factual statement.
+- Include the 1-based source index where the claim was found.
+- Include a verbatim quote from the source that supports the claim (keep it short,
+  1-2 sentences).
+- If a fact appears in multiple sources, use the source with the most detailed coverage.
+- Extract 10-30 claims depending on source richness. Prefer specific facts (numbers, dates,
+  names, entities) over vague generalities.
+- Order claims by relevance to the query.
+
+USER QUERY: {query}
+
+{context}
+
+Respond with a JSON array of objects, each with:
+- "claim": the factual statement
+- "source_index": the 1-based source number
+- "verbatim_quote": exact text from the source
+
+Example:
+[
+  {{"claim": "The Eiffel Tower is 330 meters tall", "source_index": 1, \
+"verbatim_quote": "Standing at 330 metres (1,083 ft), the Eiffel Tower is the tallest \
+structure in Paris."}},
+  {{"claim": "It was built for the 1889 World's Fair", "source_index": 2, \
+"verbatim_quote": "The tower was constructed as the centrepiece of the 1889 World's Fair."}}
+]
+
+Output ONLY the JSON array, no other text.
+"""
+
+
+def get_claim_first_writer_prompt(
+    claims_text: str,
+    context: str,
+    system_instructions: str = "",
+    max_writer_words: int | None = None,
+    research_narrative: str = "",
+) -> str:
+    """Prompt for the claim-first writer that composes from verified claims."""
+    word_target = max_writer_words or 2000
+    current_date = datetime.datetime.now(datetime.UTC).isoformat()
+
+    narrative_block = ""
+    if research_narrative:
+        narrative_block = f"""
+    ### Research Chain
+    The following is a verified chain of findings from sequential research steps.
+    Use this as additional context for structuring your answer.
+
+    {research_narrative}
+"""
+
+    return f"""\
+You are Vane, an AI model skilled in crafting detailed, engaging, and well-structured answers.
+
+### Your Task
+Compose a comprehensive answer using ONLY the provided CLAIMS below. Each claim has been
+extracted from and verified against the source documents.
+
+### CRITICAL RULES
+- You may ONLY use facts from the CLAIMS list below. Do NOT add any facts, numbers, dates,
+  names, or details that are not present in the claims.
+- Every factual statement MUST have a [N] citation matching the claim's source_index.
+- If the claims do not cover a part of the question, explicitly say "No information was found
+  in the available sources about this aspect."
+- Do NOT fabricate or hallucinate any information. If unsure, omit rather than guess.
+- Aim for ~{word_target} words. Exceed if needed for completeness, but do not pad.
+
+### Answer Structure
+- Lead with the direct answer in the first 1-3 sentences.
+- Use Markdown headings (##), bold, and bullets for clarity.
+- No main title -- start directly with the answer.
+- End with a "## Summary" section (3-5 bullet points).
+- End with a "## Sources" section listing each cited source as [N] Title - URL.
+
+### Citation Format
+- Use [N] notation corresponding to the source_index from the claims.
+- Integrate citations naturally at the end of sentences.
+- Use multiple citations if a claim is supported by multiple sources.
+
+### Verified Claims
+{claims_text}
+
+### User Instructions
+{system_instructions}
+
+{narrative_block}
+
+<context>
+{context}
+</context>
+
+Current date & time (UTC): {current_date}
+"""
+
+
+def get_revision_prompt(
+    original_answer: str,
+    failed_claims: list[tuple[str, int]],
+    context: str,
+    system_instructions: str = "",
+    max_writer_words: int | None = None,
+    research_narrative: str = "",
+) -> str:
+    """Prompt for revising an answer after citation verification failure."""
+    word_target = max_writer_words or 2000
+    current_date = datetime.datetime.now(datetime.UTC).isoformat()
+
+    failed_list = "\n".join(
+        f'- FAILED: "{claim}" (was cited as [{src_idx}])' for claim, src_idx in failed_claims
+    )
+
+    narrative_block = ""
+    if research_narrative:
+        narrative_block = f"""
+    ### Research Chain
+    {research_narrative}
+"""
+
+    return f"""\
+You are Vane, an AI writing assistant. Your previous answer had citation verification \
+failures. You must revise the answer to fix these issues.
+
+### What Failed
+The following claims were removed because they could NOT be verified against their cited \
+sources:
+
+{failed_list}
+
+### Your Task
+Rewrite the answer with these corrections:
+1. REMOVE or REPHRASE any claims from the failed list above.
+2. Do NOT simply re-cite failed claims with different source numbers -- that would also fail.
+3. Replace removed claims with information that IS present in the sources (see <context>).
+4. Keep all VERIFIED claims intact with their original citations.
+5. Maintain the same answer structure and quality.
+6. Aim for ~{word_target} words.
+
+### Original Answer
+{original_answer}
+
+### User Instructions
+{system_instructions}
+
+{narrative_block}
+
+<context>
+{context}
+</context>
+
+Current date & time (UTC): {current_date}
+"""

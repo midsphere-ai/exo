@@ -28,10 +28,29 @@ class SearchConfig:
     max_iterations: int | None = None  # override per-mode default (speed=2, balanced=6, quality=25)
     use_reasoning_preamble: bool | None = None  # None=auto-detect thinking models, True/False=force
     max_writer_words: int | None = None  # override quality mode 2000-word target
-    max_writer_sources: int = 30  # cap sources passed to writer for citation accuracy
+    max_writer_sources: int = 15  # cap sources passed to writer for citation accuracy
     jina_reader_url: str = ""  # Jina Reader for full-page content extraction
     jina_api_key: str = ""  # Jina Cloud API key (enables r.jina.ai / s.jina.ai)
     serper_api_key: str = ""  # Serper API key for Google Search
+
+    # Deep research settings
+    max_deep_research_steps: int = 7  # max steps in sequential research plan
+    deep_research_enrich_per_step: int = 5  # pages to enrich per research step
+    max_content_chars: int = 10_000  # max chars per page (increased for quality/deep)
+
+    # Context window override — set for custom/fine-tuned models
+    context_window_tokens: int | None = None  # None=auto-detect from model name
+
+    # Verification settings
+    llm_verification: bool = False  # enable LLM-based claim verification (quality/deep)
+    llm_verify_source_chars: int = 4000  # max source chars sent to LLM verifier
+
+    # Writing settings
+    claim_first_writing: bool = True  # use claim-first writing (quality/deep)
+
+    # Revision loop settings
+    max_revision_rounds: int = 2  # max write-verify-revise rounds
+    revision_threshold: float = 0.3  # revise if removed/total > this
 
     def __post_init__(self) -> None:
         if not self.searxng_url:
@@ -58,3 +77,131 @@ class SearchConfig:
             self.fast_model,
             self.searxng_url,
         )
+
+
+# ---------------------------------------------------------------------------
+# Known model context windows (tokens) — used when exo.models lookup fails
+# ---------------------------------------------------------------------------
+
+_FALLBACK_CONTEXT_WINDOWS: dict[str, int] = {
+    "gpt-4o": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4-turbo": 128_000,
+    "gpt-4": 8_192,
+    "gpt-3.5-turbo": 16_385,
+    "o1": 200_000,
+    "o1-mini": 128_000,
+    "o1-pro": 200_000,
+    "o3": 200_000,
+    "o3-mini": 200_000,
+    "o4-mini": 200_000,
+    "claude-3-5-sonnet": 200_000,
+    "claude-3-5-haiku": 200_000,
+    "claude-3-opus": 200_000,
+    "claude-sonnet-4": 200_000,
+    "claude-opus-4": 200_000,
+    "gemini-2.0-flash": 1_000_000,
+    "gemini-2.5-flash": 1_000_000,
+    "gemini-2.5-pro": 1_000_000,
+    "gemini-2.0-pro": 1_000_000,
+    "gemini-1.5-pro": 2_000_000,
+    "gemini-1.5-flash": 1_000_000,
+}
+
+_DEFAULT_CONTEXT_TOKENS = 128_000
+
+
+def _resolve_context_window(model: str, override: int | None = None) -> int:
+    """Resolve the context window size in tokens for a model string.
+
+    Tries ``exo.models`` lookup first, then falls back to the built-in table.
+    """
+    if override is not None:
+        return override
+
+    # Parse provider:model format
+    model_name = model.split(":")[-1] if ":" in model else model
+
+    # Try exo.models import (may not be available)
+    try:
+        from exo.models import MODEL_CONTEXT_WINDOWS  # type: ignore[import-not-found]
+
+        ctx = MODEL_CONTEXT_WINDOWS.get(model_name)
+        if ctx:
+            return ctx
+    except (ImportError, AttributeError):
+        pass
+
+    # Fallback table — try exact match, then prefix match
+    if model_name in _FALLBACK_CONTEXT_WINDOWS:
+        return _FALLBACK_CONTEXT_WINDOWS[model_name]
+    for key, val in _FALLBACK_CONTEXT_WINDOWS.items():
+        if model_name.startswith(key):
+            return val
+
+    return _DEFAULT_CONTEXT_TOKENS
+
+
+def compute_context_budget(
+    model: str,
+    mode: str,
+    chat_history_chars: int = 0,
+    narrative_chars: int = 0,
+    context_window_override: int | None = None,
+) -> tuple[int, int, int]:
+    """Compute how much source context the writer can receive.
+
+    Returns:
+        ``(max_sources, max_chars_per_source, enrich_cap)``
+        - ``max_sources``: how many sources to pass to the writer
+        - ``max_chars_per_source``: character budget per source
+        - ``enrich_cap``: how many sources should be enriched (0 for speed)
+    """
+    ctx_tokens = _resolve_context_window(model, context_window_override)
+    ctx_chars = ctx_tokens * 4  # ~4 chars per token
+
+    # Reserve space for response and prompt overhead
+    response_reserve = 4096 * 4  # 4096 tokens for response
+    prompt_overhead = 8_000  # system prompt, instructions, formatting
+    history_chars = max(chat_history_chars, 0)
+    narr_chars = max(narrative_chars, 0)
+
+    available = ctx_chars - response_reserve - prompt_overhead - history_chars - narr_chars
+    available = max(available, 20_000)  # floor of 20K available chars
+
+    # Mode-specific enrichment ratios
+    if mode == "speed":
+        # Speed: snippets only, no enrichment
+        enrich_ratio = 0.0
+        chars_per_source_target = 500  # snippet size
+    elif mode == "balanced":
+        enrich_ratio = 0.8
+        chars_per_source_target = min(available // 8, 15_000)
+    else:
+        # quality / deep
+        enrich_ratio = 0.9
+        chars_per_source_target = min(available // 6, 50_000)
+
+    # Compute max_sources from available budget
+    max_sources = available // chars_per_source_target if chars_per_source_target > 0 else 10
+
+    # Clamp bounds
+    max_sources = max(3, min(max_sources, 30))
+    chars_per_source = max(2_000, min(chars_per_source_target, 50_000))
+
+    # Enrich cap: proportion of max_sources
+    enrich_cap = 0 if mode == "speed" else max(1, int(max_sources * enrich_ratio))
+
+    _log.debug(
+        "context_budget model=%s mode=%s ctx_tokens=%d available=%d "
+        "-> max_sources=%d chars_per_source=%d enrich_cap=%d",
+        model,
+        mode,
+        ctx_tokens,
+        available,
+        max_sources,
+        chars_per_source,
+        enrich_cap,
+    )
+
+    return max_sources, chars_per_source, enrich_cap

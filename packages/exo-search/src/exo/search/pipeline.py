@@ -10,17 +10,34 @@ from exo.observability.logging import get_logger  # pyright: ignore[reportMissin
 from exo.types import StreamEvent
 
 from .agents.classifier import classify
+from .agents.deep_researcher import deep_research
 from .agents.query_planner import hybrid_research
 from .agents.researcher import direct_search
 from .agents.suggestion_generator import generate_suggestions
-from .agents.writer import stream_write_answer, write_answer
-from .config import SearchConfig
+from .agents.writer import revise_answer, stream_write_answer, write_answer
+from .config import SearchConfig, compute_context_budget
+from .tools.citation_verifier import verify_citations
+from .tools.confidence import compute_confidence
+from .tools.contradiction_detector import detect_contradictions
 from .tools.embeddings import rerank_search_results
 from .tools.searxng import configure_search_keys
 from .tools.web_fetcher import enrich_results
-from .types import PipelineEvent, SearchResponse, SearchResult, Source
+from .types import ClassifierOutput, PipelineEvent, SearchResponse, SearchResult, Source
 
 _log = get_logger(__name__)
+
+
+def _should_use_deep_research(classification: ClassifierOutput, mode: str) -> bool:
+    """Determine whether to use deep sequential research based on classification and mode."""
+    if mode == "deep":
+        return True
+    if mode == "speed":
+        return False
+    if not classification.requires_sequential_research:
+        return False
+    if mode == "quality":
+        return True
+    return mode == "balanced" and classification.estimated_complexity == "complex"
 
 
 async def run_search_pipeline(
@@ -46,6 +63,8 @@ async def run_search_pipeline(
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
+    research_narrative = ""
+
     if mode == "speed":
         # Fast path: classifier and direct search in parallel
         classification, search_results = await asyncio.gather(
@@ -59,16 +78,38 @@ async def run_search_pipeline(
             classify(query, history, cfg),
             direct_search(query),
         )
+        effective_query = classification.standalone_follow_up or query
+
         if not classification.classification.skip_search:
-            search_results = await hybrid_research(
-                query=classification.standalone_follow_up or query,
-                classification=classification,
-                chat_history=history,
-                mode=mode,
-                config=cfg,
-                sub_questions=classification.sub_questions,
-                seed_results=seed_results,
+            use_deep = _should_use_deep_research(classification, mode)
+            _log.info(
+                "routing decision: use_deep=%s sequential=%s complexity=%s mode=%s",
+                use_deep,
+                classification.requires_sequential_research,
+                classification.estimated_complexity,
+                mode,
             )
+            if use_deep:
+                _log.info("using deep sequential research")
+                search_results, research_narrative = await deep_research(
+                    query=effective_query,
+                    classification=classification,
+                    chat_history=history,
+                    config=cfg,
+                    sub_questions=classification.sub_questions,
+                    seed_results=seed_results,
+                )
+            else:
+                search_results = await hybrid_research(
+                    query=effective_query,
+                    classification=classification,
+                    chat_history=history,
+                    mode=mode,
+                    config=cfg,
+                    sub_questions=classification.sub_questions,
+                    seed_results=seed_results,
+                )
+
     effective_query = classification.standalone_follow_up or query
     _log.info(
         "classifier done skip_search=%s results=%d",
@@ -81,29 +122,44 @@ async def run_search_pipeline(
         _log.debug("reranking %d results", len(search_results))
         search_results = await rerank_search_results(effective_query, search_results)
 
-    # Cap sources — speed stays lean, balanced/quality get all results
-    writer_cap = {"speed": 10}.get(mode, cfg.max_writer_sources)
-    writer_results = search_results[:writer_cap]
-
     # Speed mode uses fast model for writing too
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
+
+    # Compute context budget based on model context window
+    history_text = " ".join(f"{q} {a}" for q, a in history)
+    budget_sources, budget_chars, budget_enrich = compute_context_budget(
+        model=writer_cfg.model,
+        mode=mode,
+        chat_history_chars=len(history_text),
+        narrative_chars=len(research_narrative),
+        context_window_override=cfg.context_window_tokens,
+    )
+
+    # Cap sources using computed budget
+    writer_cap = min(budget_sources, cfg.max_writer_sources)
+    writer_results = search_results[:writer_cap]
 
     # Start suggestions early (independent of enrichment and writing)
     suggest_task = asyncio.create_task(generate_suggestions([*history, (query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
-    enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
+    enrich_cap = budget_enrich
+    content_chars = budget_chars
     if enrich_cap > 0 and writer_results:
-        _log.debug("enriching top %d results", enrich_cap)
+        _log.debug("enriching top %d results (max_chars=%d)", enrich_cap, content_chars)
         writer_results = await enrich_results(
             writer_results,
             cfg.jina_reader_url,
             max_results=enrich_cap,
             jina_api_key=cfg.jina_api_key,
+            query=effective_query,
+            max_chars=content_chars,
         )
 
     # Step 3: Write answer
-    _log.debug("writing answer sources=%d", len(writer_results))
+    _log.debug(
+        "writing answer sources=%d narrative=%d", len(writer_results), len(research_narrative)
+    )
     answer = await write_answer(
         query=effective_query,
         search_results=writer_results,
@@ -111,7 +167,65 @@ async def run_search_pipeline(
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
         config=writer_cfg,
+        research_narrative=research_narrative,
     )
+
+    # Step 3b: Verify citations and detect contradictions
+    if mode in ("quality", "deep"):
+        # Run citation verification and contradiction detection in parallel
+        (answer, verification), contradiction_report = await asyncio.gather(
+            verify_citations(answer, writer_results, mode, config=cfg),
+            detect_contradictions(answer, writer_results, mode, cfg),
+        )
+    else:
+        answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
+        contradiction_report = None
+    _log.info(
+        "citation verification total=%d verified=%d removed=%d",
+        verification.total_citations,
+        verification.verified,
+        verification.removed,
+    )
+
+    # Step 3c: Write-verify-revise loop
+    revision_count = 0
+    while (
+        verification.total_citations > 0
+        and verification.removed / verification.total_citations > cfg.revision_threshold
+        and revision_count < cfg.max_revision_rounds
+        and verification.failed_claims
+    ):
+        revision_count += 1
+        _log.info(
+            "revision round %d: removed=%d/%d (%.0f%% > %.0f%%)",
+            revision_count,
+            verification.removed,
+            verification.total_citations,
+            100 * verification.removed / verification.total_citations,
+            100 * cfg.revision_threshold,
+        )
+        answer = await revise_answer(
+            query=effective_query,
+            original_answer=answer,
+            failed_claims=verification.failed_claims,
+            search_results=writer_results,
+            chat_history=history,
+            system_instructions=system_instructions or cfg.system_instructions,
+            mode=mode,
+            config=writer_cfg,
+            research_narrative=research_narrative,
+        )
+        answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
+        _log.info(
+            "post-revision verification: total=%d verified=%d removed=%d",
+            verification.total_citations,
+            verification.verified,
+            verification.removed,
+        )
+    verification.revision_count = revision_count
+
+    if contradiction_report and contradiction_report.has_contradictions:
+        _log.info("contradictions detected: %d", len(contradiction_report.contradictions))
 
     # Step 4: Get suggestions (should be done by now)
     suggestions = await suggest_task
@@ -121,12 +235,24 @@ async def run_search_pipeline(
     sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
     _log.info("pipeline complete sources=%d suggestions=%d", len(sources), len(suggestions))
 
+    # Step 5: Confidence scoring
+    confidence_score, confidence_breakdown = compute_confidence(
+        verification=verification,
+        sources=writer_results,
+        sub_questions=classification.sub_questions,
+        answer=answer,
+    )
+
     return SearchResponse(
         answer=answer,
         sources=sources,
         suggestions=suggestions,
         query=effective_query,
         mode=mode,
+        verification=verification,
+        contradictions=contradiction_report,
+        confidence=confidence_score,
+        confidence_breakdown=confidence_breakdown.model_dump(),
     )
 
 
@@ -152,6 +278,8 @@ async def stream_search_pipeline(
 
     # Step 1 + 2: Classify and research
     search_results: list[SearchResult] = []
+    research_narrative = ""
+
     if mode == "speed":
         yield PipelineEvent(stage="classifier", status="started")
         classification, search_results = await asyncio.gather(
@@ -177,21 +305,50 @@ async def stream_search_pipeline(
             message=f"skip_search={classification.classification.skip_search}",
         )
         if not classification.classification.skip_search:
-            yield PipelineEvent(stage="researcher", status="started")
-            search_results = await hybrid_research(
-                query=effective_query,
-                classification=classification,
-                chat_history=history,
-                mode=mode,
-                config=cfg,
-                sub_questions=classification.sub_questions,
-                seed_results=seed_results,
+            use_deep = _should_use_deep_research(classification, mode)
+            _log.info(
+                "routing decision: use_deep=%s sequential=%s complexity=%s mode=%s",
+                use_deep,
+                classification.requires_sequential_research,
+                classification.estimated_complexity,
+                mode,
             )
-            yield PipelineEvent(
-                stage="researcher",
-                status="completed",
-                message=f"{len(search_results)} results",
-            )
+            if use_deep:
+                _log.info("using deep sequential research (streaming)")
+                yield PipelineEvent(
+                    stage="deep_research",
+                    status="started",
+                    message="Decomposing query into sequential research steps",
+                )
+                search_results, research_narrative = await deep_research(
+                    query=effective_query,
+                    classification=classification,
+                    chat_history=history,
+                    config=cfg,
+                    sub_questions=classification.sub_questions,
+                    seed_results=seed_results,
+                )
+                yield PipelineEvent(
+                    stage="deep_research",
+                    status="completed",
+                    message=f"{len(search_results)} results from sequential research",
+                )
+            else:
+                yield PipelineEvent(stage="researcher", status="started")
+                search_results = await hybrid_research(
+                    query=effective_query,
+                    classification=classification,
+                    chat_history=history,
+                    mode=mode,
+                    config=cfg,
+                    sub_questions=classification.sub_questions,
+                    seed_results=seed_results,
+                )
+                yield PipelineEvent(
+                    stage="researcher",
+                    status="completed",
+                    message=f"{len(search_results)} results",
+                )
     effective_query = classification.standalone_follow_up or query
 
     # Rerank by relevance (skip for speed)
@@ -199,26 +356,39 @@ async def stream_search_pipeline(
         _log.debug("reranking %d results", len(search_results))
         search_results = await rerank_search_results(effective_query, search_results)
 
-    # Cap sources — speed stays lean, balanced/quality get all results
-    writer_cap = {"speed": 10}.get(mode, cfg.max_writer_sources)
-    writer_results = search_results[:writer_cap]
-
     # Speed mode uses fast model for writing too
     writer_cfg = replace(cfg, model=cfg.fast_model) if mode == "speed" else cfg
+
+    # Compute context budget based on model context window
+    history_text = " ".join(f"{q} {a}" for q, a in history)
+    budget_sources, budget_chars, budget_enrich = compute_context_budget(
+        model=writer_cfg.model,
+        mode=mode,
+        chat_history_chars=len(history_text),
+        narrative_chars=len(research_narrative),
+        context_window_override=cfg.context_window_tokens,
+    )
+
+    # Cap sources using computed budget
+    writer_cap = min(budget_sources, cfg.max_writer_sources)
+    writer_results = search_results[:writer_cap]
 
     # Start suggestions concurrently (independent of enrichment and writing)
     suggest_task = asyncio.create_task(generate_suggestions([*history, (query, "")], cfg))
 
     # Enrich top results with full page content (skip for speed)
-    enrich_cap = {"balanced": 3, "quality": 5}.get(mode, 0)
+    enrich_cap = budget_enrich
+    content_chars = budget_chars
     if enrich_cap > 0 and writer_results:
-        _log.debug("enriching top %d results", enrich_cap)
+        _log.debug("enriching top %d results (max_chars=%d)", enrich_cap, content_chars)
         yield PipelineEvent(stage="enrichment", status="started")
         writer_results = await enrich_results(
             writer_results,
             cfg.jina_reader_url,
             max_results=enrich_cap,
             jina_api_key=cfg.jina_api_key,
+            query=effective_query,
+            max_chars=content_chars,
         )
         yield PipelineEvent(
             stage="enrichment",
@@ -236,6 +406,7 @@ async def stream_search_pipeline(
         system_instructions=system_instructions or cfg.system_instructions,
         mode=mode,
         config=writer_cfg,
+        research_narrative=research_narrative,
     ):
         from exo.types import TextEvent
 
@@ -244,6 +415,76 @@ async def stream_search_pipeline(
         yield event
     answer = "".join(answer_parts)
     yield PipelineEvent(stage="writer", status="completed")
+
+    # Step 3b: Verify citations and detect contradictions
+    if mode in ("quality", "deep"):
+        # Run citation verification and contradiction detection in parallel
+        (answer, verification), contradiction_report = await asyncio.gather(
+            verify_citations(answer, writer_results, mode, config=cfg),
+            detect_contradictions(answer, writer_results, mode, cfg),
+        )
+    else:
+        answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
+        contradiction_report = None
+    _log.info(
+        "citation verification total=%d verified=%d removed=%d",
+        verification.total_citations,
+        verification.verified,
+        verification.removed,
+    )
+
+    # Step 3c: Write-verify-revise loop (revisions run silently, not streamed)
+    revision_count = 0
+    while (
+        verification.total_citations > 0
+        and verification.removed / verification.total_citations > cfg.revision_threshold
+        and revision_count < cfg.max_revision_rounds
+        and verification.failed_claims
+    ):
+        revision_count += 1
+        _log.info(
+            "revision round %d: removed=%d/%d (%.0f%% > %.0f%%)",
+            revision_count,
+            verification.removed,
+            verification.total_citations,
+            100 * verification.removed / verification.total_citations,
+            100 * cfg.revision_threshold,
+        )
+        yield PipelineEvent(
+            stage="revision",
+            status="started",
+            message=f"Revising answer (round {revision_count})",
+        )
+        answer = await revise_answer(
+            query=effective_query,
+            original_answer=answer,
+            failed_claims=verification.failed_claims,
+            search_results=writer_results,
+            chat_history=history,
+            system_instructions=system_instructions or cfg.system_instructions,
+            mode=mode,
+            config=writer_cfg,
+            research_narrative=research_narrative,
+        )
+        answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
+        yield PipelineEvent(
+            stage="revision",
+            status="completed",
+            message=(
+                f"Round {revision_count}: {verification.verified}/{verification.total_citations}"
+                f" citations verified"
+            ),
+        )
+        _log.info(
+            "post-revision verification: total=%d verified=%d removed=%d",
+            verification.total_citations,
+            verification.verified,
+            verification.removed,
+        )
+    verification.revision_count = revision_count
+
+    if contradiction_report and contradiction_report.has_contradictions:
+        _log.info("contradictions detected: %d", len(contradiction_report.contradictions))
 
     # Step 4: Suggestions (should be done by now)
     yield PipelineEvent(stage="suggestions", status="started")
@@ -255,10 +496,23 @@ async def stream_search_pipeline(
     # Sources list matches what the writer cited (same order, same indices)
     sources = [Source(title=r.title, url=r.url, content=r.content) for r in writer_results]
     _log.info("stream pipeline complete sources=%d suggestions=%d", len(sources), len(suggestions))
+
+    # Step 5: Confidence scoring
+    confidence_score, confidence_breakdown = compute_confidence(
+        verification=verification,
+        sources=writer_results,
+        sub_questions=classification.sub_questions,
+        answer=answer,
+    )
+
     yield SearchResponse(
         answer=answer,
         sources=sources,
         suggestions=suggestions,
         query=effective_query,
         mode=mode,
+        verification=verification,
+        contradictions=contradiction_report,
+        confidence=confidence_score,
+        confidence_breakdown=confidence_breakdown.model_dump(),
     )

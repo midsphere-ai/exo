@@ -68,6 +68,68 @@ _MAX_RETRIES = 3
 _RETRY_DELAY = 2  # seconds between retries
 
 
+def _available_providers() -> list[tuple[str, str]]:
+    """Return list of (provider_name, key_or_url) for all configured search backends."""
+    providers: list[tuple[str, str]] = []
+    serper_key = _search_keys.get("serper") or os.environ.get("SERPER_API_KEY", "")
+    if serper_key:
+        providers.append(("serper", serper_key))
+    jina_key = _search_keys.get("jina") or os.environ.get("JINA_API_KEY", "")
+    if jina_key:
+        providers.append(("jina", jina_key))
+    # Only include SearXNG if explicitly configured (not the default localhost)
+    searxng_url = _search_keys.get("searxng_url") or os.environ.get("SEARXNG_URL", "")
+    if searxng_url and "localhost" not in searxng_url and "127.0.0.1" not in searxng_url:
+        providers.append(("searxng", searxng_url))
+    elif searxng_url and not providers:
+        # Use SearXNG as last resort only if no other providers available
+        providers.append(("searxng", searxng_url))
+    return providers
+
+
+def _search_single_provider(
+    provider_name: str,
+    provider_key: str,
+    query: str,
+    categories: str = "general",
+    engines: str = "",
+    num_results: int = 10,
+    timeout: int = 15,
+) -> list[dict]:
+    """Call a single search provider by name and return results."""
+    if provider_name == "serper":
+        from .serper import serper_search
+
+        return serper_search(query, categories, engines, num_results, timeout, api_key=provider_key)
+    if provider_name == "jina":
+        from .jina import jina_search
+
+        return jina_search(query, categories, engines, num_results, timeout, api_key=provider_key)
+    if provider_name == "searxng":
+        return _searxng_search(query, categories, engines, num_results, timeout, provider_key)
+    _log.warning("unknown search provider: %s", provider_name)
+    return []
+
+
+def _merge_results(batches: list[list[dict]], num_results: int) -> list[dict]:
+    """Merge multiple result batches by URL, keeping the entry with longer content."""
+    seen: dict[str, dict] = {}
+    order: list[str] = []
+    for batch in batches:
+        for r in batch:
+            url = r.get("url", "")
+            if not url:
+                continue
+            if url in seen:
+                # Keep the result with longer content
+                if len(r.get("content", "")) > len(seen[url].get("content", "")):
+                    seen[url] = r
+            else:
+                seen[url] = r
+                order.append(url)
+    return [seen[u] for u in order[:num_results]]
+
+
 def _search(
     query: str,
     categories: str = "general",
@@ -75,46 +137,55 @@ def _search(
     num_results: int = 10,
     timeout: int = 15,
 ) -> list[dict]:
-    """Dispatch to Serper by default, fall back to SearXNG.
+    """Dispatch to all configured providers, merging results.
+
+    When multiple providers are available, queries all of them in parallel
+    using a thread pool, then merges results by URL (keeping the entry with
+    longer ``content`` when duplicates occur).
 
     Reads API keys from module-level ``_search_keys`` (set via
     ``configure_search_keys``), falling back to environment variables.
     """
-    serper_key = _search_keys.get("serper") or os.environ.get("SERPER_API_KEY")
-    jina_key = _search_keys.get("jina") or os.environ.get("JINA_API_KEY")
-    searxng_url = _search_keys.get("searxng_url") or os.environ.get("SEARXNG_URL", "")
+    providers = _available_providers()
 
-    backend = "serper" if serper_key else ("jina" if jina_key else "searxng")
-    _log.debug("search backend=%s query=%r", backend, query)
+    if not providers:
+        # No provider configured — try SearXNG at default URL as last resort
+        _log.debug("search no providers configured, trying default SearXNG")
+        return _searxng_search(query, categories, engines, num_results, timeout, "")
 
-    # Prefer Serper (faster, no retry/backoff needed)
-    if serper_key:
-        from .serper import serper_search
+    if len(providers) == 1:
+        name, key = providers[0]
+        _log.debug("search backend=%s query=%r", name, query)
+        return _search_single_provider(name, key, query, categories, engines, num_results, timeout)
 
-        return serper_search(
-            query,
-            categories,
-            engines,
-            num_results,
-            timeout,
-            api_key=serper_key,
-        )
+    # Multiple providers — fan out in parallel
+    _log.debug(
+        "search multi-provider fan-out providers=%s query=%r",
+        [p[0] for p in providers],
+        query,
+    )
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # Jina Cloud Search
-    if jina_key:
-        from .jina import jina_search
+    batches: list[list[dict]] = []
+    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+        futures = {
+            pool.submit(
+                _search_single_provider, name, key, query, categories, engines, num_results, timeout
+            ): name
+            for name, key in providers
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                results = future.result()
+                _log.debug("provider %s returned %d results", name, len(results))
+                batches.append(results)
+            except Exception as exc:
+                _log.warning("provider %s failed: %s", name, exc)
 
-        return jina_search(
-            query,
-            categories,
-            engines,
-            num_results,
-            timeout,
-            api_key=jina_key,
-        )
-
-    # Fall back to SearXNG
-    return _searxng_search(query, categories, engines, num_results, timeout, searxng_url)
+    merged = _merge_results(batches, num_results)
+    _log.debug("multi-provider merged=%d results", len(merged))
+    return merged
 
 
 def _searxng_search(

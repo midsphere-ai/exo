@@ -167,6 +167,7 @@ async def list_modes():
         {"name": "speed", "description": "Fast search with 1-2 searches"},
         {"name": "balanced", "description": "Balanced research with 2-6 searches"},
         {"name": "quality", "description": "Deep research with up to 25 iterations"},
+        {"name": "deep", "description": "Sequential multi-step research for complex questions"},
     ]
 
 
@@ -352,16 +353,47 @@ async def ui_search_stream_endpoint(
                     ]
                     yield f"event: sources\ndata: {json.dumps({'sources': sources_data})}\n\n"
                     yield f"event: suggestions\ndata: {json.dumps({'suggestions': event.suggestions})}\n\n"
+                    # Send verified answer so the UI can replace streamed text
+                    answer_data: dict = {"answer": event.answer}
+                    if event.confidence is not None:
+                        answer_data["confidence"] = event.confidence
+                    yield f"event: answer\ndata: {json.dumps(answer_data)}\n\n"
+                    # Send contradictions if detected
+                    if event.contradictions and event.contradictions.has_contradictions:
+                        contradictions_data = [
+                            {
+                                "claim": c.claim_text,
+                                "position_a": c.position_a,
+                                "position_b": c.position_b,
+                                "sources_a": c.source_indices_a,
+                                "sources_b": c.source_indices_b,
+                                "severity": c.severity,
+                            }
+                            for c in event.contradictions.contradictions
+                        ]
+                        yield (
+                            f"event: contradictions\n"
+                            f"data: {json.dumps({'contradictions': contradictions_data})}\n\n"
+                        )
                     yield f"event: done\ndata: {json.dumps({'status': 'complete'})}\n\n"
 
                     # Persist conversation turn
                     conversation.add_turn(q, event.answer)
         except Exception as exc:
             _log.error("stream pipeline error: %s", exc)
-            # Extract a human-readable message from the exception chain
-            msg = str(exc)
-            if exc.__cause__:
-                msg = str(exc.__cause__)
+            # Build a user-friendly error message
+            raw = str(exc.__cause__) if exc.__cause__ else str(exc)
+            # Simplify common error patterns
+            if "Invalid JSON" in raw or "Extra data" in raw:
+                msg = "The AI model returned malformed output. Please try again."
+            elif "API key" in raw or "INVALID_ARGUMENT" in raw or "401" in raw:
+                msg = "Invalid API key. Check your settings and try again."
+            elif "rate_limit" in raw.lower() or "429" in raw:
+                msg = "Rate limited by the API provider. Wait a moment and try again."
+            elif "timeout" in raw.lower() or "timed out" in raw.lower():
+                msg = "Request timed out. Try again or switch to speed mode."
+            else:
+                msg = raw
             yield f"event: error\ndata: {json.dumps({'error': msg})}\n\n"
 
     return StreamingResponse(

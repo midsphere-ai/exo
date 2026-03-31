@@ -15,14 +15,26 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 import subprocess
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from exo.types import ExoError
+
+if TYPE_CHECKING:
+    from exo.agent import Agent
+    from exo.events import EventBus
+    from exo.tool import Tool
+
+logger = logging.getLogger(__name__)
 
 _GITHUB_RE = re.compile(
     r"https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)"
@@ -306,3 +318,277 @@ class SkillRegistry:
     def list_names(self) -> list[str]:
         """Return all loaded skill names."""
         return list(self._skills.keys())
+
+
+# ---------------------------------------------------------------------------
+# Hot-reload abstractions
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SkillChangeEvent:
+    """Represents a single skill change detected by a watcher."""
+
+    kind: Literal["added", "modified", "removed"]
+    skill_name: str
+    skill: Skill | None  # None only for kind="removed"
+    source_path: str
+
+
+class SkillWatcher(ABC):
+    """Base class for skill source watchers.
+
+    Implementations monitor a skill source (local directory, GitHub repo,
+    etc.) and yield batches of change events.  Each batch represents one
+    "settle" cycle — filesystem events are debounced, polling results are
+    diffed.
+    """
+
+    @abstractmethod
+    async def watch(self) -> AsyncIterator[list[SkillChangeEvent]]:
+        """Yield batches of change events.  Blocks between batches."""
+        ...  # pragma: no cover
+
+    @abstractmethod
+    async def stop(self) -> None:
+        """Signal the watcher to shut down.  Must cause ``watch()`` to return."""
+        ...  # pragma: no cover
+
+
+@runtime_checkable
+class ToolResolver(Protocol):
+    """Maps skill metadata to actual Tool implementations."""
+
+    def resolve(self, skill: Skill) -> list[Tool]: ...
+
+
+class DictToolResolver:
+    """Simple resolver that maps skill names to Tool objects via a dict."""
+
+    def __init__(self, tool_map: dict[str, Tool | list[Tool]]) -> None:
+        self._map = tool_map
+
+    def resolve(self, skill: Skill) -> list[Tool]:
+        entry = self._map.get(skill.name)
+        if entry is None:
+            return []
+        if isinstance(entry, list):
+            return entry
+        return [entry]
+
+
+def _skill_fingerprint(skill: Skill) -> tuple[str, str, str, str, str, bool]:
+    """Return a comparable tuple for change detection (Skill has no __eq__)."""
+    return (
+        skill.name,
+        skill.description,
+        skill.usage,
+        str(skill.tool_list),
+        skill.skill_type,
+        skill.active,
+    )
+
+
+class SkillSyncManager:
+    """Orchestrates skill watchers and pushes changes to bound agents.
+
+    Args:
+        registry: The :class:`SkillRegistry` whose state is kept in sync.
+        tool_resolver: Maps skills to Tool objects.  Accepts a
+            :class:`ToolResolver` instance or a plain
+            ``dict[str, Tool | list[Tool]]``.
+        event_bus: Optional :class:`~exo.events.EventBus` for emitting
+            change events.
+        instructions_builder: Optional callable that rebuilds agent
+            instructions from the current list of active skills.
+    """
+
+    _MAX_BACKOFF: float = 60.0
+
+    def __init__(
+        self,
+        registry: SkillRegistry,
+        tool_resolver: ToolResolver | dict[str, Tool | list[Tool]],
+        *,
+        event_bus: EventBus | None = None,
+        instructions_builder: Callable[[list[Skill]], str] | None = None,
+    ) -> None:
+        self._registry = registry
+        if isinstance(tool_resolver, dict):
+            self._resolver: ToolResolver = DictToolResolver(tool_resolver)
+        else:
+            self._resolver = tool_resolver
+        self._bus = event_bus
+        self._instructions_builder = instructions_builder
+
+        self._watchers: list[SkillWatcher] = []
+        self._agents: set[Agent] = set()
+        self._tasks: list[asyncio.Task[None]] = []
+        self._skill_tools: dict[str, list[str]] = {}
+
+    # -- public API ---------------------------------------------------------
+
+    def add_watcher(self, watcher: SkillWatcher) -> None:
+        """Register a watcher.  Must be called before :meth:`start`."""
+        self._watchers.append(watcher)
+
+    def bind_agent(self, agent: Agent) -> None:
+        """Bind an agent to receive skill change updates."""
+        self._agents.add(agent)
+
+    def unbind_agent(self, agent: Agent) -> None:
+        """Stop pushing updates to an agent."""
+        self._agents.discard(agent)
+
+    async def start(self) -> None:
+        """Start all watchers as background ``asyncio.Task`` instances."""
+        for watcher in self._watchers:
+            task = asyncio.create_task(self._run_watcher(watcher))
+            self._tasks.append(task)
+
+    async def stop(self) -> None:
+        """Stop all watchers, cancel tasks, and await cleanup."""
+        for watcher in self._watchers:
+            try:
+                await watcher.stop()
+            except Exception:
+                logger.warning("Error stopping watcher %s", watcher, exc_info=True)
+
+        for task in self._tasks:
+            task.cancel()
+
+        for task in self._tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.warning("Error awaiting watcher task", exc_info=True)
+
+        self._tasks.clear()
+
+    async def __aenter__(self) -> SkillSyncManager:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.stop()
+
+    # -- internal -----------------------------------------------------------
+
+    async def _run_watcher(self, watcher: SkillWatcher) -> None:
+        """Run a single watcher with exponential backoff on errors."""
+        backoff = 1.0
+        while True:
+            try:
+                async for batch in watcher.watch():
+                    await self._process_batch(batch)
+                return  # watch() finished normally
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.error(
+                    "Watcher %s raised an error, retrying in %.1fs",
+                    watcher,
+                    backoff,
+                    exc_info=True,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, self._MAX_BACKOFF)
+
+    async def _process_batch(self, batch: list[SkillChangeEvent]) -> None:
+        """Apply a batch of change events to registry and bound agents."""
+        for event in batch:
+            if event.kind == "added":
+                await self._handle_added(event)
+            elif event.kind == "modified":
+                await self._handle_modified(event)
+            elif event.kind == "removed":
+                await self._handle_removed(event)
+
+        # Rebuild instructions for all bound agents after the batch
+        if self._instructions_builder is not None:
+            active_skills = list(self._registry._skills.values())
+            new_instructions = self._instructions_builder(active_skills)
+            for agent in self._agents:
+                agent.instructions = new_instructions
+
+    async def _handle_added(self, event: SkillChangeEvent) -> None:
+        assert event.skill is not None
+        self._registry._skills[event.skill_name] = event.skill
+
+        tools = self._resolver.resolve(event.skill)
+        tool_names: list[str] = []
+        for t in tools:
+            for agent in self._agents:
+                try:
+                    await agent.add_tool(t)
+                except Exception:
+                    logger.warning(
+                        "Failed to add tool '%s' to agent '%s'",
+                        t.name,
+                        agent.name,
+                        exc_info=True,
+                    )
+            tool_names.append(t.name)
+        self._skill_tools[event.skill_name] = tool_names
+
+        if self._bus is not None:
+            await self._bus.emit("skill:added", skill=event.skill)
+
+    async def _handle_modified(self, event: SkillChangeEvent) -> None:
+        assert event.skill is not None
+        old_skill = self._registry._skills.get(event.skill_name)
+
+        # Remove old tools
+        old_tool_names = self._skill_tools.pop(event.skill_name, [])
+        for name in old_tool_names:
+            for agent in self._agents:
+                try:
+                    agent.remove_tool(name)
+                except Exception:
+                    logger.warning(
+                        "Failed to remove tool '%s' from agent '%s'",
+                        name,
+                        agent.name,
+                        exc_info=True,
+                    )
+
+        # Update registry and add new tools
+        self._registry._skills[event.skill_name] = event.skill
+        tools = self._resolver.resolve(event.skill)
+        tool_names: list[str] = []
+        for t in tools:
+            for agent in self._agents:
+                try:
+                    await agent.add_tool(t)
+                except Exception:
+                    logger.warning(
+                        "Failed to add tool '%s' to agent '%s'",
+                        t.name,
+                        agent.name,
+                        exc_info=True,
+                    )
+            tool_names.append(t.name)
+        self._skill_tools[event.skill_name] = tool_names
+
+        if self._bus is not None:
+            await self._bus.emit("skill:modified", old_skill=old_skill, new_skill=event.skill)
+
+    async def _handle_removed(self, event: SkillChangeEvent) -> None:
+        old_skill = self._registry._skills.pop(event.skill_name, None)
+
+        old_tool_names = self._skill_tools.pop(event.skill_name, [])
+        for name in old_tool_names:
+            for agent in self._agents:
+                try:
+                    agent.remove_tool(name)
+                except Exception:
+                    logger.warning(
+                        "Failed to remove tool '%s' from agent '%s'",
+                        name,
+                        agent.name,
+                        exc_info=True,
+                    )
+
+        if self._bus is not None:
+            await self._bus.emit("skill:removed", skill=old_skill or event.skill)

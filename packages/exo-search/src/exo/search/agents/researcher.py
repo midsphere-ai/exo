@@ -45,7 +45,7 @@ def _resolve_provider(model: str):
         return None
 
 
-_MODE_ITERATIONS = {"speed": 2, "balanced": 6, "quality": 25}
+_MODE_ITERATIONS = {"speed": 2, "balanced": 6, "quality": 25, "deep": 25}
 
 # Gemini thinking models that have built-in reasoning — reasoning_preamble is redundant.
 _THINKING_MODEL_PATTERNS = (

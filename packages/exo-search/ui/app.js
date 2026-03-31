@@ -111,7 +111,6 @@ document.querySelectorAll('.toggle-pills').forEach(function(group) {
 
 // Settings button handlers
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
-document.getElementById('settingsBtnSidebar').addEventListener('click', openSettings);
 document.getElementById('settingsCancel').addEventListener('click', closeSettings);
 document.getElementById('settingsClose').addEventListener('click', closeSettings);
 
@@ -185,11 +184,13 @@ function toggleTheme() {
 function updateThemeIcons() {
   var icon = getTheme() === 'light' ? '\u2600' : '\u263E'; // sun or moon
   document.getElementById('themeToggle').textContent = icon;
-  document.getElementById('themeToggleSidebar').textContent = icon;
+  var sidebarToggle = document.getElementById('themeToggleSidebar');
+  if (sidebarToggle) sidebarToggle.textContent = icon;
 }
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-document.getElementById('themeToggleSidebar').addEventListener('click', toggleTheme);
+var sidebarThemeBtn = document.getElementById('themeToggleSidebar');
+if (sidebarThemeBtn) sidebarThemeBtn.addEventListener('click', toggleTheme);
 
 // Set icons on load
 updateThemeIcons();
@@ -204,7 +205,7 @@ function syncModeSelects(value) {
   currentMode = value;
   document.getElementById('modeSelect').value = value;
   document.getElementById('modeSelectFollowUp').value = value;
-  var labels = { speed: '\u26A1 Speed', balanced: '\u2696 Balanced', quality: '\uD83D\uDD2C Quality' };
+  var labels = { speed: '\u26A1 Speed', balanced: '\u2696 Balanced', quality: '\uD83D\uDD2C Quality', deep: '\uD83E\uDDE0 Deep' };
   document.getElementById('modeBadge').textContent = labels[value] || value;
 }
 
@@ -221,7 +222,16 @@ document.getElementById('modeSelectFollowUp').addEventListener('change', functio
 
 var currentSessionId = null;
 
+function cancelActiveStream() {
+  if (activeEventSource) {
+    activeEventSource.close();
+    activeEventSource = null;
+  }
+  savePartialResult();
+}
+
 function showLanding() {
+  cancelActiveStream();
   document.getElementById('landingView').style.display = '';
   document.getElementById('resultsView').classList.remove('active');
   // Keep sidebar open if there's history, otherwise hide it
@@ -330,6 +340,7 @@ function renderHistoryList() {
 // ============================================================
 
 function loadSession(sessionId) {
+  cancelActiveStream();
   var history = loadHistory();
   var session = history.find(function(s) { return s.id === sessionId; });
   if (!session) return;
@@ -434,7 +445,12 @@ function renderSourcesSection(sources) {
 
 function renderAnswer(markdown, sources) {
   if (!markdown) return '';
-  var html = marked.parse(markdown);
+
+  // Strip the raw "Sources" / "References" section from the bottom —
+  // we already show sources in the collapsible UI
+  var cleaned = markdown.replace(/\n+#{1,3}\s*(Sources|References)\s*\n[\s\S]*$/i, '');
+
+  var html = marked.parse(cleaned);
 
   // Replace [N] citation patterns with linked badges
   html = html.replace(/\[(\d+)\]/g, function(match, numStr) {
@@ -447,6 +463,31 @@ function renderAnswer(markdown, sources) {
   });
 
   return html;
+}
+
+function renderConfidenceBadge(score) {
+  var badge = document.createElement('div');
+  badge.className = 'confidence-badge';
+
+  var level, label;
+  if (score >= 0.7) {
+    level = 'high';
+    label = 'High confidence';
+  } else if (score >= 0.4) {
+    level = 'medium';
+    label = 'Medium confidence';
+  } else {
+    level = 'low';
+    label = 'Low confidence';
+  }
+
+  badge.classList.add('confidence-' + level);
+  var pct = Math.round(score * 100);
+  badge.innerHTML = '<span class="confidence-dot"></span>'
+    + '<span class="confidence-label">' + label + '</span>'
+    + '<span class="confidence-score">' + pct + '%</span>';
+
+  return badge;
 }
 
 function renderRelatedSection(suggestions) {
@@ -487,14 +528,85 @@ function renderRelatedSection(suggestions) {
 }
 
 // ============================================================
+// 7b. Contradiction Rendering
+// ============================================================
+
+function renderContradictions(contradictions) {
+  var section = document.createElement('div');
+  section.className = 'contradictions-callout';
+
+  var header = document.createElement('div');
+  header.className = 'contradictions-header';
+  header.innerHTML = '<span class="contradictions-icon">&#9888;</span>'
+    + '<span class="contradictions-title">Conflicting information detected</span>';
+  section.appendChild(header);
+
+  var desc = document.createElement('div');
+  desc.className = 'contradictions-desc';
+  desc.textContent = 'Some sources present different facts. Review the details below.';
+  section.appendChild(desc);
+
+  contradictions.forEach(function(c) {
+    var item = document.createElement('div');
+    item.className = 'contradiction-item severity-' + (c.severity || 'moderate');
+
+    var claim = document.createElement('div');
+    claim.className = 'contradiction-claim';
+    claim.textContent = c.claim;
+    item.appendChild(claim);
+
+    var positions = document.createElement('div');
+    positions.className = 'contradiction-positions';
+
+    var posA = document.createElement('div');
+    posA.className = 'contradiction-pos pos-a';
+    var srcA = c.sources_a && c.sources_a.length > 0
+      ? ' (Source' + (c.sources_a.length > 1 ? 's ' : ' ') + c.sources_a.join(', ') + ')'
+      : '';
+    posA.innerHTML = '<strong>Position A' + srcA + ':</strong> ' + c.position_a;
+
+    var posB = document.createElement('div');
+    posB.className = 'contradiction-pos pos-b';
+    var srcB = c.sources_b && c.sources_b.length > 0
+      ? ' (Source' + (c.sources_b.length > 1 ? 's ' : ' ') + c.sources_b.join(', ') + ')'
+      : '';
+    posB.innerHTML = '<strong>Position B' + srcB + ':</strong> ' + c.position_b;
+
+    positions.appendChild(posA);
+    positions.appendChild(posB);
+    item.appendChild(positions);
+    section.appendChild(item);
+  });
+
+  return section;
+}
+
+// ============================================================
 // 8. Search Submission & SSE Streaming
 // ============================================================
 
 var activeEventSource = null;
+var pendingResult = null; // tracks in-progress search for saving on switch
+
+function savePartialResult() {
+  if (pendingResult && pendingResult.answerText) {
+    addToHistory(
+      pendingResult.sessionId,
+      pendingResult.query,
+      pendingResult.answerText,
+      pendingResult.sourcesData,
+      pendingResult.suggestionsData,
+      pendingResult.mode
+    );
+    pendingResult = null;
+  }
+}
 
 async function submitSearch(query) {
   if (!query.trim()) return;
-  if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+  // Save any in-progress result before starting a new search
+  savePartialResult();
+  cancelActiveStream();
 
   if (!currentSessionId) currentSessionId = crypto.randomUUID();
 
@@ -512,11 +624,31 @@ async function submitSearch(query) {
   queryEl.textContent = query;
   container.appendChild(queryEl);
 
-  // Pipeline status indicator
-  var status = document.createElement('div');
-  status.className = 'pipeline-status';
-  status.innerHTML = '<span class="dot"></span><span id="statusText">Starting...</span>';
-  container.appendChild(status);
+  // Pipeline tracker (Perplexity-style)
+  var tracker = document.createElement('div');
+  tracker.className = 'pipeline-tracker';
+  var isDeep = currentMode === 'deep';
+  var stages = isDeep ? {
+    classifier: { label: 'Understanding query', icon: '?' },
+    deep_research: { label: 'Sequential research', icon: '\uD83E\uDDE0' },
+    enrichment: { label: 'Reading sources', icon: '◉' },
+    writer: { label: 'Writing answer', icon: '✎' },
+  } : {
+    classifier: { label: 'Understanding query', icon: '?' },
+    researcher: { label: 'Searching the web', icon: '⌕' },
+    enrichment: { label: 'Reading sources', icon: '◉' },
+    writer: { label: 'Writing answer', icon: '✎' },
+  };
+  Object.keys(stages).forEach(function(key) {
+    var step = document.createElement('div');
+    step.className = 'pipeline-step';
+    step.id = 'step-' + key;
+    step.innerHTML = '<div class="pipeline-step-icon">' + stages[key].icon + '</div>'
+      + '<div><div class="pipeline-step-label">' + stages[key].label + '</div>'
+      + '<div class="pipeline-step-detail" id="detail-' + key + '"></div></div>';
+    tracker.appendChild(step);
+  });
+  container.appendChild(tracker);
 
   // Placeholders for source cards and answer prose
   var sourceCardsEl = document.createElement('div');
@@ -532,30 +664,48 @@ async function submitSearch(query) {
   });
 
   // Open SSE stream
-  var params = new URLSearchParams({ q: query, mode: currentMode, session_id: currentSessionId });
+  var searchSessionId = currentSessionId; // capture for closure
+  var params = new URLSearchParams({ q: query, mode: currentMode, session_id: searchSessionId });
   var es = new EventSource('/api/search/stream?' + params.toString());
   activeEventSource = es;
   var answerText = '';
   var sourcesData = [];
   var suggestionsData = [];
 
+  // Track in-progress result so it can be saved if user switches away
+  pendingResult = {
+    sessionId: searchSessionId,
+    query: query,
+    answerText: '',
+    sourcesData: [],
+    suggestionsData: [],
+    mode: currentMode,
+  };
+
   es.addEventListener('status', function(e) {
     var data = JSON.parse(e.data);
-    var msg = data.message ? ' \u2014 ' + data.message : '';
-    var statusEl = document.getElementById('statusText');
-    if (statusEl) {
-      statusEl.textContent = data.status === 'started'
-        ? capitalize(data.stage) + '...'
-        : capitalize(data.stage) + ' done' + msg;
+    var stepEl = document.getElementById('step-' + data.stage);
+    var detailEl = document.getElementById('detail-' + data.stage);
+    if (data.status === 'started') {
+      if (stepEl) stepEl.className = 'pipeline-step active';
+    } else {
+      // completed
+      if (stepEl) stepEl.className = 'pipeline-step done';
+      if (stepEl) {
+        var icon = stepEl.querySelector('.pipeline-step-icon');
+        if (icon) icon.textContent = '✓';
+      }
+      if (detailEl && data.message) detailEl.textContent = data.message;
     }
   });
 
   es.addEventListener('token', function(e) {
     var data = JSON.parse(e.data);
     answerText += data.text;
-    // Remove status, insert source cards + prose on first token
-    if (status.parentNode) {
-      status.remove();
+    if (pendingResult) pendingResult.answerText = answerText;
+    // Remove tracker, insert source cards + prose on first token
+    if (tracker.parentNode) {
+      tracker.remove();
       container.appendChild(sourceCardsEl);
       container.appendChild(proseEl);
     }
@@ -568,23 +718,50 @@ async function submitSearch(query) {
   es.addEventListener('sources', function(e) {
     var data = JSON.parse(e.data);
     sourcesData = data.sources;
+    if (pendingResult) pendingResult.sourcesData = sourcesData;
     var newSection = renderSourcesSection(sourcesData);
     sourceCardsEl.replaceWith(newSection);
     sourceCardsEl = newSection;
-    // Re-render answer with citation links now that sources are available
     proseEl.innerHTML = renderAnswer(answerText, sourcesData);
   });
 
   es.addEventListener('suggestions', function(e) {
     var data = JSON.parse(e.data);
     suggestionsData = data.suggestions;
+    if (pendingResult) pendingResult.suggestionsData = suggestionsData;
     container.appendChild(renderRelatedSection(suggestionsData));
+  });
+
+  // Verified answer replaces streamed text (citations may have been removed)
+  es.addEventListener('answer', function(e) {
+    var data = JSON.parse(e.data);
+    answerText = data.answer;
+    if (pendingResult) pendingResult.answerText = answerText;
+    proseEl.innerHTML = renderAnswer(answerText, sourcesData);
+    // Render confidence badge if present
+    if (data.confidence != null) {
+      var existingBadge = proseEl.parentNode.querySelector('.confidence-badge');
+      if (existingBadge) existingBadge.remove();
+      var badge = renderConfidenceBadge(data.confidence);
+      proseEl.parentNode.insertBefore(badge, proseEl);
+    }
+  });
+
+  // Contradiction detection results
+  es.addEventListener('contradictions', function(e) {
+    var data = JSON.parse(e.data);
+    if (data.contradictions && data.contradictions.length > 0) {
+      var callout = renderContradictions(data.contradictions);
+      // Insert after the answer prose
+      proseEl.parentNode.insertBefore(callout, proseEl.nextSibling);
+    }
   });
 
   es.addEventListener('done', function() {
     es.close();
     activeEventSource = null;
-    addToHistory(currentSessionId, query, answerText, sourcesData, suggestionsData, currentMode);
+    pendingResult = null;
+    addToHistory(searchSessionId, query, answerText, sourcesData, suggestionsData, currentMode);
   });
 
   // Backend sends a typed "error" event with a message when the pipeline fails
@@ -598,14 +775,12 @@ async function submitSearch(query) {
         msg = data.error || msg;
       } catch (_) {}
     }
-    var statusEl = document.getElementById('statusText');
-    if (statusEl) {
-      statusEl.textContent = msg;
-    }
-    var dot = status.querySelector('.dot');
-    if (dot) {
-      dot.style.background = 'var(--zen-coral)';
-      dot.style.animation = 'none';
+    // Show error in tracker or as fallback text
+    if (tracker.parentNode) {
+      tracker.innerHTML = '<div class="pipeline-step" style="color:var(--zen-coral)">'
+        + '<div class="pipeline-step-icon" style="border-color:var(--zen-coral);color:var(--zen-coral)">!</div>'
+        + '<div><div class="pipeline-step-label">Error</div>'
+        + '<div class="pipeline-step-detail">' + msg + '</div></div></div>';
     }
   });
 }
@@ -621,6 +796,9 @@ function capitalize(s) {
 // Landing search form
 document.getElementById('landingSearchBar').addEventListener('submit', function(e) {
   e.preventDefault();
+  // Always start a fresh session from the landing page
+  currentSessionId = null;
+  document.getElementById('answerContent').innerHTML = '';
   submitSearch(document.getElementById('landingInput').value);
 });
 
@@ -635,12 +813,22 @@ document.getElementById('followUpBar').addEventListener('submit', function(e) {
 // Suggestion chips
 document.querySelectorAll('.suggestion-chip').forEach(function(chip) {
   chip.addEventListener('click', function() {
+    currentSessionId = null;
+    document.getElementById('answerContent').innerHTML = '';
     submitSearch(chip.textContent);
   });
 });
 
 // New search button
 document.getElementById('newSearchBtn').addEventListener('click', showLanding);
+
+// Sidebar collapse/open
+document.getElementById('sidebarCollapse').addEventListener('click', function() {
+  document.getElementById('sidebar').classList.remove('open');
+});
+document.getElementById('sidebarOpen').addEventListener('click', function() {
+  document.getElementById('sidebar').classList.add('open');
+});
 
 // Escape key closes settings
 document.addEventListener('keydown', function(e) {

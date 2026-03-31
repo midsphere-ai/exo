@@ -38,6 +38,7 @@ members = [
     "exo-sandbox",
     "exo-search",
     "exo-server",
+    "exo-skills",
     "exo-train",
     "exo-web",
     "exo-workspace",
@@ -1171,6 +1172,9 @@ dependencies = [
 embeddings = [
     { name = "google-genai" },
 ]
+pdf = [
+    { name = "pymupdf" },
+]
 server = [
     { name = "fastapi" },
     { name = "uvicorn" },
@@ -1183,9 +1187,10 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.100" },
     { name = "google-genai", marker = "extra == 'embeddings'", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "pymupdf", marker = "extra == 'pdf'", specifier = ">=1.25" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.20" },
 ]
-provides-extras = ["server", "embeddings"]
+provides-extras = ["server", "embeddings", "pdf"]
 
 [[package]]
 name = "exo-server"
@@ -1204,6 +1209,21 @@ requires-dist = [
     { name = "exo-models", editable = "packages/exo-models" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[[package]]
+name = "exo-skills"
+version = "0.1.0"
+source = { editable = "packages/exo-skills" }
+dependencies = [
+    { name = "exo-core" },
+    { name = "watchfiles" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "exo-core", editable = "packages/exo-core" },
+    { name = "watchfiles", specifier = ">=1.0" },
 ]
 
 [[package]]
@@ -1282,6 +1302,7 @@ dev = [
     { name = "exo-sandbox" },
     { name = "exo-search" },
     { name = "exo-server" },
+    { name = "exo-skills" },
     { name = "exo-train" },
     { name = "exo-web" },
     { name = "fakeredis", extra = ["lua"] },
@@ -1321,6 +1342,7 @@ dev = [
     { name = "exo-sandbox", editable = "packages/exo-sandbox" },
     { name = "exo-search", editable = "packages/exo-search" },
     { name = "exo-server", editable = "packages/exo-server" },
+    { name = "exo-skills", editable = "packages/exo-skills" },
     { name = "exo-train", editable = "packages/exo-train" },
     { name = "exo-web", editable = "packages/exo-web" },
     { name = "fakeredis", extras = ["lua"] },

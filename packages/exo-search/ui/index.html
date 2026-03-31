@@ -19,25 +19,19 @@
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-      <div class="logo">exo<span>search</span></div>
+      <div class="logo">exo<span>search</span><button class="sidebar-collapse" id="sidebarCollapse" title="Close sidebar">✕</button></div>
       <button class="new-search-btn" id="newSearchBtn">+ New Search</button>
       <div class="history-list" id="historyList"></div>
-      <div class="sidebar-footer">
-        <button class="icon-btn" id="themeToggleSidebar" title="Toggle theme">&#9728;</button>
-        <button class="icon-btn" id="settingsBtnSidebar" title="Settings">&#9881;</button>
-      </div>
     </aside>
 
     <!-- Main Panel -->
     <div class="main">
 
-      <!-- Top Bar -->
+      <!-- Action Buttons (floating) -->
+      <button class="icon-btn sidebar-open-btn" id="sidebarOpen" title="Open sidebar">&#9776;</button>
       <div class="top-bar">
-        <div class="logo">exo<span>search</span></div>
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-          <button class="icon-btn" id="themeToggle" title="Toggle theme">&#9728;</button>
-          <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
-        </div>
+        <button class="icon-btn" id="themeToggle" title="Toggle theme">&#9728;</button>
+        <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
       </div>
 
       <!-- Landing View -->
@@ -52,6 +46,7 @@
               <option value="speed">&#9889; Speed</option>
               <option value="balanced" selected>&#9878; Balanced</option>
               <option value="quality">&#128300; Quality</option>
+              <option value="deep">&#129504; Deep</option>
             </select>
             <button class="submit-btn" type="submit">&rarr;</button>
           </form>
@@ -81,6 +76,7 @@
               <option value="speed">&#9889; Speed</option>
               <option value="balanced" selected>&#9878; Balanced</option>
               <option value="quality">&#128300; Quality</option>
+              <option value="deep">&#129504; Deep</option>
             </select>
             <button class="submit-btn" type="submit">&rarr;</button>
           </form>
