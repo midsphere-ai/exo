@@ -141,6 +141,65 @@ class TestSchemaGeneration:
         assert schema["properties"]["query"]["description"] == "The search query."
         assert schema["properties"]["limit"]["description"] == "Max results to return."
 
+    def test_tool_context_param_excluded(self) -> None:
+        """ToolContext-typed parameters are excluded from the generated schema."""
+        from exo.tool_context import ToolContext
+
+        def fn(query: str, ctx: ToolContext) -> str:
+            """Search with context."""
+            return query
+
+        schema = _generate_schema(fn)
+        assert "ctx" not in schema["properties"]
+        assert schema["required"] == ["query"]
+
+    def test_tool_context_not_in_schema_with_default(self) -> None:
+        """ToolContext param with default is also excluded."""
+        from exo.tool_context import ToolContext
+
+        def fn(query: str, ctx: ToolContext = None) -> str:  # type: ignore[assignment]
+            return query
+
+        schema = _generate_schema(fn)
+        assert "ctx" not in schema["properties"]
+
+
+# --- FunctionTool ToolContext detection ---
+
+
+class TestFunctionToolContextDetection:
+    def test_detects_tool_context_param(self) -> None:
+        """FunctionTool detects a ToolContext-typed parameter."""
+        from exo.tool_context import ToolContext
+
+        @tool
+        async def research(query: str, ctx: ToolContext) -> str:
+            """Research something."""
+            return query
+
+        assert research._tool_context_param == "ctx"
+
+    def test_no_tool_context_param(self) -> None:
+        """FunctionTool sets _tool_context_param to None for normal tools."""
+
+        @tool
+        def add(a: int, b: int) -> int:
+            """Add."""
+            return a + b
+
+        assert add._tool_context_param is None
+
+    def test_custom_param_name(self) -> None:
+        """Detection works regardless of parameter name."""
+        from exo.tool_context import ToolContext
+
+        @tool
+        async def fetch(url: str, tool_ctx: ToolContext) -> str:
+            """Fetch."""
+            return url
+
+        assert fetch._tool_context_param == "tool_ctx"
+
 
 # --- Execution ---
 

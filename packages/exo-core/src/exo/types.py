@@ -480,6 +480,31 @@ class MessageInjectedEvent(BaseModel):
     agent_name: str = ""
 
 
+class RalphIterationEvent(BaseModel):
+    """Emitted at the start/end of each Ralph loop iteration."""
+
+    model_config = {"frozen": True}
+
+    type: Literal["ralph_iteration"] = "ralph_iteration"
+    iteration: int
+    status: Literal["started", "completed", "failed"]
+    scores: dict[str, float] = Field(default_factory=dict)
+    agent_name: str = ""
+
+
+class RalphStopEvent(BaseModel):
+    """Emitted when the Ralph loop terminates."""
+
+    model_config = {"frozen": True}
+
+    type: Literal["ralph_stop"] = "ralph_stop"
+    stop_type: str
+    reason: str
+    iterations: int
+    final_scores: dict[str, float] = Field(default_factory=dict)
+    agent_name: str = ""
+
+
 StreamEvent = (
     TextEvent
     | ToolCallEvent
@@ -492,4 +517,6 @@ StreamEvent = (
     | MCPProgressEvent
     | ContextEvent
     | MessageInjectedEvent
+    | RalphIterationEvent
+    | RalphStopEvent
 )

@@ -124,6 +124,23 @@ def validate_max_parallel_subagents(value: int) -> int:
     raise ValueError("max_parallel_subagents must be between 1 and 7")
 
 
+def validate_max_spawn_children(value: int) -> int:
+    """Validate the per-call spawn children cap.
+
+    Args:
+        value: Maximum number of child agents spawned in one spawn_self call.
+
+    Returns:
+        The validated limit.
+
+    Raises:
+        ValueError: If the limit falls outside ``1..8``.
+    """
+    if 1 <= value <= 8:
+        return value
+    raise ValueError("max_spawn_children must be between 1 and 8")
+
+
 class ModelConfig(BaseModel):
     """Configuration for an LLM provider connection.
 

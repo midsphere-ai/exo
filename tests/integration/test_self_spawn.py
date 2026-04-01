@@ -4,9 +4,11 @@ US-INT-012: Verifies that a parent agent can spawn child agents for parallel
 subtasks and aggregate their results, and that the depth limit is correctly
 enforced without infinite recursion.
 
-The spawn mechanism in Exo registers a ``spawn_self(task)`` tool when
-``allow_self_spawn=True`` is passed to Agent.  The tool creates a child agent
-with ``_spawn_depth = parent._spawn_depth + 1``; when depth reaches
+The spawn mechanism in Exo registers a ``spawn_self(tasks)`` tool when
+``allow_self_spawn=True`` is passed to Agent.  The tool accepts a list of task
+prompts and runs one child per task in parallel.  Single task returns raw string;
+multiple tasks return ``[Task 1]: ...\\n\\n[Task 2]: ...``.  The tool creates
+child agents with ``_spawn_depth = parent._spawn_depth + 1``; when depth reaches
 ``max_spawn_depth`` the tool returns an error string instead of spawning.
 """
 
@@ -22,12 +24,13 @@ import pytest
 @pytest.mark.integration
 @pytest.mark.timeout(60)
 async def test_parent_spawns_two_children_and_aggregates(vertex_model: str) -> None:
-    """Parent agent spawns two child agents and aggregates their capital results.
+    """Parent agent spawns children via a single spawn_self call with a list of tasks.
 
-    The parent agent is instructed to call spawn_self sequentially — first for
-    Australia, then for Brazil — and combine both results.  We assert:
+    The parent agent is instructed to call spawn_self once with a list containing
+    two tasks — one for Australia and one for Brazil — then combine both results.
+    We assert:
     - result.text contains 'canberra' and 'brasilia' (case-insensitive)
-    - result.tool_calls contains at least two spawn_self entries
+    - result.tool_calls contains at least one spawn_self entry
     """
     from exo.agent import Agent  # pyright: ignore[reportMissingImports]
     from exo.models import get_provider  # pyright: ignore[reportMissingImports]
@@ -39,11 +42,9 @@ async def test_parent_spawns_two_children_and_aggregates(vertex_model: str) -> N
         model=vertex_model,
         instructions=(
             "You are a geography coordinator. "
-            "To answer questions about multiple countries, use spawn_self to "
-            "delegate each country lookup as a separate sub-task. "
-            "IMPORTANT: Call spawn_self SEQUENTIALLY — complete one spawn before "
-            "starting the next. "
-            "After both spawns complete, combine their results in your final answer."
+            "To answer questions about multiple countries, use spawn_self with a list "
+            "of tasks, one per country. "
+            "After spawn_self returns, combine the results in your final answer."
         ),
         max_steps=8,
         allow_self_spawn=True,
@@ -54,12 +55,10 @@ async def test_parent_spawns_two_children_and_aggregates(vertex_model: str) -> N
 
     result = await agent.run(
         "Find the capital cities of both Australia AND Brazil. "
-        "You MUST use spawn_self for EACH country separately. "
-        "First call spawn_self with task='What is the capital city of Australia? "
-        "Reply with only the city name.' "
-        "Then call spawn_self with task='What is the capital city of Brazil? "
-        "Reply with only the city name.' "
-        "After both calls, state both capitals in your final answer.",
+        "You MUST use spawn_self with tasks=['What is the capital city of Australia? "
+        "Reply with only the city name.', 'What is the capital city of Brazil? "
+        "Reply with only the city name.']. "
+        "After the call, state both capitals in your final answer.",
         provider=provider,
     )
 
@@ -72,10 +71,10 @@ async def test_parent_spawns_two_children_and_aggregates(vertex_model: str) -> N
         f"Expected 'brasilia' or 'brasília' in result, got: {result.text!r}"
     )
 
-    # Assert two spawn-related tool calls are present
+    # Assert at least one spawn_self call (single call with list of tasks)
     spawn_calls = [tc for tc in result.tool_calls if tc.name == "spawn_self"]
-    assert len(spawn_calls) >= 2, (
-        f"Expected at least 2 spawn_self calls, got {len(spawn_calls)}. "
+    assert len(spawn_calls) >= 1, (
+        f"Expected at least 1 spawn_self call, got {len(spawn_calls)}. "
         f"All tool calls: {[tc.name for tc in result.tool_calls]}"
     )
 
@@ -121,7 +120,7 @@ async def test_spawn_depth_limit_enforced(vertex_model: str) -> None:
 
     # Should not raise; spawn_self returns error string which LLM handles
     result = await agent.run(
-        "Use spawn_self to find the capital of France.",
+        "Use spawn_self with tasks=['What is the capital of France? Reply with only the city name.'] to find the capital.",
         provider=provider,
     )
 
@@ -136,3 +135,61 @@ async def test_spawn_depth_limit_enforced(vertex_model: str) -> None:
         # LLM attempted spawn but got error — result should acknowledge it
         # No assertion on exact text, just confirm no infinite recursion (test completes)
         pass
+
+
+# ---------------------------------------------------------------------------
+# test_spawn_self_parallel_fan_out
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.timeout(90)
+async def test_spawn_self_parallel_fan_out(vertex_model: str) -> None:
+    """Parent fans out 3 country lookups in a single spawn_self call."""
+    from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+    from exo.models import get_provider  # pyright: ignore[reportMissingImports]
+
+    provider = get_provider(vertex_model)
+
+    agent = Agent(
+        name="fan-out",
+        model=vertex_model,
+        instructions=(
+            "You are a geography coordinator. "
+            "Use spawn_self with a list of tasks to look up information in parallel. "
+            "After spawn_self returns, summarize all results."
+        ),
+        max_steps=6,
+        allow_self_spawn=True,
+        max_spawn_depth=2,
+        max_spawn_children=4,
+        memory=None,
+        context=None,
+    )
+
+    result = await agent.run(
+        "Find the capital cities of France, Japan, and Egypt. "
+        "You MUST call spawn_self exactly once with tasks=["
+        "'What is the capital of France? Reply with only the city name.', "
+        "'What is the capital of Japan? Reply with only the city name.', "
+        "'What is the capital of Egypt? Reply with only the city name.']. "
+        "After the call returns, list all three capitals.",
+        provider=provider,
+    )
+
+    result_lower = result.text.lower()
+    assert "paris" in result_lower, (
+        f"Expected 'paris' in result, got: {result.text!r}"
+    )
+    assert "tokyo" in result_lower, (
+        f"Expected 'tokyo' in result, got: {result.text!r}"
+    )
+    assert "cairo" in result_lower, (
+        f"Expected 'cairo' in result, got: {result.text!r}"
+    )
+
+    spawn_calls = [tc for tc in result.tool_calls if tc.name == "spawn_self"]
+    assert len(spawn_calls) >= 1, (
+        f"Expected at least 1 spawn_self call, got {len(spawn_calls)}. "
+        f"All tool calls: {[tc.name for tc in result.tool_calls]}"
+    )

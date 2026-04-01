@@ -472,3 +472,185 @@ class TestRalphRunnerRepr:
         r = repr(runner)
         assert "RalphRunner" in r
         assert "scorers=1" in r
+
+
+# ---------------------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------------------
+
+
+class TestRalphRunnerStream:
+    async def test_stream_requires_stream_execute_fn(self) -> None:
+        """stream() raises ValueError when stream_execute_fn is not set."""
+        import pytest
+
+        runner = RalphRunner(_make_execute(["hi"]), [])
+        with pytest.raises(ValueError, match="stream_execute_fn required"):
+            async for _ in runner.stream("input"):
+                pass  # pragma: no cover
+
+    async def test_stream_yields_iteration_and_stop_events(self) -> None:
+        """stream() yields RalphIterationEvent + inner events + RalphStopEvent."""
+        from exo.types import (  # pyright: ignore[reportMissingImports]
+            RalphIterationEvent,
+            RalphStopEvent,
+            TextEvent,
+        )
+
+        async def stream_execute(input: str):
+            yield TextEvent(text="hello", agent_name="inner")
+            yield TextEvent(text=" world", agent_name="inner")
+
+        cfg = RalphConfig(stop_condition=StopConditionConfig(max_iterations=1))
+        runner = RalphRunner(
+            _make_execute(["hi"]),
+            [_FixedScorer(score=0.9)],
+            stream_execute_fn=stream_execute,
+            config=cfg,
+        )
+
+        events = []
+        async for event in runner.stream("input", name="test_ralph"):
+            events.append(event)
+
+        # First: iteration started
+        assert isinstance(events[0], RalphIterationEvent)
+        assert events[0].status == "started"
+        assert events[0].iteration == 1
+        assert events[0].agent_name == "test_ralph"
+
+        # Middle: inner text events
+        assert isinstance(events[1], TextEvent)
+        assert events[1].text == "hello"
+        assert isinstance(events[2], TextEvent)
+        assert events[2].text == " world"
+
+        # Then: iteration completed
+        assert isinstance(events[3], RalphIterationEvent)
+        assert events[3].status == "completed"
+        assert events[3].iteration == 1
+        assert events[3].scores == {"fixed": 0.9}
+
+        # Last: stop event
+        assert isinstance(events[4], RalphStopEvent)
+        assert events[4].stop_type == "max_iterations"
+        assert events[4].iterations == 1
+        assert events[4].agent_name == "test_ralph"
+
+    async def test_stream_captures_text_for_scoring(self) -> None:
+        """Text events from stream_execute_fn are assembled for the analyze phase."""
+        from exo.types import TextEvent  # pyright: ignore[reportMissingImports]
+
+        scores_received: list[dict[str, float]] = []
+
+        class _TrackingScorer(_FixedScorer):
+            async def score(self, case_id: str, input: Any, output: Any) -> ScorerResult:
+                # output should be the assembled text from the stream
+                scores_received.append({"output": output})
+                return await super().score(case_id, input, output)
+
+        async def stream_execute(input: str):
+            yield TextEvent(text="part1", agent_name="inner")
+            yield TextEvent(text="part2", agent_name="inner")
+
+        cfg = RalphConfig(stop_condition=StopConditionConfig(max_iterations=1))
+        runner = RalphRunner(
+            _make_execute(["unused"]),
+            [_TrackingScorer()],
+            stream_execute_fn=stream_execute,
+            config=cfg,
+        )
+
+        async for _ in runner.stream("input"):
+            pass
+
+        # The scorer should have received the assembled text
+        assert len(scores_received) == 1
+        assert scores_received[0]["output"] == "part1part2"
+
+    async def test_stream_handles_execution_failure(self) -> None:
+        """stream() marks iteration as failed when stream_execute_fn raises."""
+        from exo.types import (  # pyright: ignore[reportMissingImports]
+            RalphIterationEvent,
+            RalphStopEvent,
+        )
+
+        async def failing_stream(input: str):
+            raise RuntimeError("boom")
+            yield  # make it an async generator  # type: ignore[misc]
+
+        cfg = RalphConfig(stop_condition=StopConditionConfig(max_iterations=1))
+        runner = RalphRunner(
+            _make_execute(["unused"]),
+            [],
+            stream_execute_fn=failing_stream,
+            config=cfg,
+        )
+
+        events = []
+        async for event in runner.stream("input"):
+            events.append(event)
+
+        iteration_events = [e for e in events if isinstance(e, RalphIterationEvent)]
+        assert iteration_events[0].status == "started"
+        assert iteration_events[1].status == "failed"
+
+        stop_events = [e for e in events if isinstance(e, RalphStopEvent)]
+        assert len(stop_events) == 1
+
+    async def test_stream_multi_iteration(self) -> None:
+        """stream() works across multiple iterations."""
+        from exo.types import (  # pyright: ignore[reportMissingImports]
+            RalphIterationEvent,
+            RalphStopEvent,
+            TextEvent,
+        )
+
+        call_count = {"n": 0}
+
+        async def stream_execute(input: str):
+            call_count["n"] += 1
+            yield TextEvent(text=f"iter-{call_count['n']}", agent_name="inner")
+
+        cfg = RalphConfig(stop_condition=StopConditionConfig(max_iterations=3))
+        runner = RalphRunner(
+            _make_execute(["unused"]),
+            [_FixedScorer(score=0.5)],
+            stream_execute_fn=stream_execute,
+            config=cfg,
+        )
+
+        events = []
+        async for event in runner.stream("input"):
+            events.append(event)
+
+        iteration_started = [
+            e for e in events if isinstance(e, RalphIterationEvent) and e.status == "started"
+        ]
+        iteration_completed = [
+            e for e in events if isinstance(e, RalphIterationEvent) and e.status == "completed"
+        ]
+        text_events = [e for e in events if isinstance(e, TextEvent)]
+        stop_events = [e for e in events if isinstance(e, RalphStopEvent)]
+
+        assert len(iteration_started) == 3
+        assert len(iteration_completed) == 3
+        assert len(text_events) == 3
+        assert len(stop_events) == 1
+        assert stop_events[0].iterations == 3
+
+
+# ---------------------------------------------------------------------------
+# from_agent factory
+# ---------------------------------------------------------------------------
+
+
+class TestRalphRunnerFromAgent:
+    def test_from_agent_sets_both_fns(self) -> None:
+        """from_agent() configures both execute_fn and stream_execute_fn."""
+        from exo.agent import Agent  # pyright: ignore[reportMissingImports]
+
+        agent = Agent(name="test_agent")
+        runner = RalphRunner.from_agent(agent, scorers=[_FixedScorer()])
+        assert runner._execute_fn is not None
+        assert runner._stream_execute_fn is not None

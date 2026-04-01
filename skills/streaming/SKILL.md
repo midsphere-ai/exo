@@ -1,6 +1,6 @@
 ---
 name: exo:streaming
-description: "Use when consuming Exo agent output via streaming — run.stream(), StreamEvent types (TextEvent, ToolCallEvent, StepEvent, ToolResultEvent, UsageEvent, StatusEvent, ErrorEvent, ContextEvent, MCPProgressEvent, ReasoningEvent, MessageInjectedEvent), event filtering, detailed mode. Triggers on: run.stream, streaming, TextEvent, ToolCallEvent, StepEvent, stream events, event_types, detailed, real-time output."
+description: "Use when consuming Exo agent output via streaming — run.stream(), StreamEvent types (TextEvent, ToolCallEvent, StepEvent, ToolResultEvent, UsageEvent, StatusEvent, ErrorEvent, ContextEvent, MCPProgressEvent, ReasoningEvent, MessageInjectedEvent, RalphIterationEvent, RalphStopEvent), ToolContext event forwarding from nested agents, event filtering, detailed mode. Triggers on: run.stream, streaming, TextEvent, ToolCallEvent, StepEvent, stream events, event_types, detailed, real-time output, ToolContext, nested streaming, inner agent events, RalphIterationEvent, RalphStopEvent."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -11,10 +11,11 @@ description: "Use when consuming Exo agent output via streaming — run.stream()
 
 Use this skill when the developer needs to:
 - Stream agent output in real-time using `run.stream()`
-- Understand the 11 event types and when each is emitted
+- Understand the 13 event types and when each is emitted
 - Filter events by type
 - Use `detailed=True` mode for rich execution telemetry
 - Stream from Swarms with per-agent event attribution
+- Forward inner agent events through tools via `ToolContext`
 - Build real-time UIs or logging from streamed events
 
 ## Decision Guide
@@ -24,6 +25,8 @@ Use this skill when the developer needs to:
 3. **Only care about specific events?** → Pass `event_types={"text", "tool_call"}` to filter
 4. **Streaming a Swarm?** → Use `swarm.stream()` — all events include `agent_name` showing which agent produced them
 5. **Building a UI?** → Use `detailed=True` with `event_types` filter for the events you need
+6. **Tool runs an inner agent and you want its events?** → Declare `ctx: ToolContext` in the tool, call `ctx.emit(event)` for each inner event
+7. **Streaming a Ralph loop?** → Use `RalphRunner.stream()` — yields `RalphIterationEvent` + inner events + `RalphStopEvent`
 
 ## Reference
 
@@ -45,7 +48,7 @@ async for event in run.stream(
     ...
 ```
 
-### All 11 Event Types
+### All 13 Event Types
 
 #### TextEvent (always emitted)
 
@@ -127,6 +130,33 @@ class MessageInjectedEvent:
 
 Emitted when `agent.inject_message()` pushes content into the running agent.
 
+#### RalphIterationEvent (always emitted during Ralph streaming)
+
+```python
+class RalphIterationEvent:
+    type: Literal["ralph_iteration"] = "ralph_iteration"
+    iteration: int                  # 1-based iteration number
+    status: Literal["started", "completed", "failed"]
+    scores: dict[str, float] = {}   # Scorer results (on completed)
+    agent_name: str = ""
+```
+
+Emitted at the start and end of each Ralph loop iteration. On `"completed"`, includes the scorer results for that iteration.
+
+#### RalphStopEvent (always emitted when Ralph loop terminates)
+
+```python
+class RalphStopEvent:
+    type: Literal["ralph_stop"] = "ralph_stop"
+    stop_type: str                  # e.g. "max_iterations", "score_threshold"
+    reason: str                     # Human-readable stop reason
+    iterations: int                 # Total iterations executed
+    final_scores: dict[str, float] = {}
+    agent_name: str = ""
+```
+
+Emitted once when the Ralph loop terminates, with the stop reason and final scores.
+
 #### ReasoningEvent (emitted when model supports reasoning)
 
 ```python
@@ -205,6 +235,8 @@ Emitted for execution status changes. Particularly useful in Swarm mode for hand
 | `ContextEvent` | Yes (when triggered) | Yes (when triggered) |
 | `MCPProgressEvent` | Yes (when triggered) | Yes (when triggered) |
 | `MessageInjectedEvent` | Yes (when triggered) | Yes (when triggered) |
+| `RalphIterationEvent` | Yes (during Ralph streaming) | Yes (during Ralph streaming) |
+| `RalphStopEvent` | Yes (during Ralph streaming) | Yes (during Ralph streaming) |
 | `ReasoningEvent` | Yes (when model supports) | Yes (when model supports) |
 | `StepEvent` | No | Yes |
 | `ToolResultEvent` | No | Yes |
@@ -237,7 +269,7 @@ async for event in run.stream(
 {
     "text", "tool_call", "step", "tool_result", "reasoning",
     "error", "status", "usage", "mcp_progress", "context",
-    "message_injected"
+    "message_injected", "ralph_iteration", "ralph_stop"
 }
 ```
 
@@ -377,6 +409,76 @@ async for event in run.stream(agent, query, provider=provider, detailed=True):
         print(event.text, end="", flush=True)
 ```
 
+### Forwarding Inner Agent Events via ToolContext
+
+When a tool runs an inner agent, use `ToolContext` to forward its events to the parent stream:
+
+```python
+from exo import tool, Agent, run, ToolContext
+from exo.types import TextEvent
+
+@tool
+async def research(query: str, ctx: ToolContext) -> str:
+    """Run a research agent and forward its events.
+
+    Args:
+        query: The research query.
+    """
+    inner_agent = Agent(name="researcher", instructions="Research deeply.")
+    parts = []
+    async for event in run.stream(inner_agent, query, provider=provider):
+        ctx.emit(event)  # Forward to parent stream
+        if isinstance(event, TextEvent):
+            parts.append(event.text)
+    return "".join(parts)
+
+# Parent agent — tool events appear in its stream
+parent = Agent(name="orchestrator", tools=[research])
+async for event in run.stream(parent, "Analyze AI trends", provider=provider):
+    print(f"[{event.agent_name}] {event.type}: ", end="")
+    if isinstance(event, TextEvent):
+        print(event.text)
+```
+
+**How it works:**
+1. Tool declares `ctx: ToolContext` — auto-injected, excluded from LLM schema
+2. `ctx.emit(event)` pushes events to the parent agent's `_event_queue`
+3. After tool execution, `run.stream()` drains the queue and yields all buffered events
+4. Inner events retain their original `agent_name` — consumers can distinguish them from outer agent events
+
+**Zero cost when not streaming:** The queue exists but is never drained during `run()` (non-streaming). Events are discarded on GC.
+
+### Streaming a Ralph Loop
+
+```python
+from exo.eval.ralph import RalphRunner, RalphIterationEvent, RalphStopEvent
+from exo.types import TextEvent
+
+runner = RalphRunner.from_agent(agent, scorers=[quality_scorer])
+
+async for event in runner.stream("Analyze market trends", name="research_loop"):
+    match event:
+        case RalphIterationEvent(iteration=n, status="started"):
+            print(f"\n--- Iteration {n} ---")
+        case TextEvent(text=t):
+            print(t, end="", flush=True)
+        case RalphIterationEvent(iteration=n, status="completed", scores=s):
+            print(f"\n[Scores: {s}]")
+        case RalphStopEvent(stop_type=st, reason=r, iterations=n):
+            print(f"\n=== Stopped ({st}): {r} after {n} iterations ===")
+```
+
+**Event sequence per iteration:**
+```
+RalphIterationEvent(status="started", iteration=1)
+TextEvent(...)           ← inner agent events
+ToolCallEvent(...)       ← inner agent events
+TextEvent(...)           ← inner agent events
+RalphIterationEvent(status="completed", iteration=1, scores={...})
+... (next iteration or stop)
+RalphStopEvent(stop_type="max_iterations", iterations=3)
+```
+
 ## Gotchas
 
 - **All events are frozen Pydantic models** — `event.text = "new"` raises `ValidationError`
@@ -385,6 +487,9 @@ async for event in run.stream(agent, query, provider=provider, detailed=True):
 - **`agent_name` defaults to `""`** — always set by the runtime for agent/swarm execution, but default is empty string
 - **Tool call accumulation** — tool calls are built incrementally from stream deltas. The `ToolCallEvent` is emitted after accumulation is complete, not during.
 - **MCP progress is drained after tool execution** — not during. Progress events arrive in a batch after tools complete.
+- **ToolContext events are also drained after tool execution** — inner agent events are buffered and yielded after all tools complete, not during.
+- **ToolContext only works with `FunctionTool`** — custom `Tool` ABC subclasses and MCP tools don't support ToolContext injection. Use `FunctionTool` or `@tool` decorator.
+- **ToolContext.emit() must be called from the event loop thread** — sync tools wrapped via `asyncio.to_thread()` cannot safely call `emit()`. Use async tools for inner agent streaming.
 - **Hooks still fire during streaming** — `START`, `POST_LLM_CALL`, `FINISHED`, `ERROR` hooks all fire normally
 - **Swarm.stream() delegates to run.stream()** — each sub-agent is streamed via `run.stream()` internally
 - **Usage comes from the final stream chunk** — if the provider doesn't include usage in stream chunks, `UsageEvent` may have zero values

@@ -22,6 +22,10 @@ from exo.eval.ralph.runner import (  # pyright: ignore[reportMissingImports]
     RalphResult,
     RalphRunner,
 )
+from exo.types import (  # pyright: ignore[reportMissingImports]
+    RalphIterationEvent,
+    RalphStopEvent,
+)
 
 __all__ = [
     "CompositeDetector",
@@ -30,8 +34,10 @@ __all__ = [
     "LoopState",
     "MaxIterationDetector",
     "RalphConfig",
+    "RalphIterationEvent",
     "RalphResult",
     "RalphRunner",
+    "RalphStopEvent",
     "ReflectionConfig",
     "ScoreThresholdDetector",
     "StopConditionConfig",

@@ -177,6 +177,11 @@ def _generate_schema(fn: Callable[..., Any]) -> dict[str, Any]:
             continue
 
         annotation = hints.get(name, inspect.Parameter.empty)
+
+        # Skip ToolContext-typed parameters (injected at runtime, not part of LLM schema)
+        if getattr(annotation, "__name__", "") == "ToolContext":
+            continue
+
         prop = _python_type_to_json_schema(annotation)
 
         if name in doc_args:
@@ -271,6 +276,17 @@ class FunctionTool(Tool):
         self.description = description or _extract_description(fn)
         self.parameters = _generate_schema(fn)
         self.large_output: bool = large_output
+
+        # Detect ToolContext parameter for injection by Agent._execute_tools()
+        self._tool_context_param: str | None = None
+        try:
+            _hints = get_type_hints(fn)
+        except Exception:
+            _hints = {}
+        for _pname, _pann in _hints.items():
+            if getattr(_pann, "__name__", "") == "ToolContext":
+                self._tool_context_param = _pname
+                break
 
     async def execute(self, **kwargs: Any) -> str | dict[str, Any] | list[ContentBlock]:
         """Execute the wrapped function.

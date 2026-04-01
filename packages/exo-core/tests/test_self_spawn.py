@@ -74,11 +74,19 @@ class TestSelfSpawnInit:
         agent = Agent(name="bot", memory=None, context=None, allow_self_spawn=True)
         assert isinstance(agent.tools["spawn_self"], FunctionTool)
 
-    def test_spawn_self_tool_has_task_parameter(self) -> None:
-        """spawn_self tool schema has a 'task' parameter."""
+    def test_spawn_self_tool_has_tasks_parameter(self) -> None:
+        """spawn_self tool schema has a 'tasks' parameter."""
         agent = Agent(name="bot", memory=None, context=None, allow_self_spawn=True)
         schema = agent.tools["spawn_self"].parameters
-        assert "task" in schema["properties"]
+        assert "tasks" in schema["properties"]
+
+    def test_max_spawn_children_default_is_four(self) -> None:
+        agent = Agent(name="bot", memory=None, context=None)
+        assert agent.max_spawn_children == 4
+
+    def test_max_spawn_children_custom(self) -> None:
+        agent = Agent(name="bot", memory=None, context=None, max_spawn_children=2)
+        assert agent.max_spawn_children == 2
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +108,7 @@ class TestSpawnSelfGuards:
         agent._spawn_depth = 3  # at the limit
         agent._current_provider = _mock_provider()
 
-        result = await agent.tools["spawn_self"].execute(task="some task")
+        result = await agent.tools["spawn_self"].execute(tasks=["some task"])
         assert "Maximum spawn depth" in str(result)
         assert "3" in str(result)
 
@@ -117,7 +125,7 @@ class TestSpawnSelfGuards:
         agent._spawn_depth = 5  # well above limit
         agent._current_provider = _mock_provider()
 
-        result = await agent.tools["spawn_self"].execute(task="task")
+        result = await agent.tools["spawn_self"].execute(tasks=["task"])
         assert "spawn_self error" in str(result)
 
     @pytest.mark.asyncio
@@ -126,7 +134,7 @@ class TestSpawnSelfGuards:
         agent = Agent(name="bot", memory=None, context=None, allow_self_spawn=True)
         # _current_provider is None by default (outside of run())
 
-        result = await agent.tools["spawn_self"].execute(task="task")
+        result = await agent.tools["spawn_self"].execute(tasks=["task"])
         assert "No provider available" in str(result)
 
     @pytest.mark.asyncio
@@ -143,9 +151,33 @@ class TestSpawnSelfGuards:
         agent._spawn_depth = 2  # below limit
         agent._current_provider = provider
 
-        result = await agent.tools["spawn_self"].execute(task="sub task")
+        result = await agent.tools["spawn_self"].execute(tasks=["sub task"])
         # Should succeed and return the provider's content
         assert result == "child result"
+
+    @pytest.mark.asyncio
+    async def test_spawn_self_returns_error_when_tasks_exceed_max_children(self) -> None:
+        """Returns error string when tasks list exceeds max_spawn_children."""
+        agent = Agent(
+            name="bot",
+            memory=None,
+            context=None,
+            allow_self_spawn=True,
+            max_spawn_children=2,
+        )
+        agent._current_provider = _mock_provider()
+        result = await agent.tools["spawn_self"].execute(tasks=["a", "b", "c"])
+        assert "Too many tasks" in str(result)
+        assert "3" in str(result)
+        assert "2" in str(result)
+
+    @pytest.mark.asyncio
+    async def test_spawn_self_returns_error_on_empty_tasks(self) -> None:
+        """Returns error string when tasks list is empty."""
+        agent = Agent(name="bot", memory=None, context=None, allow_self_spawn=True)
+        agent._current_provider = _mock_provider()
+        result = await agent.tools["spawn_self"].execute(tasks=[])
+        assert "Empty tasks list" in str(result)
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +225,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="do something")
+            await parent.tools["spawn_self"].execute(tasks=["do something"])
 
         assert len(spawned_agents) == 1
         child = spawned_agents[0]
@@ -225,7 +257,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="sub task")
+            await parent.tools["spawn_self"].execute(tasks=["sub task"])
 
         assert len(spawned_agents) == 1
         assert spawned_agents[0]._spawn_depth == 2  # parent was 1 → child is 2
@@ -278,7 +310,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="task")
+            await parent.tools["spawn_self"].execute(tasks=["task"])
 
         assert len(spawned_agents) == 1
         child = spawned_agents[0]
@@ -325,7 +357,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="task")
+            await parent.tools["spawn_self"].execute(tasks=["task"])
 
         assert len(spawned_agents) == 1
         child = spawned_agents[0]
@@ -357,7 +389,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="task")
+            await parent.tools["spawn_self"].execute(tasks=["task"])
 
         assert len(spawned_agents) == 1
         assert spawned_agents[0].model == "openai:gpt-4o-mini"
@@ -392,7 +424,7 @@ class TestSpawnedAgentProperties:
         import unittest.mock as mock
 
         with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
-            await parent.tools["spawn_self"].execute(task="task")
+            await parent.tools["spawn_self"].execute(tasks=["task"])
 
         assert len(spawned_agents) == 1
         child = spawned_agents[0]
@@ -453,5 +485,90 @@ class TestProviderLifecycle:
         agent = Agent(name="parent", memory=None, context=None, allow_self_spawn=True)
         agent._current_provider = provider
 
-        result = await agent.tools["spawn_self"].execute(task="do something")
+        result = await agent.tools["spawn_self"].execute(tasks=["do something"])
         assert result == "task completed successfully"
+
+
+# ---------------------------------------------------------------------------
+# spawn_self — parallel execution
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnSelfParallel:
+    @pytest.mark.asyncio
+    async def test_spawn_self_parallel_two_children(self) -> None:
+        """Two tasks spawn two children concurrently."""
+        provider = _mock_provider(content="result")
+        parent = Agent(
+            name="parent",
+            memory=None,
+            context=None,
+            allow_self_spawn=True,
+        )
+        parent._current_provider = provider
+
+        spawned_agents: list[Any] = []
+        original_run_inner = Agent._run_inner
+
+        async def capturing_run_inner(self_agent: Any, *args: Any, **kwargs: Any) -> Any:
+            if self_agent.name != "parent":
+                spawned_agents.append(self_agent)
+            return await original_run_inner(self_agent, *args, **kwargs)
+
+        import unittest.mock as mock
+
+        with mock.patch.object(Agent, "_run_inner", capturing_run_inner):
+            await parent.tools["spawn_self"].execute(tasks=["task A", "task B"])
+
+        assert len(spawned_agents) == 2
+        names = {a.name for a in spawned_agents}
+        assert len(names) == 2  # unique names
+        for child in spawned_agents:
+            assert child._spawn_depth == 1
+
+    @pytest.mark.asyncio
+    async def test_spawn_self_parallel_results_formatted(self) -> None:
+        """Multiple tasks return [Task N] formatted results."""
+        call_count = 0
+
+        async def counting_complete(messages: Any, **kwargs: Any) -> Any:
+            nonlocal call_count
+            call_count += 1
+            return ModelResponse(
+                id=f"r{call_count}",
+                model="test",
+                content=f"result {call_count}",
+                tool_calls=[],
+                usage=Usage(input_tokens=1, output_tokens=1, total_tokens=2),
+            )
+
+        provider = AsyncMock()
+        provider.complete = AsyncMock(side_effect=counting_complete)
+
+        parent = Agent(
+            name="parent",
+            memory=None,
+            context=None,
+            allow_self_spawn=True,
+        )
+        parent._current_provider = provider
+
+        result = await parent.tools["spawn_self"].execute(tasks=["a", "b"])
+        assert "[Task 1]:" in result
+        assert "[Task 2]:" in result
+
+    @pytest.mark.asyncio
+    async def test_spawn_self_single_task_no_prefix(self) -> None:
+        """Single task returns raw result without [Task N] prefix."""
+        provider = _mock_provider(content="the answer")
+        parent = Agent(
+            name="parent",
+            memory=None,
+            context=None,
+            allow_self_spawn=True,
+        )
+        parent._current_provider = provider
+
+        result = await parent.tools["spawn_self"].execute(tasks=["only task"])
+        assert result == "the answer"
+        assert "[Task" not in result

@@ -1,6 +1,6 @@
 ---
 name: exo:testing
-description: "Use when writing tests for Exo agents, tools, swarms, or streaming — MockProvider patterns, async test configuration, asyncio_mode auto, FakeStreamChunk, test fixtures, tool testing, swarm testing, streaming event testing. Triggers on: test exo, mock provider, MockProvider, test agent, test swarm, test streaming, pytest exo, test tool, async test."
+description: "Use when writing tests for Exo agents, tools, swarms, or streaming — MockProvider patterns, async test configuration, asyncio_mode auto, FakeStreamChunk, test fixtures, tool testing, swarm testing, streaming event testing, ToolContext testing, RalphRunner streaming tests. Triggers on: test exo, mock provider, MockProvider, test agent, test swarm, test streaming, pytest exo, test tool, async test, test ToolContext, test ralph."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -15,6 +15,8 @@ Use this skill when the developer needs to:
 - Test tool execution without real API calls
 - Test streaming event sequences
 - Understand test configuration (asyncio_mode, importlib mode)
+- Test ToolContext injection and event emission
+- Test RalphRunner streaming event sequences
 - Write integration tests with real providers
 
 ## Decision Guide
@@ -25,6 +27,8 @@ Use this skill when the developer needs to:
 4. **Testing a swarm?** → Use `_make_provider` with sequential `AgentOutput` responses
 5. **Testing tool execution directly?** → Call `tool.execute(**kwargs)` directly
 6. **Need to inspect what was sent to the LLM?** → Use `RecordingProvider` that captures messages
+7. **Testing ToolContext?** → Create `asyncio.Queue`, construct `ToolContext(name, queue)`, call `emit()`, check queue
+8. **Testing RalphRunner.stream()?** → Mock `stream_execute_fn` as async generator, verify event sequence
 
 ## Reference
 
@@ -397,6 +401,105 @@ def test_model_parsing(model_string, expected_provider, expected_model):
     agent = Agent(name="bot", model=model_string, memory=None, context=None)
     assert agent.provider_name == expected_provider
     assert agent.model_name == expected_model
+```
+
+### Testing ToolContext
+
+```python
+import asyncio
+from exo.tool_context import ToolContext
+from exo.tool import _generate_schema, FunctionTool, tool
+from exo.types import TextEvent
+
+def test_tool_context_excluded_from_schema():
+    """ToolContext params are hidden from LLM schema."""
+    def fn(query: str, ctx: ToolContext) -> str:
+        return query
+
+    schema = _generate_schema(fn)
+    assert "ctx" not in schema["properties"]
+    assert schema["required"] == ["query"]
+
+def test_function_tool_detects_context_param():
+    """FunctionTool caches the ToolContext parameter name."""
+    @tool
+    async def research(query: str, ctx: ToolContext) -> str:
+        """Research."""
+        return query
+
+    assert research._tool_context_param == "ctx"
+
+def test_tool_context_emit():
+    """emit() pushes events to the queue."""
+    queue: asyncio.Queue = asyncio.Queue()
+    ctx = ToolContext(agent_name="parent", queue=queue)
+    event = TextEvent(text="hello", agent_name="inner")
+    ctx.emit(event)
+    assert queue.get_nowait() is event
+```
+
+### Testing RalphRunner Streaming
+
+```python
+from exo.eval.ralph import RalphRunner, RalphConfig, StopConditionConfig
+from exo.types import RalphIterationEvent, RalphStopEvent, TextEvent
+
+async def test_ralph_stream_events():
+    """Verify event sequence from RalphRunner.stream()."""
+    async def stream_execute(input: str):
+        yield TextEvent(text="result", agent_name="inner")
+
+    async def execute(input: str) -> str:
+        return "result"
+
+    cfg = RalphConfig(stop_condition=StopConditionConfig(max_iterations=1))
+    runner = RalphRunner(
+        execute_fn=execute,
+        scorers=[],
+        stream_execute_fn=stream_execute,
+        config=cfg,
+    )
+
+    events = [ev async for ev in runner.stream("input", name="test")]
+
+    assert isinstance(events[0], RalphIterationEvent)
+    assert events[0].status == "started"
+    assert isinstance(events[1], TextEvent)
+    assert isinstance(events[2], RalphIterationEvent)
+    assert events[2].status == "completed"
+    assert isinstance(events[3], RalphStopEvent)
+
+async def test_ralph_stream_requires_fn():
+    """stream() raises ValueError without stream_execute_fn."""
+    import pytest
+    runner = RalphRunner(execute_fn=lambda x: x, scorers=[])
+    with pytest.raises(ValueError, match="stream_execute_fn required"):
+        async for _ in runner.stream("input"):
+            pass
+```
+
+### Testing RalphNode in Swarm
+
+```python
+from exo._internal.nested import RalphNode
+from exo.types import RalphIterationEvent, RalphStopEvent, RunResult
+
+async def test_ralph_node_stream():
+    """RalphNode delegates to runner.stream()."""
+    expected = [
+        RalphIterationEvent(iteration=1, status="started", agent_name="test"),
+        RalphStopEvent(stop_type="max_iterations", reason="done", iterations=1, agent_name="test"),
+    ]
+
+    class FakeRunner:
+        async def stream(self, input, *, name="ralph"):
+            for ev in expected:
+                yield ev
+
+    node = RalphNode(runner=FakeRunner(), name="test")
+    events = [ev async for ev in node.stream("query")]
+    assert events == expected
+    assert node.is_group is True  # Swarm duck-typing
 ```
 
 ## Patterns

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -31,6 +31,12 @@ from exo.eval.reflection import (  # pyright: ignore[reportMissingImports]
     ReflectionResult,
     Reflector,
 )
+from exo.types import (  # pyright: ignore[reportMissingImports]
+    RalphIterationEvent,
+    RalphStopEvent,
+    StreamEvent,
+    TextEvent,
+)
 
 # ---------------------------------------------------------------------------
 # Types
@@ -38,6 +44,8 @@ from exo.eval.reflection import (  # pyright: ignore[reportMissingImports]
 
 # Async callable: (input: str) -> str
 ExecuteFn = Callable[..., Any]
+# Async callable: (input: str) -> AsyncIterator[StreamEvent]
+StreamExecuteFn = Callable[..., Any]
 # Async callable: (prompt: str) -> str  (for re-prompting with reflection)
 RePlanFn = Callable[..., Any]
 
@@ -82,6 +90,7 @@ class RalphRunner:
         "_reflector",
         "_replan_fn",
         "_scorers",
+        "_stream_execute_fn",
     )
 
     def __init__(
@@ -89,16 +98,50 @@ class RalphRunner:
         execute_fn: ExecuteFn,
         scorers: list[Scorer],
         *,
+        stream_execute_fn: StreamExecuteFn | None = None,
         config: RalphConfig | None = None,
         reflector: Reflector | None = None,
         replan_fn: RePlanFn | None = None,
     ) -> None:
         self._execute_fn = execute_fn
+        self._stream_execute_fn = stream_execute_fn
         self._scorers = list(scorers)
         self._config = config or RalphConfig()
         self._reflector = reflector
         self._replan_fn = replan_fn
         self._detector = self._build_detector()
+
+    @classmethod
+    def from_agent(cls, agent: Any, scorers: list[Scorer], **kwargs: Any) -> RalphRunner:
+        """Create a RalphRunner wired to an Agent's run() and stream().
+
+        Convenience factory that creates both ``execute_fn`` (for ``.run()``)
+        and ``stream_execute_fn`` (for ``.stream()``) from the same agent.
+
+        Args:
+            agent: An ``Agent`` instance.
+            scorers: List of scorers for the analyze phase.
+            **kwargs: Additional arguments forwarded to ``RalphRunner.__init__``.
+
+        Returns:
+            A configured ``RalphRunner``.
+        """
+        from exo.runner import run  # pyright: ignore[reportMissingImports]
+
+        async def _execute(input: str) -> str:
+            result = await run(agent, input)
+            return result.output
+
+        async def _stream(input: str) -> AsyncIterator[StreamEvent]:
+            async for event in run.stream(agent, input):
+                yield event
+
+        return cls(
+            execute_fn=_execute,
+            stream_execute_fn=_stream,
+            scorers=scorers,
+            **kwargs,
+        )
 
     # ---- public API -------------------------------------------------------
 
@@ -148,6 +191,85 @@ class RalphRunner:
                     state=state.to_dict(),
                     reflections=reflections,
                 )
+
+    async def stream(self, input: str, *, name: str = "ralph") -> AsyncIterator[StreamEvent]:
+        """Stream the Ralph loop, yielding inner events and Ralph lifecycle events.
+
+        Requires ``stream_execute_fn`` to have been provided at construction
+        (or use ``from_agent()`` which sets it automatically).
+
+        Args:
+            input: The initial input to the loop.
+            name: Agent name to stamp on Ralph lifecycle events.
+
+        Yields:
+            Interleaved inner agent events, ``RalphIterationEvent``,
+            and ``RalphStopEvent``.
+
+        Raises:
+            ValueError: If ``stream_execute_fn`` was not provided.
+        """
+        if self._stream_execute_fn is None:
+            raise ValueError("stream_execute_fn required for streaming")
+
+        logger.info(
+            "RalphRunner.stream starting: input_len=%d scorers=%d",
+            len(input),
+            len(self._scorers),
+        )
+        state = LoopState()
+        current_input = input
+
+        while True:
+            state.iteration += 1
+            yield RalphIterationEvent(
+                iteration=state.iteration,
+                status="started",
+                agent_name=name,
+            )
+
+            # --- Phase 1: Run (streaming) ---
+            output_parts: list[str] = []
+            success = True
+            try:
+                async for event in self._stream_execute_fn(current_input):
+                    yield event
+                    if isinstance(event, TextEvent):
+                        output_parts.append(event.text)
+                output = "".join(output_parts)
+                state.record_success()
+            except Exception as exc:
+                output = str(exc)
+                state.record_failure()
+                success = False
+
+            # --- Phase 2: Analyze ---
+            scores = await self._analyze(output, current_input, state) if success else {}
+
+            yield RalphIterationEvent(
+                iteration=state.iteration,
+                status="completed" if success else "failed",
+                scores=scores,
+                agent_name=name,
+            )
+
+            # --- Phase 3: Learn ---
+            reflection = await self._learn(current_input, output, scores, success, state)
+
+            # --- Phase 4: Plan ---
+            current_input = self._plan(input, reflection)
+
+            # --- Phase 5: Halt ---
+            decision = await self._halt(state)
+            if decision.should_stop:
+                yield RalphStopEvent(
+                    stop_type=decision.stop_type.value,
+                    reason=decision.reason,
+                    iterations=state.iteration,
+                    final_scores=scores,
+                    agent_name=name,
+                )
+                return
 
     # ---- phase implementations --------------------------------------------
 

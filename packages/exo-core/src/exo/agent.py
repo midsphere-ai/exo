@@ -18,6 +18,7 @@ from exo.config import (
     validate_budget_awareness,
     validate_injected_tool_args,
     validate_max_parallel_subagents,
+    validate_max_spawn_children,
     validate_planning_model,
 )
 from exo.hooks import Hook, HookManager, HookPoint
@@ -25,6 +26,7 @@ from exo.observability.logging import get_logger  # pyright: ignore[reportMissin
 from exo.rail import Rail, RailAbortError, RailManager
 from exo.task_controller import TaskLoopEvent, TaskLoopEventType, TaskLoopQueue
 from exo.tool import FunctionTool, Tool, ToolError
+from exo.tool_context import ToolContext
 from exo.types import (
     AgentOutput,
     AssistantMessage,
@@ -44,6 +46,46 @@ _CONTEXT_UNSET: Any = object()
 
 # Default byte threshold for automatic large-output offloading (10 KB)
 _LARGE_OUTPUT_THRESHOLD_DEFAULT = 10240
+
+
+# ---------------------------------------------------------------------------
+# spawn_self helpers — build per-child memory and context
+# ---------------------------------------------------------------------------
+
+
+def _build_child_memory(parent: Any) -> Any:
+    """Build memory for a spawned child: fresh short-term, shared long-term."""
+    child_memory: Any = _MEMORY_UNSET
+    if parent.memory is None:
+        child_memory = None
+    elif parent.memory is not _MEMORY_UNSET:
+        try:
+            from exo.memory.base import AgentMemory  # pyright: ignore[reportMissingImports]
+            from exo.memory.short_term import (
+                ShortTermMemory,  # pyright: ignore[reportMissingImports]
+            )
+
+            long_term = getattr(parent.memory, "long_term", None)
+            child_memory = AgentMemory(
+                short_term=ShortTermMemory(),
+                long_term=long_term,
+            )
+        except ImportError:
+            child_memory = None
+    return child_memory
+
+
+def _build_child_context(parent: Any, child_name: str) -> Any:
+    """Fork or share context for a spawned child."""
+    child_context: Any = _CONTEXT_UNSET
+    if parent.context is not None:
+        try:
+            child_context = parent.context.fork(child_name)
+        except Exception:
+            child_context = parent.context
+    else:
+        child_context = None
+    return child_context
 
 
 class TaskLoopAbort(ExoError):
@@ -562,6 +604,7 @@ class Agent:
         context: Any = _CONTEXT_UNSET,
         allow_self_spawn: bool = False,
         max_spawn_depth: int = 3,
+        max_spawn_children: int = 4,
     ) -> None:
         if max_steps < 1:
             raise AgentError(f"max_steps must be >= 1, got {max_steps}")
@@ -585,6 +628,7 @@ class Agent:
         # Self-spawn: opt-in parallel sub-task spawning
         self.allow_self_spawn: bool = allow_self_spawn
         self.max_spawn_depth: int = max_spawn_depth
+        self.max_spawn_children: int = validate_max_spawn_children(max_spawn_children)
         # Internal: spawn depth (0 for top-level agents; incremented for each spawn level)
         self._spawn_depth: int = 0
         # Internal: provider reference stored during run() for use by spawn_self tool
@@ -637,6 +681,9 @@ class Agent:
 
         # Queue for live message injection into a running agent
         self._injected_messages: asyncio.Queue[str] = asyncio.Queue()
+
+        # Queue for tool-emitted streaming events (drained by run.stream())
+        self._event_queue: asyncio.Queue = asyncio.Queue()
 
         # Auto-register spawn_self tool when opt-in self-spawn is enabled
         if allow_self_spawn:
@@ -810,27 +857,36 @@ class Agent:
         """Create the ``spawn_self`` FunctionTool closure for this agent.
 
         The returned tool captures ``self`` as *parent* so it can access
-        ``_current_provider``, ``_spawn_depth``, ``max_spawn_depth``, and the
-        agent configuration needed to create child agents.
+        ``_current_provider``, ``_spawn_depth``, ``max_spawn_depth``,
+        ``max_spawn_children``, and the agent configuration needed to create
+        child agents.
         """
         parent = self
 
-        async def spawn_self(task: str) -> str:
-            """Spawn a copy of the current agent to handle a parallel sub-task.
+        async def spawn_self(tasks: list[str]) -> str:
+            """Spawn copies of the current agent to handle parallel sub-tasks.
 
-            Creates a new agent with the same model, instructions, and tools
-            (but fresh short-term memory) and runs it on *task*.  The spawned
-            agent shares the parent's long-term memory store so knowledge
-            accumulates across spawns.
+            Creates one new agent per task, all running concurrently.  Each
+            child gets the same model, instructions, and tools (but fresh
+            short-term memory) and shares the parent's long-term memory store
+            so knowledge accumulates across spawns.
 
             Args:
-                task: The sub-task for the spawned agent to complete.
+                tasks: List of sub-task prompts, one per child agent to spawn.
 
             Returns:
-                The text result of the spawned agent's run, or an error string
-                if the maximum spawn depth has been reached.
+                The text results of the spawned agents' runs, or an error
+                string if limits are exceeded.
             """
-            # Depth guard — return error string instead of raising
+            if not tasks:
+                return "[spawn_self error] Empty tasks list. Provide at least one task."
+
+            if len(tasks) > parent.max_spawn_children:
+                return (
+                    f"[spawn_self error] Too many tasks ({len(tasks)}). "
+                    f"Maximum is {parent.max_spawn_children} per call."
+                )
+
             if parent._spawn_depth >= parent.max_spawn_depth:
                 return (
                     f"[spawn_self error] Maximum spawn depth ({parent.max_spawn_depth}) "
@@ -841,69 +897,62 @@ class Agent:
             if provider is None:
                 return "[spawn_self error] No provider available for spawned agent."
 
-            # Build tools list for the child — exclude spawn_self and context tools.
-            # Context tools are auto-loaded by the child's __init__ with fresh bindings.
+            # Build tools list once — exclude spawn_self and context tools.
             child_tools = [
                 t
                 for name, t in parent.tools.items()
                 if name != "spawn_self" and not getattr(t, "_is_context_tool", False)
             ]
 
-            # Build memory: fresh ShortTermMemory + shared LongTermMemory instance
-            child_memory: Any = _MEMORY_UNSET  # default: auto-create
-            if parent.memory is None:
-                child_memory = None  # explicitly disabled — propagate
-            elif parent.memory is not _MEMORY_UNSET:
-                # parent.memory is a resolved AgentMemory or MemoryStore
+            results: list[str] = [""] * len(tasks)
+
+            async def _run_child(idx: int) -> None:
+                task = tasks[idx]
+                child_memory = _build_child_memory(parent)
+                child_name = f"{parent.name}_spawn_{uuid.uuid4().hex[:8]}"
+                child_context = _build_child_context(parent, child_name)
+
+                child_agent = Agent(
+                    name=child_name,
+                    model=parent.model,
+                    instructions=parent.instructions,
+                    tools=child_tools,
+                    max_steps=parent.max_steps,
+                    temperature=parent.temperature,
+                    max_tokens=parent.max_tokens,
+                    memory=child_memory,
+                    context=child_context,
+                    allow_self_spawn=False,
+                )
+                child_agent._spawn_depth = parent._spawn_depth + 1
+
+                _log.info(
+                    "spawn_self: parent=%s child=%s depth=%d task_idx=%d/%d task_len=%d",
+                    parent.name,
+                    child_agent.name,
+                    child_agent._spawn_depth,
+                    idx + 1,
+                    len(tasks),
+                    len(task),
+                )
+
                 try:
-                    from exo.memory.base import AgentMemory  # pyright: ignore[reportMissingImports]
-                    from exo.memory.short_term import (
-                        ShortTermMemory,  # pyright: ignore[reportMissingImports]
-                    )
+                    result = await child_agent.run(task, provider=provider)
+                    results[idx] = result.text or ""
+                except Exception as exc:
+                    results[idx] = f"[child {idx + 1} error] {exc}"
 
-                    long_term = getattr(parent.memory, "long_term", None)
-                    child_memory = AgentMemory(
-                        short_term=ShortTermMemory(),
-                        long_term=long_term,
-                    )
-                except ImportError:
-                    child_memory = None
+            async with asyncio.TaskGroup() as tg:
+                for i in range(len(tasks)):
+                    tg.create_task(_run_child(i))
 
-            # Fork context for child: reads inherit from parent, writes isolated.
-            child_name = f"{parent.name}_spawn_{uuid.uuid4().hex[:8]}"
-            child_context: Any = _CONTEXT_UNSET
-            if parent.context is not None:
-                try:
-                    child_context = parent.context.fork(child_name)
-                except Exception:
-                    child_context = parent.context  # fallback: share
-            else:
-                child_context = None
+            if len(tasks) == 1:
+                return results[0]
 
-            child_agent = Agent(
-                name=child_name,
-                model=parent.model,
-                instructions=parent.instructions,
-                tools=child_tools,
-                max_steps=parent.max_steps,
-                temperature=parent.temperature,
-                max_tokens=parent.max_tokens,
-                memory=child_memory,
-                context=child_context,
-                allow_self_spawn=False,
-            )
-            child_agent._spawn_depth = parent._spawn_depth + 1
-
-            _log.info(
-                "spawn_self: parent=%s child=%s depth=%d task_len=%d",
-                parent.name,
-                child_agent.name,
-                child_agent._spawn_depth,
-                len(task),
-            )
-
-            result = await child_agent.run(task, provider=provider)
-            return result.text or ""
+            parts = []
+            for i, result in enumerate(results):
+                parts.append(f"[Task {i + 1}]: {result}")
+            return "\n\n".join(parts)
 
         return FunctionTool(spawn_self, name="spawn_self")
 
@@ -1466,7 +1515,14 @@ class Agent:
                 )
             else:
                 try:
-                    output = await tool.execute(**action.arguments)
+                    kwargs = dict(action.arguments)
+                    # Inject ToolContext if the tool declares one
+                    if isinstance(tool, FunctionTool) and tool._tool_context_param:
+                        kwargs[tool._tool_context_param] = ToolContext(
+                            agent_name=self.name,
+                            queue=self._event_queue,
+                        )
+                    output = await tool.execute(**kwargs)
                     content: MessageContent
                     if isinstance(output, list):
                         content = output  # list[ContentBlock] from tool
@@ -1555,14 +1611,19 @@ class Agent:
             "injected_tool_args": dict(self.injected_tool_args),
             "allow_parallel_subagents": self.allow_parallel_subagents,
             "max_parallel_subagents": self.max_parallel_subagents,
+            "allow_self_spawn": self.allow_self_spawn,
+            "max_spawn_depth": self.max_spawn_depth,
+            "max_spawn_children": self.max_spawn_children,
         }
 
         # Serialize tools as importable dotted paths.
-        # Skip retrieve_artifact (auto-registered) and context tools (auto-loaded).
+        # Skip retrieve_artifact (auto-registered), spawn_self (auto-registered),
+        # and context tools (auto-loaded).
         user_tools = [
             t
             for name, t in self.tools.items()
-            if name != "retrieve_artifact" and not getattr(t, "_is_context_tool", False)
+            if name not in ("retrieve_artifact", "spawn_self")
+            and not getattr(t, "_is_context_tool", False)
         ]
         if user_tools:
             data["tools"] = [_serialize_tool(t) for t in user_tools]
@@ -1624,6 +1685,9 @@ class Agent:
             injected_tool_args=data.get("injected_tool_args"),
             allow_parallel_subagents=data.get("allow_parallel_subagents", False),
             max_parallel_subagents=data.get("max_parallel_subagents", 3),
+            allow_self_spawn=data.get("allow_self_spawn", False),
+            max_spawn_depth=data.get("max_spawn_depth", 3),
+            max_spawn_children=data.get("max_spawn_children", 4),
         )
 
     def __repr__(self) -> str:

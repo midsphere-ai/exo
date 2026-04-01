@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from exo._internal.nested import NestedSwarmError, SwarmNode
+from exo._internal.nested import NestedSwarmError, RalphNode, SwarmNode
 from exo.agent import Agent
 from exo.swarm import Swarm
-from exo.types import AgentOutput, Usage
+from exo.types import AgentOutput, RalphIterationEvent, RalphStopEvent, TextEvent, Usage
 
 # ---------------------------------------------------------------------------
 # Fixtures: mock provider
@@ -302,3 +302,117 @@ class TestNestedEdgeCases:
         a = Agent(name="a")
         with pytest.raises(NestedSwarmError, match="requires a Swarm"):
             SwarmNode(swarm=a)
+
+
+# ---------------------------------------------------------------------------
+# SwarmNode.stream()
+# ---------------------------------------------------------------------------
+
+
+class TestSwarmNodeStream:
+    def test_has_stream_method(self) -> None:
+        """SwarmNode exposes a stream() method."""
+        a = Agent(name="a")
+        inner = Swarm(agents=[a])
+        node = SwarmNode(swarm=inner)
+        assert hasattr(node, "stream")
+
+    async def test_stream_delegates_to_inner_swarm(self) -> None:
+        """SwarmNode.stream() yields events from the inner swarm."""
+        expected_events = [
+            TextEvent(text="hello", agent_name="inner_a"),
+            TextEvent(text=" world", agent_name="inner_a"),
+        ]
+
+        class FakeSwarm:
+            flow_order = ["a"]
+            name = "fake"
+
+            async def stream(self, input, **kwargs):
+                for ev in expected_events:
+                    yield ev
+
+        node = SwarmNode(swarm=FakeSwarm(), name="test_node")
+        collected = []
+        async for event in node.stream("input"):
+            collected.append(event)
+
+        assert collected == expected_events
+
+
+# ---------------------------------------------------------------------------
+# RalphNode
+# ---------------------------------------------------------------------------
+
+
+class TestRalphNode:
+    def test_is_group_marker(self) -> None:
+        """RalphNode has is_group=True for Swarm duck-typing."""
+
+        class FakeRunner:
+            pass
+
+        node = RalphNode(runner=FakeRunner(), name="research_loop")
+        assert node.is_group is True
+        assert node.name == "research_loop"
+
+    def test_default_name(self) -> None:
+        """RalphNode defaults to name='ralph'."""
+
+        class FakeRunner:
+            pass
+
+        node = RalphNode(runner=FakeRunner())
+        assert node.name == "ralph"
+
+    async def test_run_delegates(self) -> None:
+        """RalphNode.run() delegates to runner.run() and wraps in RunResult."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class FakeResult:
+            output: str = "done"
+
+        class FakeRunner:
+            async def run(self, input):
+                return FakeResult(output=f"result:{input}")
+
+        node = RalphNode(runner=FakeRunner(), name="test")
+        result = await node.run("hello")
+        assert result.output == "result:hello"
+
+    async def test_stream_delegates(self) -> None:
+        """RalphNode.stream() delegates to runner.stream() and yields events."""
+        expected_events = [
+            RalphIterationEvent(iteration=1, status="started", agent_name="test"),
+            TextEvent(text="output", agent_name="inner"),
+            RalphIterationEvent(iteration=1, status="completed", agent_name="test"),
+            RalphStopEvent(
+                stop_type="max_iterations",
+                reason="done",
+                iterations=1,
+                agent_name="test",
+            ),
+        ]
+
+        class FakeRunner:
+            async def stream(self, input, *, name="ralph"):
+                for ev in expected_events:
+                    yield ev
+
+        node = RalphNode(runner=FakeRunner(), name="test")
+        collected = []
+        async for event in node.stream("hello"):
+            collected.append(event)
+
+        assert collected == expected_events
+
+    def test_repr(self) -> None:
+        """__repr__ includes node name."""
+
+        class FakeRunner:
+            pass
+
+        node = RalphNode(runner=FakeRunner(), name="my_ralph")
+        assert "RalphNode" in repr(node)
+        assert "my_ralph" in repr(node)

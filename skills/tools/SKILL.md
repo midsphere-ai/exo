@@ -1,6 +1,6 @@
 ---
 name: exo:tools
-description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, injected_tool_args, large_output, structured output (output_type), or MCP server integration. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, injected_tool_args, large_output, output_type, add_mcp_server, structured output."
+description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, ToolContext for nested agent streaming, injected_tool_args, large_output, structured output (output_type), or MCP server integration. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, ToolContext, injected_tool_args, large_output, output_type, add_mcp_server, structured output, nested agent, inner agent events."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -11,6 +11,7 @@ description: "Use when creating tools for Exo agents — @tool decorator, Functi
 
 Use this skill when the developer needs to:
 - Create tools for an Exo agent using `@tool`, `FunctionTool`, or `Tool` ABC
+- Forward inner agent streaming events via `ToolContext`
 - Configure schema-only injected arguments (`injected_tool_args`)
 - Handle large tool output with workspace offloading (`large_output`)
 - Define structured output schemas (`output_type`)
@@ -24,10 +25,11 @@ Ask these questions to pick the right pattern:
 1. **Simple function → tool?** Use `@tool` decorator (handles sync/async, schema generation)
 2. **Need to customize name/description programmatically?** Use `FunctionTool(fn, name=..., description=...)`
 3. **Need stateful tool with custom execute logic?** Subclass `Tool` ABC
-4. **Tool returns huge results (>10KB)?** Set `large_output=True` — result offloaded to workspace, LLM gets a pointer
-5. **Need the LLM to see a parameter it doesn't actually fill?** Use `injected_tool_args` on Agent
-6. **Need validated structured output from the agent?** Set `output_type=MyPydanticModel` on Agent
-7. **Need tools from an MCP server?** Use `agent.add_mcp_server(config)`
+4. **Tool runs an inner agent and you want its events in the parent stream?** Declare `ctx: ToolContext` — auto-injected, hidden from LLM
+5. **Tool returns huge results (>10KB)?** Set `large_output=True` — result offloaded to workspace, LLM gets a pointer
+6. **Need the LLM to see a parameter it doesn't actually fill?** Use `injected_tool_args` on Agent
+7. **Need validated structured output from the agent?** Set `output_type=MyPydanticModel` on Agent
+8. **Need tools from an MCP server?** Use `agent.add_mcp_server(config)`
 
 ## Reference
 
@@ -178,7 +180,50 @@ Generates:
 **Rules:**
 - Parameters with defaults are optional (not in `required`)
 - `self`, `cls`, `*args`, `**kwargs` are skipped
+- `ToolContext`-typed parameters are skipped (injected at runtime, not exposed to LLM)
 - Multi-line `Args:` descriptions are joined with spaces
+
+### ToolContext (Nested Agent Event Forwarding)
+
+When a tool internally runs another agent, the inner agent's stream events are normally invisible. `ToolContext` makes them visible by providing an `emit()` method that pushes events to the parent agent's stream.
+
+**Opt-in:** Declare a `ToolContext` parameter in your tool function. It's auto-injected at runtime and excluded from the LLM-visible schema.
+
+```python
+from exo import tool, Agent, run, ToolContext
+from exo.types import TextEvent
+
+@tool
+async def deep_research(query: str, ctx: ToolContext) -> str:
+    """Run a research agent and stream its progress.
+
+    Args:
+        query: The research topic.
+    """
+    inner = Agent(name="researcher", instructions="Research deeply.")
+    parts = []
+    async for event in run.stream(inner, query, provider=provider):
+        ctx.emit(event)           # Forward event to parent's stream
+        if isinstance(event, TextEvent):
+            parts.append(event.text)
+    return "".join(parts)
+
+# Parent sees inner events in its stream
+parent = Agent(name="orchestrator", tools=[deep_research])
+async for event in run.stream(parent, "AI trends", provider=provider):
+    print(f"[{event.agent_name}] {event.type}")
+```
+
+**How it works:**
+1. `FunctionTool` detects the `ToolContext`-typed parameter at init time
+2. Schema generation skips it — the LLM never sees it
+3. `Agent._execute_tools()` injects a `ToolContext(agent_name, _event_queue)` into kwargs
+4. After tool execution, `run.stream()` drains the queue and yields all buffered events
+5. Inner events retain their original `agent_name` for distinguishing sources
+
+**Parameter name is flexible:** `ctx`, `tool_ctx`, `context` — any name works as long as the type is `ToolContext`.
+
+**Only works with `FunctionTool` / `@tool`:** Custom `Tool` ABC subclasses don't support auto-injection.
 
 ### injected_tool_args (Schema-Only Arguments)
 
@@ -337,3 +382,6 @@ agent.remove_tool("old_tool_name")
 - **`ToolError` vs other exceptions:** `ToolError` passes through directly; all other exceptions are wrapped in `ToolError(f"Tool '{name}' failed: {exc}")`
 - **Schema fallback:** Unannotated parameters default to `{"type": "string"}`
 - **`large_output` requires exo-context** — without it installed, offloading silently falls back to returning the full content
+- **`ToolContext` only works with `@tool` / `FunctionTool`** — `Tool` ABC subclasses and MCP tools don't get auto-injection
+- **`ToolContext.emit()` is non-blocking** — events are buffered and drained after tool execution, not yielded in real-time
+- **Sync tools can't use `ToolContext`** — `emit()` calls `asyncio.Queue.put_nowait()` which is unsafe from a thread. Use async tools for inner agent streaming.

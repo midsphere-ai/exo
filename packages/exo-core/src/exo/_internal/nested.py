@@ -19,10 +19,10 @@ Usage::
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-from exo.types import ExoError, Message, RunResult
+from exo.types import ExoError, Message, RunResult, StreamEvent
 
 
 class NestedSwarmError(ExoError):
@@ -95,6 +95,39 @@ class SwarmNode:
             max_retries=max_retries,
         )
 
+    async def stream(
+        self,
+        input: str,
+        *,
+        messages: Sequence[Message] | None = None,
+        provider: Any = None,
+        detailed: bool = False,
+        max_steps: int | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream inner swarm events with context isolation.
+
+        Each call creates a fresh execution context — the inner
+        Swarm builds its own stream and does not share mutable
+        state with the outer Swarm.
+
+        Args:
+            input: User query string.
+            messages: Not forwarded to inner swarm (context isolation).
+            provider: LLM provider, forwarded to inner swarm.
+            detailed: When ``True``, emit rich event types.
+            max_steps: Maximum LLM-tool round-trips per agent.
+
+        Yields:
+            ``StreamEvent`` instances from the inner swarm's execution.
+        """
+        async for event in self._swarm.stream(
+            input,
+            provider=provider,
+            detailed=detailed,
+            max_steps=max_steps,
+        ):
+            yield event
+
     def describe(self) -> dict[str, Any]:
         """Return a summary including the inner swarm's description."""
         return {
@@ -105,3 +138,70 @@ class SwarmNode:
 
     def __repr__(self) -> str:
         return f"SwarmNode(name={self.name!r}, inner={self._swarm!r})"
+
+
+class RalphNode:
+    """Wraps a RalphRunner so it can be used as a node in a Swarm.
+
+    The ``is_group = True`` marker makes the Swarm's duck-typing check
+    (``getattr(agent, "is_group", False)``) route to ``.stream()``
+    during streaming and ``.run()`` during non-streaming execution.
+
+    Args:
+        runner: The RalphRunner to wrap.
+        name: Node name for the outer Swarm's flow DSL.
+    """
+
+    def __init__(self, *, runner: Any, name: str = "ralph") -> None:
+        self._runner = runner
+        self.name = name
+        self.is_group = True  # triggers Swarm's .stream() delegation path
+
+    async def run(
+        self,
+        input: str,
+        *,
+        messages: Sequence[Message] | None = None,
+        provider: Any = None,
+        max_retries: int = 3,
+    ) -> RunResult:
+        """Execute the Ralph loop and return the final result.
+
+        Args:
+            input: User query string.
+            messages: Ignored (Ralph manages its own context).
+            provider: Ignored (Ralph uses its own execute_fn).
+            max_retries: Ignored (Ralph has its own retry logic).
+
+        Returns:
+            ``RunResult`` with the Ralph loop's final output.
+        """
+        result = await self._runner.run(input)
+        return RunResult(output=result.output)
+
+    async def stream(
+        self,
+        input: str,
+        *,
+        messages: Sequence[Message] | None = None,
+        provider: Any = None,
+        detailed: bool = False,
+        max_steps: int | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream Ralph loop events including inner agent events.
+
+        Args:
+            input: User query string.
+            messages: Ignored (Ralph manages its own context).
+            provider: Ignored (Ralph uses its own execute_fn).
+            detailed: Passed through for compatibility but not used by Ralph.
+            max_steps: Ignored (Ralph has its own stop conditions).
+
+        Yields:
+            ``StreamEvent`` instances from the Ralph loop execution.
+        """
+        async for event in self._runner.stream(input, name=self.name):
+            yield event
+
+    def __repr__(self) -> str:
+        return f"RalphNode(name={self.name!r})"

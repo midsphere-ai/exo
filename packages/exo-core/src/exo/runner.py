@@ -449,7 +449,12 @@ async def _stream(
                 for tcd in chunk.tool_call_deltas:
                     idx = tcd.index
                     if idx not in tc_acc:
-                        tc_acc[idx] = {"id": "", "name": "", "arguments": "", "thought_signature": None}
+                        tc_acc[idx] = {
+                            "id": "",
+                            "name": "",
+                            "arguments": "",
+                            "thought_signature": None,
+                        }
                     if tcd.id is not None:
                         tc_acc[idx]["id"] = tcd.id
                     if tcd.name is not None:
@@ -569,6 +574,15 @@ async def _stream(
                                 yield progress_evt
                         except Exception:
                             break
+
+            # Drain inner agent events pushed by tools via ToolContext.emit()
+            while not agent._event_queue.empty():
+                try:
+                    inner_event = agent._event_queue.get_nowait()
+                    if _passes_filter(inner_event):
+                        yield inner_event
+                except Exception:
+                    break
 
             # Emit ToolResultEvent for each tool execution when detailed
             if detailed:

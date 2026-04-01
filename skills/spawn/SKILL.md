@@ -1,6 +1,6 @@
 ---
 name: exo:spawn
-description: "Use when an Exo agent needs to dynamically spawn copies of itself for parallel sub-tasks — allow_self_spawn, spawn_self() tool, max_spawn_depth, depth guards, memory isolation, context forking. Triggers on: spawn_self, allow_self_spawn, self spawn, max_spawn_depth, parallel sub-task, agent clone, dynamic sub-agent."
+description: "Use when an Exo agent needs to dynamically spawn copies of itself for parallel sub-tasks — allow_self_spawn, spawn_self() tool, max_spawn_depth, max_spawn_children, depth guards, memory isolation, context forking. Triggers on: spawn_self, allow_self_spawn, self spawn, max_spawn_depth, max_spawn_children, parallel sub-task, agent clone, dynamic sub-agent."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -12,7 +12,7 @@ description: "Use when an Exo agent needs to dynamically spawn copies of itself 
 Use this skill when the developer needs to:
 - Let an agent dynamically spawn copies of itself at runtime
 - Delegate parallel sub-tasks from within an agent's execution
-- Configure spawn depth limits
+- Configure spawn depth limits and per-call child caps
 - Understand memory isolation between parent and spawned children
 - Understand context forking for spawned agents
 
@@ -20,8 +20,9 @@ Use this skill when the developer needs to:
 
 1. **Does the agent need to delegate parallel work to itself?** → Set `allow_self_spawn=True`
 2. **How deep should recursive spawning go?** → Set `max_spawn_depth` (default 3; root agent at depth 0)
-3. **Does the child need to share long-term knowledge?** → Automatic: shared long-term memory, fresh short-term
-4. **Should children be able to spawn further?** → Default: No. Children get `allow_self_spawn=False`. For multi-level, parent must have `max_spawn_depth > 2`.
+3. **How many children per single spawn_self call?** → Set `max_spawn_children` (default 4). The LLM receives an error if it passes more tasks than this limit.
+4. **Does the child need to share long-term knowledge?** → Automatic: shared long-term memory, fresh short-term
+5. **Should children be able to spawn further?** → Default: No. Children get `allow_self_spawn=False`. For multi-level, parent must have `max_spawn_depth > 2`.
 
 ## Reference
 
@@ -39,33 +40,39 @@ agent = Agent(
         "After all spawn_self calls return, synthesize the results."
     ),
     tools=[search, summarize],
-    allow_self_spawn=True,       # Registers spawn_self(task) tool automatically
+    allow_self_spawn=True,       # Registers spawn_self(tasks) tool automatically
     max_spawn_depth=2,           # Root (depth 0) + 1 level of children (depth 1)
+    max_spawn_children=4,        # Up to 4 children per spawn_self call (default)
 )
 ```
 
 **Agent parameters:**
-- `allow_self_spawn: bool = False` — When `True`, registers the `spawn_self(task: str) -> str` tool
+- `allow_self_spawn: bool = False` — When `True`, registers the `spawn_self(tasks: list[str]) -> str` tool
 - `max_spawn_depth: int = 3` — Maximum recursive depth. Default allows root + 2 levels.
+- `max_spawn_children: int = 4` — Maximum number of tasks the LLM can pass in a single `spawn_self` call. If exceeded, the tool returns an error string instead of spawning.
 
-### spawn_self(task: str) -> str
+### spawn_self(tasks: list[str]) -> str
 
-Auto-registered tool that the LLM calls to spawn a child agent:
+Auto-registered tool that the LLM calls to spawn child agents in parallel:
 
-**What happens when the LLM calls `spawn_self(task)`:**
+**What happens when the LLM calls `spawn_self(tasks)`:**
 
-1. **Depth check:** If `parent._spawn_depth >= max_spawn_depth`, returns error string (no exception)
-2. **Provider check:** Verifies the parent's `_current_provider` is available
-3. **Child agent creation:**
+1. **Empty check:** If `tasks` is empty, returns error string (no exception)
+2. **Children cap check:** If `len(tasks) > max_spawn_children`, returns error string (no exception)
+3. **Depth check:** If `parent._spawn_depth >= max_spawn_depth`, returns error string (no exception)
+4. **Provider check:** Verifies the parent's `_current_provider` is available
+5. **Child tools built once:** Parent's tools **minus** `spawn_self` and context tools
+6. **Parallel child creation and execution** via `asyncio.TaskGroup` — one child agent per task, all running concurrently:
    - Same `model`, `instructions`, `temperature`, `max_tokens`, `max_steps`
-   - Parent's tools **minus** `spawn_self` and context tools
    - Fresh `ShortTermMemory` (conversation isolation)
    - Shared `LongTermMemory` instance (knowledge accumulates across spawns)
    - Forked context via `parent.context.fork(child_name)` (reads inherited, writes isolated)
    - `allow_self_spawn=False` — children cannot spawn further
    - `_spawn_depth = parent._spawn_depth + 1`
-4. **Execution:** Runs child agent on `task` with same provider
-5. **Returns:** `result.text` (string)
+7. **Returns:**
+   - **Single task** (`len(tasks) == 1`): raw `result.text` string
+   - **Multiple tasks**: formatted as `[Task 1]: result\n\n[Task 2]: result\n\n...`
+   - **Per-child errors**: if an individual child fails, its slot becomes `[child N error] <message>` (1-indexed)
 
 ### Child Agent Properties
 
@@ -96,13 +103,15 @@ Parent Agent
 ├── ShortTermMemory: [msg1, msg2, msg3, ...]  ← parent's conversation
 ├── LongTermMemory: shared_store               ← shared across all
 │
-├── Child A (spawn_self("Research topic A"))
-│   ├── ShortTermMemory: []                    ← fresh, empty
-│   └── LongTermMemory: shared_store           ← same reference
-│
-└── Child B (spawn_self("Research topic B"))
-    ├── ShortTermMemory: []                    ← fresh, empty
-    └── LongTermMemory: shared_store           ← same reference
+└── spawn_self(tasks=["Research topic A", "Research topic B"])
+    │
+    ├── Child A (tasks[0]: "Research topic A")   ← runs in parallel
+    │   ├── ShortTermMemory: []                  ← fresh, empty
+    │   └── LongTermMemory: shared_store         ← same reference
+    │
+    └── Child B (tasks[1]: "Research topic B")   ← runs in parallel
+        ├── ShortTermMemory: []                  ← fresh, empty
+        └── LongTermMemory: shared_store         ← same reference
 ```
 
 - **Short-term:** Each child gets a brand new `ShortTermMemory` — no access to parent's or sibling's conversation
@@ -113,11 +122,20 @@ Parent Agent
 All errors return strings (no exceptions raised to the LLM):
 
 ```
+"[spawn_self error] Empty tasks list. Provide at least one task."
+"[spawn_self error] Too many tasks (6). Maximum is 4 per call."
 "[spawn_self error] Maximum spawn depth (2) reached. Cannot spawn further sub-agents."
 "[spawn_self error] No provider available for spawned agent."
 ```
 
-The LLM sees these as tool results and can react accordingly.
+Per-child errors (when an individual child raises during execution):
+
+```
+"[child 1 error] Connection timeout"
+"[child 3 error] Rate limit exceeded"
+```
+
+The LLM sees these as tool results and can react accordingly. Per-child errors are embedded in the formatted output — other children's results are still returned.
 
 ### Provider Lifecycle
 
@@ -143,7 +161,7 @@ Depth 2: Grandchild        → can spawn (2 < 3) IF allow_self_spawn=True
 Depth 3: Great-grandchild  → blocked (3 >= 3), returns error string
 ```
 
-**Important:** By default, children get `allow_self_spawn=False`, so only the root can spawn. For multi-level spawning, you would need to create children with `allow_self_spawn=True` manually (the auto-spawned children do not get this).
+**Important:** By default, children get `allow_self_spawn=False`, so only the root can spawn. Children cannot spawn further by default.
 
 ## Patterns
 
@@ -155,12 +173,13 @@ agent = Agent(
     model="openai:gpt-4o",
     instructions=(
         "You research topics by delegating to sub-agents. "
-        "For each distinct sub-topic, call spawn_self with a focused task. "
-        "After all calls return, synthesize findings into a report."
+        "Pass all sub-topics in a single spawn_self call as a list. "
+        "After spawn_self returns, synthesize findings into a report."
     ),
     tools=[web_search, fetch_page],
     allow_self_spawn=True,
     max_spawn_depth=2,
+    max_spawn_children=6,   # Allow up to 6 parallel children
     memory=None,    # Disable memory for stateless research
     context=None,   # Disable context for simplicity
 )
@@ -170,9 +189,9 @@ result = await run(
     "Compare AI chip architectures: NVIDIA H100, Google TPU v5, AMD MI300X",
     provider=provider,
 )
-# LLM calls spawn_self 3 times (once per chip)
-# Each child researches one chip independently
-# Parent synthesizes all results
+# LLM calls spawn_self(tasks=["Research NVIDIA H100", "Research Google TPU v5", "Research AMD MI300X"])
+# All 3 children run in parallel via asyncio.TaskGroup
+# Parent receives "[Task 1]: ...\n\n[Task 2]: ...\n\n[Task 3]: ..." and synthesizes
 ```
 
 ### Data Processing Fan-Out
@@ -181,12 +200,14 @@ result = await run(
 agent = Agent(
     name="processor",
     instructions=(
-        "Process each data item by spawning a sub-agent. "
-        "Use spawn_self(task='Process item: <item>') for each."
+        "Process data items by spawning sub-agents. "
+        "Use spawn_self(tasks=['Process item: X', 'Process item: Y', ...]) "
+        "to handle multiple items in parallel."
     ),
     tools=[validate, transform, store],
     allow_self_spawn=True,
     max_spawn_depth=2,
+    max_spawn_children=8,   # Higher cap for batch processing
 )
 ```
 
@@ -207,6 +228,7 @@ agent = Agent(
         long_term=shared_lt,
     ),
     allow_self_spawn=True,
+    max_spawn_children=4,
 )
 # Children will share shared_lt but get fresh ShortTermMemory
 ```
@@ -214,10 +236,13 @@ agent = Agent(
 ## Gotchas
 
 - **Children get `allow_self_spawn=False`** — only the parent can spawn. Children cannot spawn further by default.
-- **Spawned agents run sequentially** from the parent's perspective — each `spawn_self(task)` call awaits completion before returning. The LLM can issue multiple spawn_self calls in one step, but they execute via the normal parallel tool execution path.
+- **Children within a single `spawn_self` call run in parallel** via `asyncio.TaskGroup`. All children from one call execute concurrently, not sequentially.
+- **`max_spawn_children` caps tasks per call, not total children** — the LLM can make multiple `spawn_self` calls across different tool-call steps, each spawning up to `max_spawn_children` children. The cap applies per invocation.
+- **Single vs. multiple return format differs** — a single-task call returns the raw result string; multiple tasks return the `[Task N]: result` formatted output. Design instructions accordingly.
+- **Per-child errors don't abort siblings** — if one child fails, its slot gets `[child N error] ...` but other children continue and their results are still returned.
 - **Context tools are excluded** from children's tool sets — children get fresh context tool bindings via their own `__init__`
 - **`retrieve_artifact` is also excluded** — auto-registered by child's `__init__` if any `large_output=True` tool exists
-- **Guide the LLM via instructions** — the LLM decides when to spawn. Be explicit: "use spawn_self for each country separately"
+- **Guide the LLM via instructions** — the LLM decides when to spawn. Be explicit: "pass all countries as a list to spawn_self"
 - **Memory=None propagates** — if parent has `memory=None`, children also get `memory=None`
 - **Context fork fallback** — if `parent.context.fork()` fails, child shares parent's context (fallback, not isolation)
 - **Provider is shared** — parent and all children use the same provider instance. Rate limits and quotas are shared.

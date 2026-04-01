@@ -1,6 +1,6 @@
 ---
 name: exo:swarms
-description: "Use when building multi-agent systems with Exo — Swarm orchestration, flow DSL, workflow/handoff/team modes, ParallelGroup, SerialGroup, BranchNode, LoopNode, agent delegation. Triggers on: swarm, multi-agent, workflow, handoff, team mode, flow DSL, ParallelGroup, SerialGroup, agent pipeline, delegation."
+description: "Use when building multi-agent systems with Exo — Swarm orchestration, flow DSL, workflow/handoff/team modes, ParallelGroup, SerialGroup, BranchNode, LoopNode, SwarmNode, RalphNode, agent delegation. Triggers on: swarm, multi-agent, workflow, handoff, team mode, flow DSL, ParallelGroup, SerialGroup, SwarmNode, RalphNode, agent pipeline, delegation, nested swarm."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -15,6 +15,8 @@ Use this skill when the developer needs to:
 - Choose between workflow, handoff, and team modes
 - Use ParallelGroup or SerialGroup for concurrent/sequential execution
 - Add conditional branching (BranchNode) or iteration (LoopNode)
+- Nest swarms inside swarms via `SwarmNode` (with streaming support)
+- Plug a `RalphRunner` into a swarm via `RalphNode`
 - Stream events from multi-agent execution
 
 ## Decision Guide
@@ -25,6 +27,8 @@ Use this skill when the developer needs to:
 4. **Need agents to run in parallel within a workflow?** → `ParallelGroup(agents=[a, b])` as a node
 5. **Need conditional routing?** → `BranchNode` evaluates state and jumps to a target agent
 6. **Need iteration?** → `LoopNode` repeats body agents until condition or max_iterations
+7. **Need a swarm as a node in another swarm?** → `SwarmNode(swarm=inner)` — supports `run()` and `stream()` with context isolation
+8. **Need a Ralph iterative loop as a node?** → `RalphNode(runner=ralph_runner)` — streams `RalphIterationEvent` + inner events
 
 ## Reference
 
@@ -279,6 +283,63 @@ swarm = Swarm(
     mode="workflow",
 )
 ```
+
+### SwarmNode (Nested Swarm)
+
+Wraps a Swarm so it can be used as a node in another Swarm. Supports both `run()` and `stream()` with context isolation.
+
+```python
+from exo import Swarm, SwarmNode, Agent
+
+# Inner pipeline
+inner = Swarm(agents=[a, b], flow="a >> b")
+node = SwarmNode(swarm=inner, name="inner_pipeline")
+
+# Outer pipeline uses inner as a node
+outer = Swarm(agents=[c, node, d], flow="c >> inner_pipeline >> d")
+
+# Streaming works — inner events flow through
+async for event in outer.stream("Query", provider=provider):
+    print(f"[{event.agent_name}] {event.type}")
+```
+
+**Key properties:**
+- `is_swarm = True` — triggers Swarm's duck-typing detection
+- `stream()` delegates to inner swarm's `stream()` with context isolation
+- `run()` delegates to inner swarm's `run()` — no message history forwarding
+- Inner swarm creates its own `RunState` — no shared mutable state
+
+### RalphNode (Ralph Loop in a Swarm)
+
+Wraps a `RalphRunner` so it can be placed in a Swarm's agent list. The `is_group = True` marker triggers the Swarm's stream delegation path.
+
+```python
+from exo import RalphNode, Swarm, Agent
+from exo.eval.ralph import RalphRunner
+
+researcher = Agent(name="researcher", instructions="Research deeply.")
+ralph = RalphNode(
+    runner=RalphRunner.from_agent(researcher, scorers=[quality_scorer]),
+    name="research_loop",
+)
+summarizer = Agent(name="summarizer", instructions="Summarize findings.")
+
+swarm = Swarm(
+    agents=[ralph, summarizer],
+    flow="research_loop >> summarizer",
+)
+
+# Stream yields RalphIterationEvent, inner agent events, RalphStopEvent,
+# then summarizer's events
+async for event in swarm.stream("Analyze market trends", provider=provider):
+    print(event)
+```
+
+**Key properties:**
+- `is_group = True` — triggers Swarm's `getattr(agent, "is_group", False)` check
+- `stream()` delegates to `RalphRunner.stream()` with the node's name
+- `run()` delegates to `RalphRunner.run()`, wraps result in `RunResult`
+- Provider and messages are ignored — Ralph manages its own execution context
 
 ## Gotchas
 
