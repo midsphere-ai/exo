@@ -5,106 +5,436 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
-  <img alt="Exo — Multi-Agent Framework" src="docs/assets/logo-light.svg" width="560">
+  <img alt="Exo" src="docs/assets/logo-light.svg" width="560">
 </picture>
 
 <br><br>
 
-<p><strong>Build exotic, cutting-edge agents with Exo.</strong></p>
+<h3>Smart agents by default, not by configuration.</h3>
 
 <br>
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e.svg?style=flat-square)](LICENSE)
-[![UV](https://img.shields.io/badge/uv-workspace-DE5FE9.svg?style=flat-square&logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
+[![UV Workspace](https://img.shields.io/badge/uv-workspace-DE5FE9.svg?style=flat-square&logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![Pydantic v2](https://img.shields.io/badge/pydantic-v2-E92063.svg?style=flat-square&logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
-[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-D7FF64.svg?style=flat-square&logo=ruff&logoColor=D7FF64&labelColor=261230)](https://docs.astral.sh/ruff/)
 
 <br>
 
-[Getting Started](docs/getting-started/) · [Guides](docs/guides/) · [API Reference](docs/reference/) · [Examples](examples/)
+[Docs](docs/getting-started/) · [Examples](examples/) · [API Reference](docs/reference/)
 
----
+<br>
+
+```
+                         ✦
+              .    ·  ✧       .    ·
+          ·        E X O S P H E R E        ·
+       .    The outermost layer.    .
+            Invisible, but everything     ✧
+     ✦      above it depends on it.
+          ·    .        ·    .        ·
+                    ✦
+```
 
 </div>
 
 <br>
 
-## Why Exo
+---
 
-Exo is the next-generation rewrite of [AWorld](https://github.com/inclusionAI/AWorld), designed around **composability**, **type safety**, and a clean **async-first** API.
-
-> One `Agent` class. Three execution modes. Zero inheritance hierarchies.
+<br>
 
 ```python
-from exo import Agent, run, tool
+from exo import Agent, run
 
-@tool
-async def get_weather(city: str) -> str:
-    """Return the current weather for a city."""
-    return f"Sunny, 22°C in {city}."
+agent = Agent(name="assistant", model="openai:gpt-4o")
 
-agent = Agent(
-    name="weather-bot",
-    model="openai:gpt-4o-mini",
-    instructions="You are a helpful weather assistant.",
-    tools=[get_weather],
-)
+result = run.sync(agent, "What should I know about quantum computing?")
+```
 
-result = run.sync(agent, "What's the weather in Tokyo?")
-print(result.output)
+<div align="center">
+<table>
+<tr><td>
+
+**This 3-line agent already has:**
+
+</td></tr>
+<tr><td>
+
+```
+  ╭─ MEMORY ──────────────────────────────────────────────────╮
+  │  Short-term history + ChromaDB vector long-term storage   │
+  │  Relevant memories auto-injected as <knowledge> blocks    │
+  ╰───────────────────────────────────────────────────────────╯
+  ╭─ CONTEXT ENGINE ──────────────────────────────────────────╮
+  │  9 neurons dynamically compose the system prompt from     │
+  │  task state, history, workspace, facts, entities, todos   │
+  ╰───────────────────────────────────────────────────────────╯
+  ╭─ PRESSURE MANAGEMENT ────────────────────────────────────╮
+  │  Processor pipeline compresses tool chains, offloads      │
+  │  oversized messages, triggers LLM summarization           │
+  ╰───────────────────────────────────────────────────────────╯
+  ╭─ BUDGET AWARENESS ───────────────────────────────────────╮
+  │  Per-agent token tracking, auto-compression at limits     │
+  ╰───────────────────────────────────────────────────────────╯
+  ╭─ WORKSPACE ──────────────────────────────────────────────╮
+  │  Artifacts auto-chunked & TF-IDF indexed for retrieval    │
+  │  Agent gets search_knowledge, add_todo, read_file tools   │
+  ╰───────────────────────────────────────────────────────────╯
+```
+
+</td></tr>
+<tr><td>
+
+*You didn't configure any of that. It's just what an agent should be.*
+
+</td></tr>
+</table>
+</div>
+
+<br>
+
+## Install
+
+```bash
+pip install exo              # everything
+pip install exo-core         # just the agent runtime
+```
+
+> Requires Python 3.11+
+
+<br>
+
+---
+
+<div align="center">
+
+```
+     ·    .    ·        ✧        ·    .    ·
+              W H Y   E X O
+     .    ·        .        ·    .        ✦
+```
+
+</div>
+
+Other frameworks give you a blank agent and a long checklist: wire up memory, manage context windows, handle token budgets, write summarization logic, build knowledge retrieval. You spend weeks on plumbing before your agent does anything interesting.
+
+Exo agents are intelligent on line one. The agent has a cognitive architecture — not just a prompt and a tool loop, but a full system for building context, managing memory, reasoning about its own state, and operating under token pressure.
+
+```python
+# Full cognitive architecture: neurons, memory, context processors,
+# knowledge retrieval, workspace indexing, budget-aware compression.
+agent = Agent(name="agent", model="openai:gpt-4o")
+
+# Don't need all that? Opt out.
+bare = Agent(name="bare", model="openai:gpt-4o", memory=None, context=None)
 ```
 
 <br>
 
-## Highlights
+---
+
+<div align="center">
+
+```
+     ·    .    ·        ✧        ·    .    ·
+      T H E   C O N T E X T   E N G I N E
+     .    ·        .        ·    .        ✦
+```
+
+*The core of what makes Exo agents deeply smart.*
+
+</div>
+
+<br>
+
+Most frameworks treat context as a list of messages you trim when it gets too long. Exo treats context as a **living, structured system** the agent builds, queries, and manages.
+
+<br>
+
+### Neurons
+
+<div align="center">
+
+*Composable prompt architecture — the agent's system prompt assembles itself.*
+
+</div>
+
+<br>
+
+Agent prompts aren't static strings. They're dynamically assembled from **neurons** — modular, priority-ordered, async prompt fragments that render based on what context exists:
+
+```
+ Priority Flow ─────────────────────────────────────────────────
+ 
+  ┌──────────────┐
+  │  TaskNeuron   │  P:1    Current task, expected output, subtask plan
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │  TodoNeuron   │  P:2    Checklist with [x]/[ ] progress markers
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │ HistoryNeuron │  P:10   Windowed conversation history
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │KnowledgeNeuron│  P:20   Relevant knowledge base snippets
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │WorkspaceNeuron│  P:30   Available artifacts with type and size
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │  SkillNeuron  │  P:40   Active skills and capabilities
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │  FactNeuron   │  P:50   Established facts from prior reasoning
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │ EntityNeuron  │  P:60   Named entities in the conversation
+  └──────┬───────┘
+         │
+  ┌──────▼───────┐
+  │ SystemNeuron  │  P:100  Date/time, platform, environment info
+  └──────────────┘
+
+ ────────────────────────────────────── ▸ Assembled System Prompt
+```
+
+Each neuron only renders if its data exists in state. A research agent gets task + history + knowledge + workspace. A quick Q&A agent might only get history + system. **The prompt adapts to the work.**
+
+<br>
+
+### Context Processors
+
+<div align="center">
+
+*Automatic pressure management — before every LLM call.*
+
+</div>
+
+<br>
+
+```
+  Messages In                                              Messages Out
+  ━━━━━━━━━━                                              ━━━━━━━━━━━
+       │                                                       ▲
+       ▼                                                       │
+  ┌─────────────────────────────────────────────────────────────┐
+  │                   PROCESSOR PIPELINE                        │
+  │                                                             │
+  │  ┌─────────────────────┐   5 tool calls → 1 summary msg    │
+  │  │ DialogueCompressor  │   "Called search, parse, extract,  │
+  │  │                     │    validate, store. Results: ..."   │
+  │  └─────────┬───────────┘                                    │
+  │            ▼                                                │
+  │  ┌─────────────────────┐   >10KB messages → [[OFFLOAD]]    │
+  │  │  MessageOffloader   │   originals stored for retrieval   │
+  │  │                     │   system messages never offloaded  │
+  │  └─────────┬───────────┘                                    │
+  │            ▼                                                │
+  │  ┌─────────────────────┐   history > threshold →            │
+  │  │ SummarizeProcessor  │   LLM-generated summary replaces  │
+  │  │                     │   older messages, keeps recent     │
+  │  └─────────┬───────────┘                                    │
+  │            ▼                                                │
+  │  ┌─────────────────────┐   keep last N rounds, respects    │
+  │  │ RoundWindowProcessor│   tool-chain boundaries            │
+  │  └─────────────────────┘                                    │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+
+  The agent never sees token limits — it just has the right context.
+```
+
+<br>
+
+### Automation Modes
+
+<div align="center">
+
+*Three presets. From manual control to full autonomy.*
+
+</div>
+
+<br>
+
+```
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                                                                 │
+  │   PILOT          COPILOT           NAVIGATOR                    │
+  │   ○ ─ ─ ─ ─ ─ ─ ◉ ─ ─ ─ ─ ─ ─ ─ ● ─ ─ ─ ─ ▸                 │
+  │   manual         balanced          autonomous                   │
+  │                                                                 │
+  │   100 rounds     20 rounds         10 rounds                    │
+  │   you manage     auto-summarize    aggressive compression       │
+  │   full history   offload at 50     auto-retrieval enabled       │
+  │                  ↑ default                                      │
+  │                                                                 │
+  └─────────────────────────────────────────────────────────────────┘
+```
+
+```python
+Agent(name="a", model="openai:gpt-4o", context_mode="pilot")      # you drive
+Agent(name="a", model="openai:gpt-4o", context_mode="copilot")    # balanced (default)
+Agent(name="a", model="openai:gpt-4o", context_mode="navigator")  # fully autonomous
+```
+
+<br>
+
+### Self-Manipulation Tools
+
+<div align="center">
+
+*The agent reasons about what it's done, what it knows, and what's left.*
+
+</div>
+
+<br>
+
+Every agent with an active context engine gets tools to manage its own execution:
+
+```python
+# The agent can call these during its tool loop:
+add_todo("Research competing approaches")        # track its own progress
+complete_todo(0)                                  # mark steps done
+search_knowledge("prior findings on X")          # query its workspace index
+grep_knowledge("results.csv", r"accuracy.*\d+")  # regex search within artifacts
+read_file("data/input.json")                     # read from working directory
+```
+
+These aren't user-facing tools. They're the agent's inner monologue made actionable.
+
+<br>
+
+### Workspace & Auto-Indexing
+
+When an agent writes an artifact (code, CSVs, analysis), the content is automatically chunked and TF-IDF indexed:
+
+```
+  Agent writes artifact          Auto-indexed
+  ━━━━━━━━━━━━━━━━━━━          ━━━━━━━━━━━━━
+                                ┌──────────────────┐
+  workspace.write("analysis")──▸│ Chunker (512ch)  │
+                                │ Overlap: 64ch    │
+                                └────────┬─────────┘
+                                         ▼
+                                ┌──────────────────┐
+                                │ TF-IDF Indexer   │
+                                │ search("query")  │──▸ Scored chunks
+                                └──────────────────┘
+
+  Artifacts are versioned. Revert, explore history, observe changes.
+```
+
+<br>
+
+### Context Forking
+
+When an agent spawns subtasks, each child gets a **forked context** with hierarchical state inheritance:
+
+```
+  ┌─────────────────────────────────────────────────┐
+  │              PARENT CONTEXT                      │
+  │  state: { config, knowledge, workspace }         │
+  │  tokens: 1,200                                   │
+  │                                                  │
+  │     fork()          fork()          fork()       │
+  │       │               │               │          │
+  │  ┌────▼────┐    ┌─────▼────┐    ┌─────▼────┐    │
+  │  │ Child 1 │    │ Child 2  │    │ Child 3  │    │
+  │  │ reads ↑ │    │ reads ↑  │    │ reads ↑  │    │
+  │  │writes ↓ │    │writes ↓  │    │writes ↓  │    │
+  │  └────┬────┘    └─────┬────┘    └─────┬────┘    │
+  │       │               │               │          │
+  │       └───── merge() ─┴─── merge() ───┘          │
+  │                                                  │
+  │  Only net-new tokens counted. No double-booking. │
+  └─────────────────────────────────────────────────┘
+```
+
+Children inherit parent config. Writes are local. Merges aggregate results with accurate token accounting. This is how self-spawning agents work under the hood.
+
+<br>
+
+---
+
+<div align="center">
+
+```
+     ·    .    ·        ✧        ·    .    ·
+         A G E N T   C A P A B I L I T I E S
+     .    ·        .        ·    .        ✦
+```
+
+</div>
+
+<br>
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-### 🧩 Core
+### Three Ways to Run
 
-- Single composable `Agent` with tools, handoffs, hooks, memory, and structured output
-- `@tool` decorator auto-generates JSON schemas from signatures and docstrings
-- Three modes: `run()` async · `run.sync()` blocking · `run.stream()` real-time
-- Lifecycle hooks: `PRE_LLM_CALL`, `POST_TOOL_CALL`, `START`, `FINISHED`, `ERROR`
-- Config-driven: load agents and swarms from YAML
+```python
+from exo import Agent, run
 
-</td>
-<td width="50%" valign="top">
+agent = Agent(
+    name="a",
+    model="openai:gpt-4o",
+    tools=[...],
+)
 
-### 🐝 Multi-Agent
+# Async
+result = await run(agent, "Do the thing")
 
-- Workflow (sequential), handoff (agent-driven), and team (lead-worker) swarm modes
-- Flow DSL: `"researcher >> writer >> reviewer"`
-- `ParallelGroup` and `SerialGroup` for concurrent/sequential sub-pipelines
-- Agent-to-Agent protocol (A2A) for network-based delegation
-- Distributed execution with Redis task queue and Temporal workflows
+# Blocking
+result = run.sync(agent, "Do the thing")
 
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
+# Streaming
+async for event in run.stream(agent, "..."):
+    match event.type:
+        case "text":
+            print(event.text, end="")
+        case "tool_call":
+            print(f"> {event.tool_name}")
+```
 
-### 🧠 Intelligence
-
-- Context engine with hierarchical state, neurons, and workspace
-- Short/long-term memory with SQLite, Postgres, and vector backends
-- Structured output constrained to Pydantic models
-- Skills system for dynamic, reusable capability packages
-- Human-in-the-loop: pause for input, confirmation, or review
+Events: `Text` `ToolCall` `ToolResult` `Step` `Usage` `Status` `Error` `Reasoning`
 
 </td>
 <td width="50%" valign="top">
 
-### ⚡ Platform
+### Tools
 
-- **LLM providers:** OpenAI, Anthropic, Gemini, Vertex AI — extensible via `ModelProvider` ABC
-- MCP client/server for tool interoperability
-- OpenTelemetry tracing with `@traced` decorator
-- Evaluation: rule-based and LLM-as-judge scorers, reflection, pass@k
-- Training: trajectory collection, data synthesis, VeRL/RLHF integration
+Type hints in, JSON schema out:
+
+```python
+from exo import tool
+
+@tool
+async def search_db(
+    query: str,
+    limit: int = 10,
+) -> list[dict]:
+    """Search the database.
+
+    Args:
+        query: The search query.
+        limit: Max results to return.
+    """
+    return await db.search(query, limit=limit)
+```
+
+The `@tool` decorator extracts name, description, and full parameter schema from the signature and docstring. 
+
+`@tool(large_output=True)` offloads results to the workspace and auto-indexes for retrieval.
 
 </td>
 </tr>
@@ -112,76 +442,84 @@ print(result.output)
 
 <br>
 
-<div align="center">
+<table>
+<tr>
+<td width="50%" valign="top">
 
-> 🌐 **Exo Web** — Full-featured agent platform with visual workflow editor, real-time playground, knowledge bases, scheduling, and team management. Built with Astro 5 + React 19 + FastAPI.
+### Planning
 
-</div>
+Complex tasks fail when agents jump straight into tool calls. The planning system adds a dedicated reasoning phase:
+
+```python
+agent = Agent(
+    name="architect",
+    model="openai:gpt-4o",
+    planning_enabled=True,
+    planning_model="openai:o3",
+)
+```
+
+```
+  ┌─────────┐     ┌──────────┐
+  │ PLANNER │────▸│ EXECUTOR │
+  │         │     │          │
+  │ reason  │     │ tools    │
+  │ plan    │     │ actions  │
+  │ decomp. │     │ results  │
+  └─────────┘     └──────────┘
+  isolated ctx    follows plan
+  no side effects full tool access
+```
+
+Planning transcript is discarded. Only the final plan survives.
+
+</td>
+<td width="50%" valign="top">
+
+### Self-Spawning Agents
+
+Agents recognize when they've hit a ceiling and split themselves into parallel workers:
+
+```python
+agent = Agent(
+    name="researcher",
+    model="openai:gpt-4o",
+    allow_self_spawn=True,
+    max_spawn_children=5,
+    max_spawn_depth=2,
+)
+```
+
+```
+         ┌──────────┐
+         │  PARENT  │
+         └────┬─────┘
+        spawn_self()
+      ┌───┬───┼───┬───┐
+      ▼   ▼   ▼   ▼   ▼
+     C1  C2  C3  C4  C5
+      │   │   │   │   │
+      └───┴───┼───┴───┘
+           merge()
+         ┌────▼─────┐
+         │  PARENT  │
+         │ + results│
+         └──────────┘
+```
+
+Children: forked context, shared long-term memory. Knowledge accumulates across all spawns.
+
+</td>
+</tr>
+</table>
 
 <br>
 
-## Installation
+<table>
+<tr>
+<td width="50%" valign="top">
 
-```bash
-# Meta-package — installs core + all standard extras
-pip install exo
-
-# Minimal — agent, tools, runner, swarm only
-pip install exo-core
-
-# Core + LLM providers
-pip install exo-core exo-models
-
-# Distributed execution
-pip install exo-distributed
-```
-
-> **Requires Python 3.11+**
-
-<br>
-
-## Quick Start
-
-### 🔴 Streaming
-
-Rich streaming events provide real-time visibility into agent execution:
-
-```python
-import asyncio
-from exo import Agent, run, tool
-
-@tool
-async def get_weather(city: str) -> str:
-    """Return the current weather for a city."""
-    return f"Sunny, 22°C in {city}."
-
-agent = Agent(name="weather-bot", model="openai:gpt-4o-mini", tools=[get_weather])
-
-async def main():
-    async for event in run.stream(agent, "What's the weather in Tokyo?"):
-        if event.type == "text":
-            print(event.text, end="", flush=True)
-        elif event.type == "tool_call":
-            print(f"\n[Tool: {event.tool_name}]")
-    print()
-
-asyncio.run(main())
-```
-
-<details>
-<summary><b>Enable detailed events for full visibility</b></summary>
-
-```python
-async for event in run.stream(agent, "...", detailed=True):
-    # TextEvent, ToolCallEvent, ToolResultEvent, StepEvent, ErrorEvent, and more
-    ...
-```
-
-</details>
-
-### 🐝 Multi-Agent Swarm
-
-Chain agents with the flow DSL:
+### Multi-Agent Orchestration
 
 ```python
 from exo import Agent, Swarm, run
@@ -189,200 +527,291 @@ from exo import Agent, Swarm, run
 researcher = Agent(
     name="researcher",
     model="openai:gpt-4o",
-    instructions="Research the given topic and provide key facts.",
+    instructions="Research thoroughly.",
 )
-
 writer = Agent(
     name="writer",
     model="openai:gpt-4o",
-    instructions="Write a polished summary from the research notes you receive.",
+    instructions="Write from research.",
+)
+reviewer = Agent(
+    name="reviewer",
+    model="openai:gpt-4o",
+    instructions="Review for accuracy.",
 )
 
 swarm = Swarm(
-    agents=[researcher, writer],
-    flow="researcher >> writer",
-    mode="workflow",
+    agents=[researcher, writer, reviewer],
+    flow="researcher >> writer >> reviewer",
 )
 
-result = run.sync(swarm, "Tell me about quantum computing")
-print(result.output)
+result = run.sync(swarm, "Fusion energy")
 ```
 
-### 📐 Structured Output
-
-Constrain agent output to Pydantic models:
-
-```python
-from pydantic import BaseModel
-from exo import Agent, run
-
-class WeatherReport(BaseModel):
-    city: str
-    temperature_celsius: float
-    condition: str
-
-agent = Agent(
-    name="structured-bot",
-    model="openai:gpt-4o-mini",
-    instructions="Return weather data in the requested format.",
-    output_type=WeatherReport,
-)
-
-result = run.sync(agent, "Weather in Paris?")
-print(result.output)  # WeatherReport(city='Paris', temperature_celsius=18.0, condition='Partly cloudy')
-```
+</td>
+<td width="50%" valign="top">
 
 <br>
 
-## Packages
+**Three orchestration modes:**
+
+```
+ WORKFLOW ─────────────────────────
+   A ──▸ B ──▸ C
+   Sequential. Output flows forward.
+   + BranchNode (conditional routing)
+   + LoopNode (iteration)
+
+ HANDOFF ──────────────────────────
+   A ──?──▸ B
+     └──?──▸ C
+   Agent-driven. A decides who's next.
+
+ TEAM ─────────────────────────────
+   Lead ──▸ tool(Worker₁)
+        ──▸ tool(Worker₂)
+        ──▸ tool(Worker₃)
+   First agent leads. Others become
+   callable tools.
+```
+
+Mix `ParallelGroup` and `SerialGroup` within any mode.
+
+</td>
+</tr>
+</table>
+
+<br>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Structured Output
+
+No parsing. No regex. No "please respond as JSON":
+
+```python
+from pydantic import BaseModel
+
+class Analysis(BaseModel):
+    sentiment: str
+    confidence: float
+    key_topics: list[str]
+
+agent = Agent(
+    name="analyzer",
+    model="openai:gpt-4o-mini",
+    output_type=Analysis,
+)
+
+result = run.sync(agent, "Analyze: ...")
+result.output.sentiment   # "mixed"
+result.output.confidence  # 0.85
+```
+
+</td>
+<td width="50%" valign="top">
+
+### Human-in-the-Loop
+
+Gate specific tools for human approval:
+
+```python
+agent = Agent(
+    name="ops",
+    model="openai:gpt-4o",
+    tools=[
+        deploy_to_prod,
+        run_migration,
+        check_status,
+    ],
+    hitl_tools=[
+        "deploy_to_prod",
+        "run_migration",
+    ],
+)
+```
+
+```
+  agent runs ──▸ wants deploy ──▸ PAUSE
+                                    │
+                              human approves
+                                    │
+                              ◂── RESUME
+```
+
+</td>
+</tr>
+</table>
+
+<br>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Guardrails
+
+Security rails as composable lifecycle hooks:
+
+```python
+from exo.guardrail import (
+    PatternGuardrail,
+    LLMGuardrail,
+)
+
+agent = Agent(
+    name="assistant",
+    model="openai:gpt-4o-mini",
+    rails=[
+        PatternGuardrail(
+            blocked_patterns=[
+                r"\b\d{3}-\d{2}-\d{4}\b",
+            ]
+        ),
+        LLMGuardrail(
+            model="openai:gpt-4o-mini",
+            policy="No harmful content",
+        ),
+    ],
+)
+```
+
+Actions: `CONTINUE` `SKIP` `RETRY` `ABORT`
+
+</td>
+<td width="50%" valign="top">
+
+### Lifecycle Hooks
+
+Intercept and mutate at every stage:
+
+```python
+from exo.hooks import HookPoint
+
+async def on_start(context):
+    agent = context["agent"]
+    await agent.add_tool(my_tool)
+
+agent = Agent(
+    name="dynamic",
+    model="openai:gpt-4o",
+    hooks=[
+        (HookPoint.START, on_start),
+    ],
+)
+```
+
+```
+  START
+    ▼
+  PRE_LLM_CALL ──▸ POST_LLM_CALL
+    ▼                    │
+  PRE_TOOL_CALL ◂───────┘
+    ▼
+  POST_TOOL_CALL ──▸ (loop)
+    ▼
+  FINISHED ─── or ─── ERROR
+```
+
+</td>
+</tr>
+</table>
+
+<br>
+
+<table>
+<tr>
+<td valign="top">
+
+### MCP
+
+Connect to any MCP tool server, or expose your agent's tools as one:
+
+```python
+from exo.mcp import MCPServerStdio
+
+agent = Agent(
+    name="coder",
+    model="openai:gpt-4o",
+    mcp_servers=[MCPServerStdio(command="npx", args=["-y", "@modelcontextprotocol/server-github"])],
+)
+```
+
+</td>
+</tr>
+</table>
+
+<br>
+
+---
 
 <div align="center">
 
-Exo is organized as a UV workspace monorepo with **15 focused packages**:
+```
+     ·    .    ·        ✧        ·    .    ·
+             P A C K A G E S
+     .    ·        .        ·    .        ✦
+```
+
+*18 focused packages. `exo-core` depends only on `pydantic`. Everything else is opt-in.*
 
 </div>
 
 <br>
 
-| | Package | Description |
-|:--|:--------|:------------|
-| 🎯 | [`exo-core`](packages/exo-core/) | Agent, Tool, Runner, Swarm, Config, Events, Hooks, Registry |
-| 🤖 | [`exo-models`](packages/exo-models/) | LLM providers — OpenAI, Anthropic, Gemini, Vertex AI |
-| 🧠 | [`exo-context`](packages/exo-context/) | Context engine, neurons, prompt builder, workspace, checkpoints |
-| 💾 | [`exo-memory`](packages/exo-memory/) | Short/long-term memory, SQLite, Postgres, vector backends |
-| 🔌 | [`exo-mcp`](packages/exo-mcp/) | Model Context Protocol client/server |
-| 📦 | [`exo-sandbox`](packages/exo-sandbox/) | Local + Kubernetes sandboxed execution |
-| 📊 | [`exo-observability`](packages/exo-observability/) | Logging, tracing, metrics, health checks, cost tracking |
-| 🌐 | [`exo-distributed`](packages/exo-distributed/) | Redis task queue, workers, Temporal workflows, event streaming |
-| 📏 | [`exo-eval`](packages/exo-eval/) | Evaluators, scorers, reflection framework |
-| 🤝 | [`exo-a2a`](packages/exo-a2a/) | Agent-to-Agent protocol (server + client) |
-| ⌨️ | [`exo-cli`](packages/exo-cli/) | CLI runner, interactive console, batch processing |
-| 🚀 | [`exo-server`](packages/exo-server/) | FastAPI server, session management, WebSocket streaming |
-| 🏋️ | [`exo-train`](packages/exo-train/) | Trajectory dataset, data synthesis, VeRL integration |
-| 🖥️ | [`exo-web`](packages/exo-web/) | Full platform UI — visual workflows, playground, knowledge bases |
-| 📦 | [`exo`](packages/exo/) | Meta-package that installs core + all extras |
-
-<br>
-
-### Dependency Graph
-
 ```
-                         exo (meta)
-                             │
-      ┌──────────┬───────────┼───────────┬──────────┐
-      │          │           │           │          │
-   cli        server      train       a2a        eval
-      │          │           │           │          │
-      └──────────┴───────────┼───────────┴──────────┘
-                             │
-      ┌──────────┬───────────┼───────────┬──────────┐
-      │          │           │           │          │
-   context    memory       mcp       sandbox  observability
-      │          │           │           │          │
-      └──────────┴───────────┼───────────┴──────────┘
-                             │
-               ┌─────────────┼─────────────┐
-               │             │             │
-            models         core        distributed
-               │             │             │
-               └──────── core ◄────────────┘
-```
-
-> `exo-core` has zero heavy dependencies (only `pydantic`). Provider SDKs are isolated in `exo-models`.
-
-<br>
-
-## Examples
-
-See the [`examples/`](examples/) directory:
-
-| | Directory | What's Inside |
-|:--|:----------|:--------------|
-| 🚀 | `quickstart/` | Agents, tools, LLM calls, memory, tracing, config-driven, MCP |
-| 🐝 | `multi_agent/` | Workflow, handoff, debate, deep research, master-worker, travel planning |
-| ⚙️ | `advanced/` | Parallel tasks, HITL, skills, web deployment |
-| 🌐 | `distributed/` | Redis workers, SSE streaming, multi-agent distributed execution |
-| 📏 | `benchmarks/` | GAIA, IMO, OSWorld, VisualWebArena, BFCL, XBench |
-
-<br>
-
-## Documentation
-
-Full documentation is in the [`docs/`](docs/) directory:
-
-| | Section | Description |
-|:--|:--------|:------------|
-| 📖 | [Getting Started](docs/getting-started/) | Installation, quickstart, core concepts, first agent tutorial |
-| 📚 | [Guides](docs/guides/) | 28 in-depth guides covering every feature |
-| 🏗️ | [Architecture](docs/architecture/) | Design philosophy, dependency graph, execution flow, async patterns |
-| 📋 | [API Reference](docs/reference/) | Complete reference for all public APIs |
-| 🤝 | [Contributing](docs/contributing/) | Development setup, code style, testing, package structure |
-| 🔄 | [Migration Guide](docs/migration-guide.md) | Migrating from AWorld to Exo |
-
-<br>
-
-## Development
-
-```bash
-# Clone the repository
-git clone https://github.com/hazel-core/exo-ai && cd exo-ai
-
-# Install UV (if needed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install all workspace packages in editable mode
-uv sync
-
-# Verify installation
-uv run python -c "from exo import Agent, run, tool; print('OK')"
-
-# Run all tests
-uv run pytest
-
-# Lint + format
-uv run ruff check packages/
-uv run ruff format --check packages/
-
-# Type-check
-uv run pyright packages/exo-core/
-```
-
-### Exo Web (Platform UI)
-
-```bash
-cd packages/exo-web
-npm install
-npm run dev          # Runs Astro frontend + FastAPI backend concurrently
+                              ╭──────╮
+                              │  exo │  meta-package
+                              ╰──┬───╯
+            ┌─────────┬──────────┼──────────┬──────────┐
+            │         │          │          │          │
+         ╭──▼──╮  ╭───▼──╮  ╭───▼──╮  ╭───▼──╮  ╭───▼──╮
+         │ cli │  │server│  │train │  │ a2a  │  │ eval │
+         ╰──┬──╯  ╰───┬──╯  ╰───┬──╯  ╰───┬──╯  ╰───┬──╯
+            └─────────┬──────────┼──────────┴──────────┘
+   ┌──────────┬───────┼──────────┼──────────┬──────────┐
+   │          │       │          │          │          │
+╭──▼───╮ ╭───▼──╮ ╭──▼──╮ ╭────▼───╮ ╭───▼────╮ ╭───▼───╮
+│contxt│ │memory│ │ mcp │ │sandbox │ │observe │ │guardr.│
+╰──┬───╯ ╰───┬──╯ ╰──┬──╯ ╰────┬───╯ ╰───┬────╯ ╰───┬───╯
+   └──────────┴───────┼──────────┴─────────┘          │
+                      │                                │
+              ╭───────▼───────╮                        │
+              │    models     │                        │
+              ╰───────┬───────╯                        │
+                      │              ╭─────────────────┘
+              ╭───────▼───────╮      │
+              │     core      │◂─────╯
+              │  (pydantic)   │
+              ╰───────────────╯
 ```
 
 <br>
-
-## Environment Variables
-
-```bash
-# OpenAI
-export OPENAI_API_KEY="sk-..."
-
-# Anthropic
-export ANTHROPIC_API_KEY="sk-ant-..."
-
-# Google Vertex AI (uses service account or ADC)
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
-# OR
-export VERTEX_PROJECT="my-project"
-export VERTEX_LOCATION="us-central1"
-```
-
-<br>
-
-## Supported Providers
 
 <div align="center">
 
-[![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com)
-[![Anthropic](https://img.shields.io/badge/Anthropic-D4A574?style=for-the-badge&logo=anthropic&logoColor=white)](https://anthropic.com)
-[![Google Gemini](https://img.shields.io/badge/Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)](https://deepmind.google/technologies/gemini/)
-[![Vertex AI](https://img.shields.io/badge/Vertex_AI-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://cloud.google.com/vertex-ai)
+| | Package | Purpose |
+|:--:|:---|:---|
+| **core** | `exo-core` | Agent, Tool, Runner, Swarm, Hooks, Events, Config |
+| **models** | `exo-models` | LLM providers — OpenAI, Anthropic, Gemini, Vertex AI |
+| **context** | `exo-context` | Context engine, neurons, prompt builder, checkpoints |
+| **memory** | `exo-memory` | Short/long-term memory, SQLite, Postgres, ChromaDB |
+| **mcp** | `exo-mcp` | Model Context Protocol client and server |
+| **guardrail** | `exo-guardrail` | Pattern and LLM-based security guardrails |
+| **sandbox** | `exo-sandbox` | Local + Kubernetes sandboxed execution |
+| **observe** | `exo-observability` | Logging, OpenTelemetry tracing, metrics, cost tracking |
+| **eval** | `exo-eval` | Evaluation — scorers, LLM-as-judge, reflection, pass@k |
+| **retrieval** | `exo-retrieval` | RAG — embeddings, vector stores, reranking, knowledge graph |
+| **search** | `exo-search` | AI search engine with deep research and citations |
+| **skills** | `exo-skills` | Dynamic capability packages — load, compose, hot-reload |
+| **a2a** | `exo-a2a` | Agent-to-Agent protocol for network delegation |
+| **distributed** | `exo-distributed` | Redis task queue, Temporal workflows, event streaming |
+| **server** | `exo-server` | FastAPI server, sessions, WebSocket streaming |
+| **cli** | `exo-cli` | CLI runner, interactive console, batch processing |
+| **train** | `exo-train` | Trajectory collection, data synthesis, RLHF integration |
+| **web** | `exo-web` | Platform UI — visual workflows, playground, knowledge bases |
 
 </div>
 
@@ -392,6 +821,36 @@ export VERTEX_LOCATION="us-central1"
 
 <div align="center">
 
-<sub>MIT License — Copyright (c) 2025 Hazel Communications Private Limited, India (a part of Midsphere AI)</sub>
+```
+     ·    .    ·        ✧        ·    .    ·
+          D E V E L O P M E N T
+     .    ·        .        ·    .        ✦
+```
+
+</div>
+
+```bash
+git clone https://github.com/hazel-core/exo-ai && cd exo-ai
+uv sync                                      # install everything
+uv run pytest                                 # ~2,900 tests
+uv run ruff check packages/ --fix            # lint
+uv run ruff format packages/                 # format
+uv run pyright packages/exo-core/            # type-check
+```
+
+<br>
+
+---
+
+<div align="center">
+
+```
+              ✦         .    ·
+     .    ·        ✧              ·    .
+          ·    .        ·    .
+                   ✦
+```
+
+<sub>MIT License — [Hazel Communications Private Limited](https://midsphere.ai), India (a part of Midsphere AI)</sub>
 
 </div>

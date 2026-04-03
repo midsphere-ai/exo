@@ -128,6 +128,7 @@ def _build_planner_agent(agent: Any, planner_model: str, planner_instructions: s
         context=getattr(agent, "context", None),
         allow_self_spawn=allow_self_spawn,
         max_spawn_depth=getattr(agent, "max_spawn_depth", 3),
+        max_spawn_children=getattr(agent, "max_spawn_children", 4),
     )
 
 
