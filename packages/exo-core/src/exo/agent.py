@@ -24,6 +24,7 @@ from exo.config import (
 from exo.hooks import Hook, HookManager, HookPoint
 from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from exo.rail import Rail, RailAbortError, RailManager
+from exo.skills import DictToolResolver, SkillError, SkillRegistry, ToolResolver
 from exo.task_controller import TaskLoopEvent, TaskLoopEventType, TaskLoopQueue
 from exo.tool import FunctionTool, Tool, ToolError
 from exo.tool_context import ToolContext
@@ -605,6 +606,8 @@ class Agent:
         allow_self_spawn: bool = False,
         max_spawn_depth: int = 3,
         max_spawn_children: int = 4,
+        skills: SkillRegistry | None = None,
+        tool_resolver: ToolResolver | dict[str, Tool | list[Tool]] | None = None,
     ) -> None:
         if max_steps < 1:
             raise AgentError(f"max_steps must be >= 1, got {max_steps}")
@@ -633,6 +636,14 @@ class Agent:
         self._spawn_depth: int = 0
         # Internal: provider reference stored during run() for use by spawn_self tool
         self._current_provider: Any = None
+        # Skills: lazy activation via activate_skill tool
+        self._skill_registry: SkillRegistry | None = skills
+        self._tool_resolver: ToolResolver | None = None
+        if tool_resolver is not None:
+            if isinstance(tool_resolver, dict):
+                self._tool_resolver = DictToolResolver(tool_resolver)
+            else:
+                self._tool_resolver = tool_resolver
         # Auto-create AgentMemory when not explicitly specified; None disables memory
         if memory is _MEMORY_UNSET:
             memory = _make_default_memory()
@@ -661,6 +672,10 @@ class Agent:
         if tools:
             for t in tools:
                 self._register_tool(t)
+
+        # Auto-register activate_skill tool when skills are provided
+        if self._skill_registry is not None:
+            self._register_tool(self._make_activate_skill_tool())
 
         # Always register retrieve_artifact so any tool result that exceeds the
         # EXO_LARGE_OUTPUT_THRESHOLD byte limit can be retrieved by the LLM.
@@ -956,6 +971,45 @@ class Agent:
 
         return FunctionTool(spawn_self, name="spawn_self")
 
+    def _make_activate_skill_tool(self) -> Tool:
+        """Create the ``activate_skill`` FunctionTool for lazy skill loading.
+
+        The returned tool captures ``self`` so it can look up skills in the
+        registry, resolve their tools, and add them to the agent's toolset.
+        """
+        agent_ref = self
+
+        async def activate_skill(name: str) -> str:
+            """Activate a skill by name, loading its tools and returning instructions.
+
+            Args:
+                name: The name of the skill to activate.
+            """
+            registry = agent_ref._skill_registry
+            if registry is None:
+                return "[Error: No skill registry configured]"
+
+            try:
+                skill = registry.get(name)
+            except SkillError:
+                available = registry.list_names()
+                return (
+                    f"[Error: Skill '{name}' not found. "
+                    f"Available skills: {', '.join(available)}]"
+                )
+
+            # Resolve and add tools (skip duplicates)
+            if agent_ref._tool_resolver is not None and skill.tool_list:
+                tools = agent_ref._tool_resolver.resolve(skill)
+                async with agent_ref._tools_lock:
+                    for t in tools:
+                        if t.name not in agent_ref.tools:
+                            agent_ref.tools[t.name] = t
+
+            return skill.usage or f"[Skill '{name}' activated (no usage instructions)]"
+
+        return FunctionTool(activate_skill, name="activate_skill")
+
     # -----------------------------------------------------------------------
     # Runtime mutation API — asyncio-safe via _tools_lock
     # -----------------------------------------------------------------------
@@ -1107,7 +1161,7 @@ class Agent:
         Returns:
             A dict with the agent's name, model, tools, and configuration.
         """
-        return {
+        info = {
             "name": self.name,
             "model": self.model,
             "tools": list(self.tools.keys()),
@@ -1118,6 +1172,9 @@ class Agent:
             "budget_awareness": self.budget_awareness,
             "emit_mcp_progress": self.emit_mcp_progress,
         }
+        if self._skill_registry is not None:
+            info["skills"] = self._skill_registry.list_names()
+        return info
 
     async def run(
         self,
@@ -1187,6 +1244,20 @@ class Agent:
                 instructions = raw_instr(self.name)
         else:
             instructions = raw_instr
+
+        # ---- Skills: inject catalog of available skills ----
+        if self._skill_registry is not None:
+            active_skills = self._skill_registry.search(active_only=True)
+            if active_skills:
+                skill_lines = [
+                    "\n\n## Available Skills",
+                    "You can activate any of these skills using the `activate_skill` tool:",
+                ]
+                for sk in active_skills:
+                    desc = f": {sk.description}" if sk.description else ""
+                    skill_lines.append(f"- **{sk.name}**{desc}")
+                instructions = (instructions or "") + "\n".join(skill_lines)
+        # ---- end Skills ----
 
         # ---- Memory: load history and persist user input before LLM call ----
         history: list[Message] = list(messages) if messages else []
@@ -1594,6 +1665,10 @@ class Agent:
             raise ValueError(
                 f"Agent '{self.name}' has a context engine which cannot be serialized."
             )
+        if self._skill_registry is not None:
+            raise ValueError(
+                f"Agent '{self.name}' has a skill registry which cannot be serialized."
+            )
 
         data: dict[str, Any] = {
             "name": self.name,
@@ -1622,7 +1697,7 @@ class Agent:
         user_tools = [
             t
             for name, t in self.tools.items()
-            if name not in ("retrieve_artifact", "spawn_self")
+            if name not in ("retrieve_artifact", "spawn_self", "activate_skill")
             and not getattr(t, "_is_context_tool", False)
         ]
         if user_tools:
