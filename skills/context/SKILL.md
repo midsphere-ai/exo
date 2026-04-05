@@ -425,5 +425,6 @@ agent = Agent(
 - **`overflow="hook"` still respects `context_limit`** -- the `limit` value is passed through in `info.limit` for hooks to reference, but built-in thresholds are disabled
 - **CONTEXT_WINDOW hook fires at two sites** -- initial windowing (before first LLM call, `info.step=-1`) and token budget trigger (mid-run, `info.force=True`)
 - **Cache requires memory persistence** -- `cache=True` has no effect if `memory` is not configured
-- **Cache-aware hooks must be idempotent** -- PRE_LLM_CALL hooks that inject messages should check before injecting (use `has_message_content(messages, "MARKER")` from `exo.memory.snapshot`)
+- **Cache-aware hooks must be idempotent** -- PRE_LLM_CALL hooks that inject messages should check before injecting (use `has_message_content(messages, "MARKER")` from `exo.memory.snapshot`). Alternatively, use `agent.inject_ephemeral()` which is automatically removed after each LLM call and never reaches the cache.
+- **`inject_ephemeral()` bypasses snapshots entirely** -- ephemeral messages are removed from msg_list before context windowing runs and before snapshots are saved. Use this when you need per-call context that should not pollute history or cached state.
 - **Cache excludes instruction SystemMessages** -- they are regenerated fresh each run. `[Conversation Summary]` SystemMessages are preserved.

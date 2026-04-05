@@ -374,6 +374,62 @@ async def test_structured_output():
     assert result.output.answer == "42"
 ```
 
+### Testing Ephemeral Messages
+
+```python
+async def test_ephemeral_present_then_removed():
+    """Ephemeral message visible in first call, gone in second."""
+    calls: list[list[Any]] = []
+
+    @tool
+    def ping(msg: str) -> str:
+        """Simple tool."""
+        return "pong"
+
+    call_count = 0
+
+    async def complete(messages: Any, **kwargs: Any) -> Any:
+        nonlocal call_count
+        calls.append(list(messages))
+        call_count += 1
+        if call_count == 1:
+            class R1:
+                content = ""
+                tool_calls = [ToolCall(id="tc1", name="ping", arguments='{"msg":"hi"}')]
+                usage = Usage()
+            return R1()
+        class R2:
+            content = "Done"
+            tool_calls = []
+            usage = Usage()
+        return R2()
+
+    provider = AsyncMock()
+    provider.complete = complete
+
+    agent = Agent(name="bot", tools=[ping], memory=None, context=None)
+    agent.inject_ephemeral("One-shot context")
+
+    result = await run(agent, "Go", provider=provider)
+
+    # First call: ephemeral present
+    assert any(
+        isinstance(m, UserMessage) and m.content == "One-shot context"
+        for m in calls[0]
+    )
+    # Second call: ephemeral gone
+    assert not any(
+        isinstance(m, UserMessage) and m.content == "One-shot context"
+        for m in calls[1]
+    )
+```
+
+**Key testing points:**
+- Use a RecordingProvider or capture `messages` in each `complete()` call
+- First call should contain the ephemeral message; second call should not
+- `inject_ephemeral()` also accepts `Message` objects (e.g., `SystemMessage`) — test with both
+- No `MessageInjectedEvent` is emitted for ephemeral messages (unlike `inject_message()`)
+
 ### Testing Multi-Turn Conversations
 
 ```python

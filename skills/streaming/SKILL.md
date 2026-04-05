@@ -120,7 +120,7 @@ class MCPProgressEvent:
 
 Emitted after tool execution when MCP tools report progress.
 
-#### MessageInjectedEvent (always emitted when messages injected)
+#### MessageInjectedEvent (always emitted when permanent messages injected)
 
 ```python
 class MessageInjectedEvent:
@@ -129,7 +129,7 @@ class MessageInjectedEvent:
     agent_name: str = ""
 ```
 
-Emitted when `agent.inject_message()` pushes content into the running agent.
+Emitted when `agent.inject_message()` pushes content into the running agent. **Not** emitted for `agent.inject_ephemeral()` — ephemeral messages are silent (they exist for one LLM call only and leave no trace).
 
 #### RalphIterationEvent (always emitted during Ralph streaming)
 

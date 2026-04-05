@@ -834,6 +834,9 @@ class Agent:
         # Queue for live message injection into a running agent
         self._injected_messages: asyncio.Queue[str] = asyncio.Queue()
 
+        # Queue for ephemeral messages: visible for ONE LLM call, then auto-removed
+        self._ephemeral_messages: asyncio.Queue[Message] = asyncio.Queue()
+
         # Queue for tool-emitted streaming events (drained by run.stream())
         self._event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -1244,6 +1247,28 @@ class Agent:
             raise ValueError("inject_message content must be non-empty")
         self._injected_messages.put_nowait(content)
 
+    def inject_ephemeral(self, content: str | Message) -> None:
+        """Queue a message visible to the NEXT LLM call only.
+
+        Unlike :meth:`inject_message`, ephemeral messages are automatically
+        removed from the message list after the LLM call completes.  They
+        do not persist in history, snapshots, or memory.
+
+        Safe to call from any coroutine (hooks, tools, external code).
+
+        Args:
+            content: A string (wrapped as UserMessage) or a Message object.
+
+        Raises:
+            ValueError: If *content* is an empty string.
+        """
+        if isinstance(content, str):
+            if not content:
+                raise ValueError("inject_ephemeral content must be non-empty")
+            self._ephemeral_messages.put_nowait(UserMessage(content=content))
+        else:
+            self._ephemeral_messages.put_nowait(content)
+
     async def add_tool(self, tool: Tool) -> None:
         """Append a single tool at runtime, asyncio-safe.
 
@@ -1617,7 +1642,22 @@ class Agent:
                 except asyncio.QueueEmpty:
                     break
 
-            output = await self._call_llm(msg_list, tool_schemas, provider, max_retries)
+            # ---- Drain ephemeral messages (visible for this call only) ----
+            _ephemeral_count = 0
+            while not self._ephemeral_messages.empty():
+                try:
+                    _eph_msg = self._ephemeral_messages.get_nowait()
+                    msg_list.append(_eph_msg)
+                    _ephemeral_count += 1
+                    _log.debug("ephemeral message into step %d", _step)
+                except asyncio.QueueEmpty:
+                    break
+
+            try:
+                output = await self._call_llm(msg_list, tool_schemas, provider, max_retries)
+            finally:
+                if _ephemeral_count:
+                    del msg_list[-_ephemeral_count:]
 
             # Record token usage in tracker
             if _token_tracker is not None and output.usage.total_tokens > 0:

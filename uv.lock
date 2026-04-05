@@ -30,6 +30,7 @@ members = [
     "exo-distributed",
     "exo-eval",
     "exo-guardrail",
+    "exo-harness",
     "exo-mcp",
     "exo-memory",
     "exo-models",
@@ -1011,6 +1012,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "exo-harness"
+version = "0.1.0"
+source = { editable = "packages/exo-harness" }
+dependencies = [
+    { name = "exo-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "exo-core", editable = "packages/exo-core" }]
+
+[[package]]
 name = "exo-mcp"
 version = "0.1.0"
 source = { editable = "packages/exo-mcp" }
@@ -1294,6 +1306,7 @@ dev = [
     { name = "exo-distributed" },
     { name = "exo-eval" },
     { name = "exo-guardrail" },
+    { name = "exo-harness" },
     { name = "exo-mcp" },
     { name = "exo-memory" },
     { name = "exo-models" },
@@ -1334,6 +1347,7 @@ dev = [
     { name = "exo-distributed", editable = "packages/exo-distributed" },
     { name = "exo-eval", editable = "packages/exo-eval" },
     { name = "exo-guardrail", editable = "packages/exo-guardrail" },
+    { name = "exo-harness", editable = "packages/exo-harness" },
     { name = "exo-mcp", editable = "packages/exo-mcp" },
     { name = "exo-memory", editable = "packages/exo-memory" },
     { name = "exo-models", editable = "packages/exo-models" },

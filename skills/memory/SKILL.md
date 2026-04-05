@@ -452,3 +452,4 @@ agent = Agent(name="bot", memory=AgentMemory(
 - **Search results injected as `<knowledge>` blocks** — the LLM sees them in the system message, not as separate messages
 - **Context snapshots use the same MemoryStore** — `SnapshotMemory` items are stored alongside regular items with `memory_type="snapshot"`. They use deterministic IDs (`snapshot_{agent}_{conversation}`) so upsert replaces the previous.
 - **`load_history()` excludes snapshots** — raw history loading filters by `memory_type` so snapshots never leak into the regular history path
+- **`inject_ephemeral()` messages never reach memory** — ephemeral messages are removed from msg_list immediately after the LLM call, before MemoryPersistence hooks (POST_LLM_CALL) fire on subsequent calls and before snapshots are saved. They are invisible to the memory system. Use `inject_message()` for content that should persist.

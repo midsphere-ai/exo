@@ -98,6 +98,15 @@ async def run(
         type(resolved_provider).__name__ if resolved_provider else None,
     )
 
+    # Detect Harness: delegate to its own run() method
+    if hasattr(agent, "is_harness"):
+        return await agent.run(
+            input,
+            messages=messages,
+            provider=resolved_provider,
+            max_retries=max_retries,
+        )
+
     # Detect Swarm: delegate to its own run() method
     if hasattr(agent, "flow_order"):
         return await agent.run(
@@ -234,6 +243,19 @@ async def _stream(
                 _otel_counter.add(count, attrs)
             else:
                 _collector.add_counter(METRIC_STREAM_EVENTS_EMITTED, float(count), attrs)
+
+    # Detect Harness: delegate to its stream() method
+    if hasattr(agent, "is_harness"):
+        async for event in agent.stream(
+            input,
+            messages=messages,
+            provider=resolved,
+            detailed=detailed,
+            max_steps=max_steps,
+            event_types=event_types,
+        ):
+            yield event
+        return
 
     # Detect Swarm: delegate to its stream() method
     if hasattr(agent, "flow_order"):
@@ -456,6 +478,16 @@ async def _stream(
             except asyncio.QueueEmpty:
                 break
 
+        # ---- Drain ephemeral messages (visible for this call only) ----
+        _ephemeral_count = 0
+        while not agent._ephemeral_messages.empty():
+            try:
+                _eph_msg = agent._ephemeral_messages.get_nowait()
+                msg_list.append(_eph_msg)
+                _ephemeral_count += 1
+            except asyncio.QueueEmpty:
+                break
+
         if detailed:
             _ev = StepEvent(
                 step_number=step_num + 1,
@@ -546,6 +578,11 @@ async def _stream(
                 finish_reason="tool_calls" if tool_calls else "stop",
             )
             await agent.hook_manager.run(HookPoint.POST_LLM_CALL, agent=agent, response=_synth)
+
+            # ---- Remove ephemeral messages ----
+            if _ephemeral_count:
+                del msg_list[-_ephemeral_count:]
+                _ephemeral_count = 0
 
             # Record token usage in tracker
             if _stream_token_tracker is not None and step_usage.total_tokens > 0:
@@ -741,6 +778,10 @@ async def _stream(
                         yield _sa_ev
 
         except Exception as exc:
+            # Clean up ephemeral messages on error
+            if _ephemeral_count:
+                del msg_list[-_ephemeral_count:]
+                _ephemeral_count = 0
             _ev = ErrorEvent(
                 error=str(exc),
                 error_type=type(exc).__name__,

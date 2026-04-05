@@ -1,6 +1,6 @@
 ---
 name: exo:hooks
-description: "Use when intercepting Exo agent lifecycle events — HookPoint, HookManager, pre/post LLM/tool hooks, error hooks, runtime mutation (add_tool, remove_tool, add_handoff, add_mcp_server, inject_message). Triggers on: hook, HookPoint, lifecycle, pre_llm_call, post_tool_call, agent hook, runtime mutation, add_tool, inject_message, dynamic tool."
+description: "Use when intercepting Exo agent lifecycle events — HookPoint, HookManager, pre/post LLM/tool hooks, error hooks, runtime mutation (add_tool, remove_tool, add_handoff, add_mcp_server, inject_message, inject_ephemeral). Triggers on: hook, HookPoint, lifecycle, pre_llm_call, post_tool_call, agent hook, runtime mutation, add_tool, inject_message, inject_ephemeral, ephemeral, one-shot context, dynamic tool."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -23,7 +23,8 @@ Use this skill when the developer needs to:
 3. **Need security guardrails?** → Use Rails instead (see `exo:guardrails` skill) — they offer CONTINUE/SKIP/RETRY/ABORT actions
 4. **Need fire-and-forget observation?** → Wrap hook body in try/except (hooks abort the run on exception by default)
 5. **Need to add tools during execution?** → Use `agent.add_tool()` (async-safe)
-6. **Need to steer a running agent?** → Use `agent.inject_message(content)`
+6. **Need to steer a running agent permanently?** → Use `agent.inject_message(content)`
+7. **Need one-shot context for a single LLM call?** → Use `agent.inject_ephemeral(content)` — auto-removed after the call
 
 ## Reference
 
@@ -125,7 +126,7 @@ await agent.add_mcp_server(config)
 
 **Thread safety:** `add_tool()` and `add_mcp_server()` use `agent._tools_lock` (asyncio.Lock) for concurrent safety. `remove_tool()` is safe without the lock (dict.pop is atomic in CPython's single-threaded event loop).
 
-### inject_message()
+### inject_message() — Permanent Injection
 
 Push a user message into a running agent's context, picked up before the next LLM call:
 
@@ -138,12 +139,49 @@ agent.inject_message("New priority: focus on security aspects first.")
 - Message added to `agent._injected_messages` queue (asyncio.Queue)
 - Drained before each LLM call in the agent's run loop
 - Each injected message becomes a `UserMessage` in the conversation
+- **Persists** in the message list for all subsequent LLM calls
 - Emits `MessageInjectedEvent` in streaming mode
 - Raises `ValueError` if content is empty
 
 **Use case:** Live steering of a running agent from external code (e.g., a web socket handler, a monitoring system, or a parent agent).
 
 **Snapshot interaction:** Injected messages become part of the context snapshot at end-of-run (when `enable_snapshots=True`). They will persist across runs without needing re-injection.
+
+### inject_ephemeral() — One-Shot Injection
+
+Push a message visible to the **next LLM call only**, then automatically removed:
+
+```python
+# String content (becomes a UserMessage)
+agent.inject_ephemeral("Consider the user's timezone: UTC+9")
+
+# Or pass a Message object directly
+from exo.types import SystemMessage
+agent.inject_ephemeral(SystemMessage(content="Respond in JSON format for this call only."))
+```
+
+**Behavior:**
+- Message added to `agent._ephemeral_messages` queue (asyncio.Queue)
+- Drained before each LLM call, appended to msg_list
+- **Automatically removed** from msg_list after the LLM call returns (via try/finally)
+- Persists across retries of the same call (present for all retry attempts)
+- Does **NOT** emit `MessageInjectedEvent`
+- Does **NOT** persist in snapshots, memory, or history
+- Does **NOT** appear in subsequent tool-loop LLM calls
+- Accepts `str` (wrapped as `UserMessage`) or any `Message` object
+- Raises `ValueError` if content is an empty string
+
+**Use case:** Providing temporary context or instructions that should influence exactly one LLM call — e.g., one-shot formatting hints from a hook, transient tool results that shouldn't pollute history, or per-step guidance from an orchestrator.
+
+**Comparison:**
+
+| | `inject_message()` | `inject_ephemeral()` |
+|---|---|---|
+| Lifetime | Permanent (stays in msg_list) | One LLM call only |
+| Snapshot persistence | Yes | No |
+| Memory persistence | Yes (via MemoryPersistence hooks) | No |
+| Stream event | `MessageInjectedEvent` | None |
+| Accepts | `str` only | `str` or `Message` |
 
 ## Patterns
 
@@ -336,6 +374,8 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **Rails also register as hooks** — `Agent(rails=[...])` creates hooks at ALL hook points. Rails hooks run after user hooks.
 - **Tool schemas are re-enumerated each step** — so dynamically added/removed tools take effect on the next LLM call, not retroactively.
 - **inject_message is async-safe** — uses `asyncio.Queue.put_nowait()`, can be called from any coroutine.
+- **inject_ephemeral is async-safe** — same Queue pattern, but messages are auto-removed after the LLM call.
+- **inject_ephemeral vs PRE_LLM_CALL mutation** — if you add messages in a PRE_LLM_CALL hook, they persist permanently. Use `inject_ephemeral()` instead when you want one-shot context that doesn't pollute history.
 - **Hook data kwargs may evolve** — always use `**_` or `**data` to absorb unknown kwargs for forward compatibility.
 - **`CONTEXT_WINDOW` hook has two modes**: With `overflow="hook"`, the hook replaces built-in windowing entirely. With `overflow="summarize"` or `"truncate"`, the hook fires after built-in windowing as an augmentation pass.
 - **`CONTEXT_WINDOW` hook receives `ContextWindowInfo`**: A frozen dataclass with step number, message counts, token pressure (fill_ratio, context_window, input/output tokens), cumulative trajectory, config values, and agent identity. Import from `exo.context.info`.
@@ -343,3 +383,4 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **`CONTEXT_WINDOW` hook can report actions**: Append `_ContextAction` instances to the `actions` list to emit `ContextEvent`s in streaming mode.
 - **PRE_LLM_CALL mutations persist in snapshots** — when `enable_snapshots=True`, messages injected by PRE_LLM_CALL hooks become part of the snapshot. On the next run, the hook fires again on the snapshot-loaded messages. Hooks that inject messages must be idempotent (check before injecting) to avoid duplicates. Use `has_message_content()` from `exo.memory.snapshot`.
 - **inject_message persists in snapshots** — injected messages are part of the final `msg_list` and get saved in the snapshot. They survive across runs without re-injection.
+- **inject_ephemeral does NOT persist in snapshots** — ephemeral messages are removed before tool results are appended, before context windowing runs, and before snapshots are saved. They leave no trace in history.

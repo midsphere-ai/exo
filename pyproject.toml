@@ -20,6 +20,7 @@ members = [
     "packages/exo-server",
     "packages/exo-train",
     "packages/exo-web",
+    "packages/exo-harness",
     "packages/exo-guardrail",
     "packages/exo-retrieval",
     "packages/exo-search",
@@ -43,6 +44,7 @@ dev = [
     "exo-server",
     "exo-train",
     "exo-web",
+    "exo-harness",
     "exo-guardrail",
     "exo-retrieval",
     "exo-search",
@@ -80,6 +82,7 @@ exo-cli = { workspace = true }
 exo-server = { workspace = true }
 exo-train = { workspace = true }
 exo-web = { workspace = true }
+exo-harness = { workspace = true }
 exo-guardrail = { workspace = true }
 exo-retrieval = { workspace = true }
 exo-search = { workspace = true }
