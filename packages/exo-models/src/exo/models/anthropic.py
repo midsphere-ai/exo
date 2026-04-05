@@ -212,6 +212,52 @@ def _convert_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return converted
 
 
+_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def _apply_cache_breakpoints(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Add Anthropic prompt-caching ``cache_control`` markers to API kwargs.
+
+    Places up to 4 breakpoints (the Anthropic maximum):
+    1. System prompt (last content block)
+    2. Last tool definition
+    3. Last 2 user-turn messages (rolling cache frontier)
+
+    Mutates *kwargs* in place and returns it.  Safe because
+    ``_build_kwargs`` builds fresh dicts each call.
+    """
+    # 1. System prompt — convert plain string to content-block list
+    system = kwargs.get("system")
+    if system and isinstance(system, str):
+        kwargs["system"] = [{"type": "text", "text": system, "cache_control": _CACHE_CONTROL}]
+    elif isinstance(system, list) and system:
+        system[-1]["cache_control"] = _CACHE_CONTROL
+
+    # 2. Last tool definition
+    tools = kwargs.get("tools")
+    if tools:
+        tools[-1]["cache_control"] = _CACHE_CONTROL
+
+    # 3. Last 2 user-turn messages
+    messages = kwargs.get("messages", [])
+    user_marked = 0
+    for msg in reversed(messages):
+        if user_marked >= 2:
+            break
+        if msg.get("role") != "user":
+            continue
+        content = msg["content"]
+        if isinstance(content, str):
+            msg["content"] = [
+                {"type": "text", "text": content, "cache_control": _CACHE_CONTROL}
+            ]
+        elif isinstance(content, list) and content:
+            content[-1]["cache_control"] = _CACHE_CONTROL
+        user_marked += 1
+
+    return kwargs
+
+
 # ---------------------------------------------------------------------------
 # Response parsing
 # ---------------------------------------------------------------------------
@@ -451,7 +497,7 @@ class AnthropicProvider(ModelProvider):
             kwargs["tools"] = _convert_tools(tools)
         if temperature is not None:
             kwargs["temperature"] = temperature
-        return kwargs
+        return _apply_cache_breakpoints(kwargs)
 
 
 # ---------------------------------------------------------------------------

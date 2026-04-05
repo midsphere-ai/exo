@@ -186,6 +186,36 @@ class TestToolRegistration:
         assert "greet" in names
         assert schemas[0]["type"] == "function"
 
+    def test_tool_schema_caching_returns_same_object(self) -> None:
+        agent = Agent(name="bot", tools=[greet])
+        first = agent.get_tool_schemas()
+        second = agent.get_tool_schemas()
+        assert first is second
+
+    async def test_tool_schema_cache_invalidated_on_add_tool(self) -> None:
+        agent = Agent(name="bot", tools=[greet])
+        before = agent.get_tool_schemas()
+
+        @tool
+        def farewell(name: str) -> str:
+            """Say goodbye."""
+            return f"bye {name}"
+
+        await agent.add_tool(farewell)
+        after = agent.get_tool_schemas()
+        assert before is not after
+        names = {s["function"]["name"] for s in after}
+        assert "farewell" in names
+
+    def test_tool_schema_cache_invalidated_on_remove_tool(self) -> None:
+        agent = Agent(name="bot", tools=[greet])
+        before = agent.get_tool_schemas()
+        agent.remove_tool("greet")
+        after = agent.get_tool_schemas()
+        assert before is not after
+        names = {s["function"]["name"] for s in after}
+        assert "greet" not in names
+
 
 # ---------------------------------------------------------------------------
 # Handoff registration

@@ -32,6 +32,7 @@ members = [
     "exo-guardrail",
     "exo-harness",
     "exo-mcp",
+    "exo-mcp-cli",
     "exo-memory",
     "exo-models",
     "exo-observability",
@@ -1038,6 +1039,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "exo-mcp-cli"
+version = "0.1.0"
+source = { editable = "packages/exo-mcp-cli" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "mcp" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=42.0" },
+    { name = "mcp", specifier = ">=1.0" },
+    { name = "rich", specifier = ">=13.0" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
 name = "exo-memory"
 version = "0.1.0"
 source = { editable = "packages/exo-memory" }
@@ -1308,6 +1328,7 @@ dev = [
     { name = "exo-guardrail" },
     { name = "exo-harness" },
     { name = "exo-mcp" },
+    { name = "exo-mcp-cli" },
     { name = "exo-memory" },
     { name = "exo-models" },
     { name = "exo-observability" },
@@ -1349,6 +1370,7 @@ dev = [
     { name = "exo-guardrail", editable = "packages/exo-guardrail" },
     { name = "exo-harness", editable = "packages/exo-harness" },
     { name = "exo-mcp", editable = "packages/exo-mcp" },
+    { name = "exo-mcp-cli", editable = "packages/exo-mcp-cli" },
     { name = "exo-memory", editable = "packages/exo-memory" },
     { name = "exo-models", editable = "packages/exo-models" },
     { name = "exo-observability", editable = "packages/exo-observability" },

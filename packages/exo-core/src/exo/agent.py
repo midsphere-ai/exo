@@ -711,6 +711,8 @@ class Agent:
         allow_self_spawn: bool = False,
         max_spawn_depth: int = 3,
         max_spawn_children: int = 4,
+        ptc: bool = False,
+        ptc_timeout: int = 60,
         skills: SkillRegistry | None = None,
         tool_resolver: ToolResolver | dict[str, Tool | list[Tool]] | None = None,
     ) -> None:
@@ -737,6 +739,8 @@ class Agent:
         self.allow_self_spawn: bool = allow_self_spawn
         self.max_spawn_depth: int = max_spawn_depth
         self.max_spawn_children: int = validate_max_spawn_children(max_spawn_children)
+        self.ptc: bool = ptc
+        self.ptc_timeout: int = ptc_timeout
         # Internal: spawn depth (0 for top-level agents; incremented for each spawn level)
         self._spawn_depth: int = 0
         # Internal: provider reference stored during run() for use by spawn_self tool
@@ -806,6 +810,7 @@ class Agent:
 
         # Tools indexed by name for O(1) lookup during execution
         self.tools: dict[str, Tool] = {}
+        self._cached_tool_schemas: list[dict[str, Any]] | None = None
         if tools:
             for t in tools:
                 self._register_tool(t)
@@ -847,6 +852,17 @@ class Agent:
         self.hitl_tools = normalized_hitl_tools
         self._validate_hitl_tools()
 
+        # PTC: register synthetic execute_code tool when programmatic tool calling is on
+        if self.ptc:
+            from exo.ptc import PTCTool
+
+            if "execute_code" in self.tools:
+                raise AgentError(
+                    "Cannot enable ptc: a tool named 'execute_code' is already registered"
+                )
+            self.tools["execute_code"] = PTCTool(agent=self, timeout=self.ptc_timeout)
+            self._cached_tool_schemas = None
+
         # Lifecycle hooks
         self.hook_manager = HookManager()
         self._has_user_hooks: bool = bool(hooks)  # tracks explicitly-provided hooks only
@@ -884,6 +900,7 @@ class Agent:
         if t.name in self.tools:
             raise AgentError(f"Duplicate tool name '{t.name}' on agent '{self.name}'")
         self.tools[t.name] = t
+        self._cached_tool_schemas = None
         # Auto-register retrieve_artifact when the first large_output=True tool is added
         if getattr(t, "large_output", False) and "retrieve_artifact" not in self.tools:
             self._register_retrieve_artifact()
@@ -930,6 +947,7 @@ class Agent:
         # Direct dict insertion avoids triggering the duplicate check in _register_tool
         # and the large_output auto-registration loop.
         self.tools["retrieve_artifact"] = FunctionTool(retrieve_artifact, name="retrieve_artifact")
+        self._cached_tool_schemas = None
 
     def _validate_hitl_tools(self) -> None:
         """Ensure all HITL tool names reference registered tools."""
@@ -1300,6 +1318,7 @@ class Agent:
         if tool_name not in self.tools:
             raise AgentError(f"Tool '{tool_name}' is not registered on agent '{self.name}'")
         del self.tools[tool_name]
+        self._cached_tool_schemas = None
 
     async def add_handoff(self, target: Agent) -> None:
         """Register a target agent as a handoff destination at runtime.
@@ -1387,10 +1406,24 @@ class Agent:
     def get_tool_schemas(self) -> list[dict[str, Any]]:
         """Return OpenAI-format tool schemas for all registered tools.
 
-        Returns:
-            A list of tool schema dicts suitable for LLM function calling.
+        When ``ptc=True``, PTC-eligible tools are excluded from the schema
+        list — they are available as functions inside ``execute_code``
+        instead.  Returns cached schemas when available; rebuilds after
+        tool mutations.
         """
-        return [t.to_schema() for t in self.tools.values()]
+        if self._cached_tool_schemas is None:
+            if self.ptc:
+                from exo.ptc import get_ptc_eligible_tools
+
+                ptc_names = set(get_ptc_eligible_tools(self).keys())
+                self._cached_tool_schemas = [
+                    t.to_schema()
+                    for name, t in self.tools.items()
+                    if name not in ptc_names
+                ]
+            else:
+                self._cached_tool_schemas = [t.to_schema() for t in self.tools.values()]
+        return self._cached_tool_schemas
 
     def describe(self) -> dict[str, Any]:
         """Return a summary of the agent's capabilities.
@@ -1411,6 +1444,7 @@ class Agent:
             "planning_enabled": self.planning_enabled,
             "budget_awareness": self.budget_awareness,
             "emit_mcp_progress": self.emit_mcp_progress,
+            "ptc": self.ptc,
         }
         if self._skill_registry is not None:
             info["skills"] = self._skill_registry.list_names()
@@ -2019,16 +2053,19 @@ class Agent:
             "allow_self_spawn": self.allow_self_spawn,
             "max_spawn_depth": self.max_spawn_depth,
             "max_spawn_children": self.max_spawn_children,
+            "ptc": self.ptc,
+            "ptc_timeout": self.ptc_timeout,
         }
 
         # Serialize tools as importable dotted paths.
         # Skip retrieve_artifact (auto-registered), spawn_self (auto-registered),
-        # and context tools (auto-loaded).
+        # context tools (auto-loaded), and execute_code (PTC auto-registered).
         user_tools = [
             t
             for name, t in self.tools.items()
             if name not in ("retrieve_artifact", "spawn_self", "activate_skill")
             and not getattr(t, "_is_context_tool", False)
+            and not getattr(t, "_is_ptc_tool", False)
         ]
         if user_tools:
             data["tools"] = [_serialize_tool(t) for t in user_tools]
@@ -2093,6 +2130,8 @@ class Agent:
             allow_self_spawn=data.get("allow_self_spawn", False),
             max_spawn_depth=data.get("max_spawn_depth", 3),
             max_spawn_children=data.get("max_spawn_children", 4),
+            ptc=data.get("ptc", False),
+            ptc_timeout=data.get("ptc_timeout", 60),
         )
 
     def __repr__(self) -> str:

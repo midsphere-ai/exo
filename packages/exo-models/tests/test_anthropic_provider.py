@@ -12,6 +12,7 @@ from exo.config import ModelConfig  # pyright: ignore[reportMissingImports]
 from exo.models.anthropic import (  # pyright: ignore[reportMissingImports]
     _DEFAULT_MAX_TOKENS,
     AnthropicProvider,
+    _apply_cache_breakpoints,
     _build_messages,
     _convert_tools,
     _map_stop_reason,
@@ -310,7 +311,9 @@ class TestAnthropicProviderComplete:
         )
 
         call_kwargs = provider._client.messages.create.call_args[1]
-        assert call_kwargs["system"] == "be helpful"
+        assert call_kwargs["system"] == [
+            {"type": "text", "text": "be helpful", "cache_control": {"type": "ephemeral"}}
+        ]
 
     async def test_complete_no_system_omits_kwarg(self) -> None:
         config = _make_config()
@@ -337,6 +340,7 @@ class TestAnthropicProviderComplete:
         call_kwargs = provider._client.messages.create.call_args[1]
         assert call_kwargs["tools"][0]["name"] == "t"
         assert "input_schema" in call_kwargs["tools"][0]
+        assert call_kwargs["tools"][-1]["cache_control"] == {"type": "ephemeral"}
 
     async def test_complete_default_max_tokens(self) -> None:
         config = _make_config()
@@ -539,6 +543,100 @@ class TestAnthropicProviderStream:
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+
+
+class TestApplyCacheBreakpoints:
+    """Tests for Anthropic prompt caching breakpoints."""
+
+    def test_system_string_to_content_blocks(self) -> None:
+        kwargs = _apply_cache_breakpoints({"system": "be helpful", "messages": []})
+        assert kwargs["system"] == [
+            {"type": "text", "text": "be helpful", "cache_control": {"type": "ephemeral"}}
+        ]
+
+    def test_system_list_marks_last_block(self) -> None:
+        blocks = [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]
+        kwargs = _apply_cache_breakpoints({"system": blocks, "messages": []})
+        assert "cache_control" not in kwargs["system"][0]
+        assert kwargs["system"][1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_system_unchanged(self) -> None:
+        kwargs = _apply_cache_breakpoints({"messages": []})
+        assert "system" not in kwargs
+
+    def test_empty_system_unchanged(self) -> None:
+        kwargs = _apply_cache_breakpoints({"system": "", "messages": []})
+        assert kwargs["system"] == ""
+
+    def test_last_tool_gets_cache_control(self) -> None:
+        tools = [
+            {"name": "a", "description": "a", "input_schema": {}},
+            {"name": "b", "description": "b", "input_schema": {}},
+        ]
+        kwargs = _apply_cache_breakpoints({"tools": tools, "messages": []})
+        assert "cache_control" not in kwargs["tools"][0]
+        assert kwargs["tools"][1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_empty_tools_no_error(self) -> None:
+        kwargs = _apply_cache_breakpoints({"tools": [], "messages": []})
+        assert kwargs["tools"] == []
+
+    def test_no_tools_key_no_error(self) -> None:
+        kwargs = _apply_cache_breakpoints({"messages": []})
+        assert "tools" not in kwargs
+
+    def test_last_two_user_messages_marked(self) -> None:
+        messages = [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+            {"role": "user", "content": "second"},
+            {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+            {"role": "user", "content": "third"},
+        ]
+        kwargs = _apply_cache_breakpoints({"messages": messages})
+        # First user message untouched
+        assert messages[0]["content"] == "first"
+        # Second user message marked
+        assert messages[2]["content"] == [
+            {"type": "text", "text": "second", "cache_control": {"type": "ephemeral"}}
+        ]
+        # Third user message marked
+        assert messages[4]["content"] == [
+            {"type": "text", "text": "third", "cache_control": {"type": "ephemeral"}}
+        ]
+
+    def test_user_string_content_converted(self) -> None:
+        messages = [{"role": "user", "content": "hello"}]
+        kwargs = _apply_cache_breakpoints({"messages": messages})
+        assert messages[0]["content"] == [
+            {"type": "text", "text": "hello", "cache_control": {"type": "ephemeral"}}
+        ]
+
+    def test_user_list_content_last_block_marked(self) -> None:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "a"},
+                    {"type": "tool_result", "tool_use_id": "t2", "content": "b"},
+                ],
+            }
+        ]
+        kwargs = _apply_cache_breakpoints({"messages": messages})
+        assert "cache_control" not in messages[0]["content"][0]
+        assert messages[0]["content"][1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_single_user_message_only_one_breakpoint(self) -> None:
+        messages = [{"role": "user", "content": "only one"}]
+        _apply_cache_breakpoints({"messages": messages})
+        assert messages[0]["content"] == [
+            {"type": "text", "text": "only one", "cache_control": {"type": "ephemeral"}}
+        ]
+
+    def test_no_user_messages_no_error(self) -> None:
+        messages = [{"role": "assistant", "content": [{"type": "text", "text": "hi"}]}]
+        kwargs = _apply_cache_breakpoints({"messages": messages})
+        assert "cache_control" not in messages[0]["content"][0]
 
 
 class TestAnthropicRegistration:

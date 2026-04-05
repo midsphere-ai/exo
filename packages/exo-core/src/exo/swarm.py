@@ -68,6 +68,7 @@ class Swarm:
         context_limit: int | None = None,
         overflow: str | None = None,
         cache: bool | None = None,
+        ptc: bool | None = None,
     ) -> None:
         if not agents:
             raise SwarmError("Swarm requires at least one agent")
@@ -144,6 +145,11 @@ class Swarm:
             for agent in self.agents.values():
                 agent.context = ctx
                 agent._context_is_auto = False
+
+        # Propagate PTC to all member agents when explicitly provided.
+        if ptc is not None:
+            for agent in self.agents.values():
+                agent.ptc = ptc
 
         # Set name from the first agent for compatibility with runner
         self.name = f"swarm({self.flow_order[0]}...)"
