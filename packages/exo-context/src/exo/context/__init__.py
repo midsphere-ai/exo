@@ -14,6 +14,13 @@ from exo.context.context import (  # pyright: ignore[reportMissingImports]
     Context,
     ContextError,
 )
+from exo.context.hook import (  # pyright: ignore[reportMissingImports]
+    ContextWindowHook,
+)
+from exo.context.info import (  # pyright: ignore[reportMissingImports]
+    ContextWindowInfo,
+    build_context_window_info,
+)
 from exo.context.neuron import (  # pyright: ignore[reportMissingImports]
     Neuron,
     neuron_registry,
@@ -55,6 +62,8 @@ __all__ = [
     "ContextError",
     "ContextProcessor",
     "ContextState",
+    "ContextWindowHook",
+    "ContextWindowInfo",
     "DialogueCompressor",
     "MessageOffloader",
     "Neuron",
@@ -66,6 +75,7 @@ __all__ = [
     "TokenTracker",
     "ToolResultOffloader",
     "Workspace",
+    "build_context_window_info",
     "get_context_tools",
     "get_file_tools",
     "get_knowledge_tools",

@@ -92,7 +92,7 @@ Emitted before an exception is re-raised. The exception still propagates to the 
 ```python
 class ContextEvent:
     type: Literal["context"] = "context"
-    action: Literal["offload", "summarize", "window", "token_budget"]
+    action: str  # "offload", "summarize", "window", "token_budget", or custom from hooks
     agent_name: str = ""
     before_count: int = 0           # Message count before operation
     after_count: int = 0            # Message count after operation
@@ -104,6 +104,7 @@ class ContextEvent:
 - `"summarize"` — LLM-based conversation summarization
 - `"window"` — History rounds trimming
 - `"token_budget"` — Token fill ratio exceeded threshold
+- Custom strings — from `CONTEXT_WINDOW` hooks that append `_ContextAction` to the `actions` list
 
 #### MCPProgressEvent (always emitted when MCP progress arrives)
 

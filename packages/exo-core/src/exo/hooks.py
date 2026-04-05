@@ -25,6 +25,7 @@ class HookPoint(enum.Enum):
     POST_LLM_CALL = "post_llm_call"
     PRE_TOOL_CALL = "pre_tool_call"
     POST_TOOL_CALL = "post_tool_call"
+    CONTEXT_WINDOW = "context_window"
 
 
 class HookManager:

@@ -38,6 +38,7 @@ Use this skill when the developer needs to:
 | `POST_TOOL_CALL` | After tool returns | `agent_name: str`, `tool_name: str`, `result: Any` |
 | `FINISHED` | Execution completed successfully | `agent_name: str`, `output: Any` |
 | `ERROR` | Exception occurred | `agent_name: str`, `error: Exception` |
+| `CONTEXT_WINDOW` | Context windowing runs | `agent: Agent`, `messages: list`, `info: ContextWindowInfo`, `provider: Any`, `actions: list` |
 
 ### Registering Hooks on Agent
 
@@ -244,6 +245,76 @@ agent = Agent(
 
 When `enable_snapshots=True`, hook-injected messages are saved in the snapshot and loaded on the next run. The idempotency check prevents duplicate injection.
 
+### Custom Context Management (overflow="hook")
+
+```python
+from exo import Agent, HookPoint
+from exo.context.info import ContextWindowInfo
+from exo.types import SystemMessage
+
+async def token_aware_window(*, messages, info: ContextWindowInfo, **_):
+    """Keep messages until we're under 60% of context window."""
+    if info.fill_ratio < 0.6:
+        return  # plenty of room
+    system = [m for m in messages if isinstance(m, SystemMessage)]
+    non_system = [m for m in messages if not isinstance(m, SystemMessage)]
+    # Estimate tokens per message from last call
+    avg_tokens = info.input_tokens / max(len(non_system), 1)
+    target_count = int((info.context_window * 0.5) / avg_tokens) if info.context_window else info.limit
+    messages.clear()
+    messages.extend(system + non_system[-target_count:])
+
+agent = Agent(
+    name="bot",
+    overflow="hook",
+    hooks=[(HookPoint.CONTEXT_WINDOW, token_aware_window)],
+)
+```
+
+### Context Window Hook with ContextWindowHook ABC
+
+```python
+from exo.context.hook import ContextWindowHook
+from exo.context.info import ContextWindowInfo
+
+class TrajectoryAwareCompressor(ContextWindowHook):
+    """Compress aggressively if token growth predicts overflow."""
+
+    async def window(self, *, messages, info: ContextWindowInfo, **_):
+        if len(info.trajectory) < 2 or not info.context_window:
+            return
+        growth = info.trajectory[-1].prompt_tokens - info.trajectory[-2].prompt_tokens
+        steps_left = info.max_steps - info.step
+        projected = info.input_tokens + (growth * min(steps_left, 3))
+        if projected > info.context_window * 0.9:
+            system = [m for m in messages if isinstance(m, SystemMessage)]
+            non_system = [m for m in messages if not isinstance(m, SystemMessage)]
+            messages.clear()
+            messages.extend(system + non_system[-info.keep_recent:])
+
+agent = Agent(
+    name="bot",
+    overflow="hook",
+    hooks=[(HookPoint.CONTEXT_WINDOW, TrajectoryAwareCompressor())],
+)
+```
+
+### Post-Windowing Augmentation (pin messages after summarization)
+
+```python
+async def pin_tool_results(*, messages, info, **_):
+    """After built-in summarization, ensure important messages survive."""
+    # This fires AFTER overflow="summarize" runs
+    # info.total_messages reflects post-windowing state
+    pass  # ... re-inject pinned messages from external store ...
+
+agent = Agent(
+    name="bot",
+    overflow="summarize",  # built-in runs first
+    hooks=[(HookPoint.CONTEXT_WINDOW, pin_tool_results)],
+)
+```
+
 ### Fire-and-Forget Hook (Exception-Safe)
 
 ```python
@@ -266,5 +337,9 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **Tool schemas are re-enumerated each step** — so dynamically added/removed tools take effect on the next LLM call, not retroactively.
 - **inject_message is async-safe** — uses `asyncio.Queue.put_nowait()`, can be called from any coroutine.
 - **Hook data kwargs may evolve** — always use `**_` or `**data` to absorb unknown kwargs for forward compatibility.
+- **`CONTEXT_WINDOW` hook has two modes**: With `overflow="hook"`, the hook replaces built-in windowing entirely. With `overflow="summarize"` or `"truncate"`, the hook fires after built-in windowing as an augmentation pass.
+- **`CONTEXT_WINDOW` hook receives `ContextWindowInfo`**: A frozen dataclass with step number, message counts, token pressure (fill_ratio, context_window, input/output tokens), cumulative trajectory, config values, and agent identity. Import from `exo.context.info`.
+- **`CONTEXT_WINDOW` hook mutates `messages` in place**: The `messages` kwarg is a mutable list. Modify it directly (`.clear()`, `.extend()`, etc.). Return value is ignored (hooks return None).
+- **`CONTEXT_WINDOW` hook can report actions**: Append `_ContextAction` instances to the `actions` list to emit `ContextEvent`s in streaming mode.
 - **PRE_LLM_CALL mutations persist in snapshots** — when `enable_snapshots=True`, messages injected by PRE_LLM_CALL hooks become part of the snapshot. On the next run, the hook fires again on the snapshot-loaded messages. Hooks that inject messages must be idempotent (check before injecting) to avoid duplicates. Use `has_message_content()` from `exo.memory.snapshot`.
 - **inject_message persists in snapshots** — injected messages are part of the final `msg_list` and get saved in the snapshot. They survive across runs without re-injection.

@@ -30,11 +30,13 @@ class OverflowStrategy(StrEnum):
     - summarize: Oldest messages are compressed into a summary, recent kept verbatim.
     - truncate: Oldest messages are dropped, recent kept.
     - none: No context management — grows until model token limit.
+    - hook: Context management delegated to ``CONTEXT_WINDOW`` hooks.
     """
 
     SUMMARIZE = "summarize"
     TRUNCATE = "truncate"
     NONE = "none"
+    HOOK = "hook"
 
 
 # Keys that indicate the caller is using the new simplified API.
@@ -174,6 +176,12 @@ class ContextConfig(BaseModel, frozen=True):
             elif overflow == "none":
                 data.setdefault("history_rounds", 10_000)
                 data.setdefault("limit", 10_000)
+                data.setdefault("summary_threshold", 10_000)
+                data.setdefault("offload_threshold", 10_000)
+            elif overflow == "hook":
+                # Hook-based: built-in cascade disabled, thresholds set high.
+                # limit is preserved as-is for hooks to reference via info.limit.
+                data.setdefault("history_rounds", 10_000)
                 data.setdefault("summary_threshold", 10_000)
                 data.setdefault("offload_threshold", 10_000)
 

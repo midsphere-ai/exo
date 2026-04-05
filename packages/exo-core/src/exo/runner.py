@@ -353,9 +353,31 @@ async def _stream(
     history.append(UserMessage(content=input))
     msg_list = build_messages(instr, history)
 
-    # ---- Context: apply windowing and summarization ----
+    # ---- Context + Token tracking: resolve model info early (needed by hooks) ----
     _agent_context = getattr(agent, "context", None)
     _agent_name = getattr(agent, "name", "")
+    model_name = getattr(agent, "model", "") or ""
+    _model_name_only = model_name.partition(":")[2] or model_name
+    _stream_context_window: int | None = None
+    _stream_token_tracker: Any = None
+    _update_system_token_info: Any = None
+    if _agent_context is not None:
+        try:
+            from exo.agent import (  # pyright: ignore[reportMissingImports]
+                _get_context_window_tokens,
+                _update_system_token_info,
+            )
+            from exo.context.token_tracker import (
+                TokenTracker,  # pyright: ignore[reportMissingImports]
+            )
+
+            _stream_context_window = _get_context_window_tokens(_model_name_only)
+            _stream_token_tracker = TokenTracker()
+        except ImportError:
+            pass
+    # ---- end Token tracking init ----
+
+    # ---- Context: apply windowing and summarization ----
     # Skip initial windowing when loaded from snapshot.
     if _agent_context is not None and not _snapshot_loaded:
         from exo.agent import _apply_context_windowing  # pyright: ignore[reportMissingImports]
@@ -364,6 +386,13 @@ async def _stream(
             msg_list,
             _agent_context,
             resolved,
+            hook_manager=agent.hook_manager,
+            agent=agent,
+            step=-1,
+            max_steps=getattr(agent, "max_steps", 0),
+            agent_name=_agent_name,
+            model_name=_model_name_only,
+            context_window_tokens=_stream_context_window,
         )
         for _ca in _ctx_actions:
             _ev = ContextEvent(
@@ -389,28 +418,6 @@ async def _stream(
         except ImportError:
             pass
     # ---- end Long-term memory ----
-
-    model_name = getattr(agent, "model", "") or ""
-
-    # ---- Token tracking: init per-stream tracker and look up context window ----
-    _model_name_only = model_name.partition(":")[2] or model_name
-    _stream_context_window: int | None = None
-    _stream_token_tracker: Any = None
-    if _agent_context is not None:
-        try:
-            from exo.agent import (  # pyright: ignore[reportMissingImports]
-                _get_context_window_tokens,
-                _update_system_token_info,
-            )
-            from exo.context.token_tracker import (
-                TokenTracker,  # pyright: ignore[reportMissingImports]
-            )
-
-            _stream_context_window = _get_context_window_tokens(_model_name_only)
-            _stream_token_tracker = TokenTracker()
-        except ImportError:
-            pass
-    # ---- end Token tracking init ----
 
     # Fire START hook (parity with run() path)
     await agent.hook_manager.run(HookPoint.START, agent=agent, input=input)
@@ -708,6 +715,15 @@ async def _stream(
                         _agent_context,
                         resolved,
                         force_summarize=True,
+                        hook_manager=agent.hook_manager,
+                        agent=agent,
+                        step=step_num,
+                        max_steps=getattr(agent, "max_steps", 0),
+                        agent_name=_agent_name,
+                        model_name=_model_name_only,
+                        context_window_tokens=_stream_context_window,
+                        last_usage=step_usage,
+                        token_tracker=_stream_token_tracker,
                     )
                     for _ba in _budget_actions:
                         _ba_ev = ContextEvent(

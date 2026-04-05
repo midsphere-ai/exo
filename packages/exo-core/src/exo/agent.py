@@ -356,6 +356,15 @@ async def _apply_context_windowing(
     provider: Any,
     *,
     force_summarize: bool = False,
+    hook_manager: Any | None = None,
+    agent: Any | None = None,
+    step: int = -1,
+    max_steps: int = 0,
+    agent_name: str = "",
+    model_name: str = "",
+    context_window_tokens: int | None = None,
+    last_usage: Any | None = None,
+    token_tracker: Any | None = None,
 ) -> tuple[list[Message], list[_ContextAction]]:
     """Apply context windowing and optional summarization to *msg_list*.
 
@@ -385,6 +394,38 @@ async def _apply_context_windowing(
 
     actions: list[_ContextAction] = []
 
+    # ── overflow="hook" — delegate entirely to hooks ────────────────────
+    if overflow_strategy == "hook":
+        if hook_manager is not None:
+            try:
+                from exo.context.info import (  # pyright: ignore[reportMissingImports]
+                    build_context_window_info,
+                )
+
+                _info = build_context_window_info(
+                    msg_list,
+                    _cfg,
+                    step=step,
+                    max_steps=max_steps,
+                    agent_name=agent_name,
+                    model=model_name,
+                    context_window_tokens=context_window_tokens,
+                    last_usage=last_usage,
+                    token_tracker=token_tracker,
+                    force=force_summarize,
+                )
+                await hook_manager.run(
+                    HookPoint.CONTEXT_WINDOW,
+                    agent=agent,
+                    messages=msg_list,
+                    info=_info,
+                    provider=provider,
+                    actions=actions,
+                )
+            except ImportError:
+                _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
+        return msg_list, actions
+
     # Separate system messages from conversation history
     system_msgs: list[Message] = [m for m in msg_list if isinstance(m, SystemMessage)]
     non_system: list[Message] = [m for m in msg_list if not isinstance(m, SystemMessage)]
@@ -412,125 +453,158 @@ async def _apply_context_windowing(
                     {"limit": history_rounds},
                 )
             )
-        return system_msgs + non_system, actions
-
     # ── overflow="summarize" — three-stage cascade ───────────────────────
-
-    # 1. Offload threshold: aggressive trim when far over limit
-    if msg_count > offload_threshold:
-        before = msg_count
-        _log.debug(
-            "context offload: %d messages > offload_threshold=%d, trimming to %d",
-            msg_count,
-            offload_threshold,
-            summary_threshold,
-        )
-        non_system = non_system[-summary_threshold:]
-        msg_count = len(non_system)
-        actions.append(
-            _ContextAction(
-                "offload",
-                before,
+    elif overflow_strategy == "summarize":
+        # 1. Offload threshold: aggressive trim when far over limit
+        if msg_count > offload_threshold:
+            before = msg_count
+            _log.debug(
+                "context offload: %d messages > offload_threshold=%d, trimming to %d",
                 msg_count,
-                {"offload_threshold": offload_threshold},
+                offload_threshold,
+                summary_threshold,
             )
-        )
-
-    # 2. Summary threshold: attempt summarization via exo-memory.
-    # Also fires when force_summarize=True (token budget exceeded) as long as
-    # there are at least 2 messages to summarize.
-    elif msg_count >= summary_threshold or (force_summarize and msg_count >= 2):
-        try:
-            from exo.memory.base import (  # pyright: ignore[reportMissingImports]
-                AIMemory,
-                HumanMemory,
-                MemoryItem,
-                ToolMemory,
-            )
-            from exo.memory.summary import (  # pyright: ignore[reportMissingImports]
-                SummaryConfig,
-                check_trigger,
-                generate_summary,
+            non_system = non_system[-summary_threshold:]
+            msg_count = len(non_system)
+            actions.append(
+                _ContextAction(
+                    "offload",
+                    before,
+                    msg_count,
+                    {"offload_threshold": offload_threshold},
+                )
             )
 
-            # Convert messages to MemoryItems for trigger check
-            items: list[MemoryItem] = []
-            for msg in non_system:
-                content = str(getattr(msg, "content", "") or "")
-                if isinstance(msg, UserMessage):
-                    items.append(HumanMemory(content=content))
-                elif isinstance(msg, AssistantMessage):
-                    items.append(AIMemory(content=content))
+        # 2. Summary threshold: attempt summarization via exo-memory.
+        # Also fires when force_summarize=True (token budget exceeded) as long as
+        # there are at least 2 messages to summarize.
+        elif msg_count >= summary_threshold or (force_summarize and msg_count >= 2):
+            try:
+                from exo.memory.base import (  # pyright: ignore[reportMissingImports]
+                    AIMemory,
+                    HumanMemory,
+                    MemoryItem,
+                    ToolMemory,
+                )
+                from exo.memory.summary import (  # pyright: ignore[reportMissingImports]
+                    SummaryConfig,
+                    check_trigger,
+                    generate_summary,
+                )
+
+                # Convert messages to MemoryItems for trigger check
+                items: list[MemoryItem] = []
+                for msg in non_system:
+                    content = str(getattr(msg, "content", "") or "")
+                    if isinstance(msg, UserMessage):
+                        items.append(HumanMemory(content=content))
+                    elif isinstance(msg, AssistantMessage):
+                        items.append(AIMemory(content=content))
+                    else:
+                        items.append(ToolMemory(content=content))
+
+                # When force_summarize=True, use a tighter keep_recent so that even
+                # a small message list gets meaningfully compressed (keep half).
+                if force_summarize:
+                    keep_recent = max(2, msg_count // 2)
                 else:
-                    items.append(ToolMemory(content=content))
+                    keep_recent = max(2, keep_recent_cfg)
+                summary_cfg = SummaryConfig(
+                    message_threshold=summary_threshold,
+                    keep_recent=keep_recent,
+                )
 
-            # When force_summarize=True, use a tighter keep_recent so that even
-            # a small message list gets meaningfully compressed (keep half).
-            if force_summarize:
-                keep_recent = max(2, msg_count // 2)
-            else:
-                keep_recent = max(2, keep_recent_cfg)
-            summary_cfg = SummaryConfig(
-                message_threshold=summary_threshold,
-                keep_recent=keep_recent,
+                # Bypass check_trigger() when force_summarize is set — the token
+                # budget decision has already been made by the caller.
+                should_summarize = force_summarize or check_trigger(items, summary_cfg).triggered
+
+                if should_summarize and provider is not None:
+                    before = msg_count
+                    summarizer = _ProviderSummarizer(provider)
+                    result = await generate_summary(items, summary_cfg, summarizer)
+                    if result.summaries:
+                        summary_text = "\n\n".join(result.summaries.values())
+                        keep_count = len(result.compressed_items)
+                        recent_msgs = non_system[-keep_count:] if keep_count > 0 else []
+                        summary_msg = SystemMessage(
+                            content=f"[Conversation Summary]\n{summary_text}"
+                        )
+                        non_system = [summary_msg, *recent_msgs]
+                        msg_count = len(non_system)
+                        _log.debug(
+                            "context summarization applied: %d -> %d messages"
+                            " (summary + %d recent)",
+                            len(items),
+                            msg_count,
+                            keep_count,
+                        )
+                        actions.append(
+                            _ContextAction(
+                                "summarize",
+                                before,
+                                msg_count,
+                                {
+                                    "summary_threshold": summary_threshold,
+                                    "keep_recent": keep_count,
+                                    "forced": force_summarize,
+                                },
+                            )
+                        )
+            except ImportError:
+                pass
+
+        # 3. History windowing: keep last history_rounds messages
+        if msg_count > history_rounds:
+            before = msg_count
+            _log.debug(
+                "context windowing: trimming %d -> %d messages (history_rounds=%d)",
+                msg_count,
+                history_rounds,
+                history_rounds,
+            )
+            non_system = non_system[-history_rounds:]
+            actions.append(
+                _ContextAction(
+                    "window",
+                    before,
+                    history_rounds,
+                    {"history_rounds": history_rounds},
+                )
             )
 
-            # Bypass check_trigger() when force_summarize is set — the token
-            # budget decision has already been made by the caller.
-            should_summarize = force_summarize or check_trigger(items, summary_cfg).triggered
+    # ── Post-windowing augmentation hook ──────────────────────────────
+    # Fires after built-in strategies for observation / additional mutations.
+    result_list = system_msgs + non_system
+    if hook_manager is not None and hook_manager.has_hooks(HookPoint.CONTEXT_WINDOW):
+        try:
+            from exo.context.info import (  # pyright: ignore[reportMissingImports]
+                build_context_window_info,
+            )
 
-            if should_summarize and provider is not None:
-                before = msg_count
-                summarizer = _ProviderSummarizer(provider)
-                result = await generate_summary(items, summary_cfg, summarizer)
-                if result.summaries:
-                    summary_text = "\n\n".join(result.summaries.values())
-                    keep_count = len(result.compressed_items)
-                    recent_msgs = non_system[-keep_count:] if keep_count > 0 else []
-                    summary_msg = SystemMessage(content=f"[Conversation Summary]\n{summary_text}")
-                    non_system = [summary_msg] + recent_msgs
-                    msg_count = len(non_system)
-                    _log.debug(
-                        "context summarization applied: %d -> %d messages (summary + %d recent)",
-                        len(items),
-                        msg_count,
-                        keep_count,
-                    )
-                    actions.append(
-                        _ContextAction(
-                            "summarize",
-                            before,
-                            msg_count,
-                            {
-                                "summary_threshold": summary_threshold,
-                                "keep_recent": keep_count,
-                                "forced": force_summarize,
-                            },
-                        )
-                    )
+            _info = build_context_window_info(
+                result_list,
+                _cfg,
+                step=step,
+                max_steps=max_steps,
+                agent_name=agent_name,
+                model=model_name,
+                context_window_tokens=context_window_tokens,
+                last_usage=last_usage,
+                token_tracker=token_tracker,
+                force=force_summarize,
+            )
+            await hook_manager.run(
+                HookPoint.CONTEXT_WINDOW,
+                agent=agent,
+                messages=result_list,
+                info=_info,
+                provider=provider,
+                actions=actions,
+            )
         except ImportError:
             pass
 
-    # 3. History windowing: keep last history_rounds messages
-    if msg_count > history_rounds:
-        before = msg_count
-        _log.debug(
-            "context windowing: trimming %d -> %d messages (history_rounds=%d)",
-            msg_count,
-            history_rounds,
-            history_rounds,
-        )
-        non_system = non_system[-history_rounds:]
-        actions.append(
-            _ContextAction(
-                "window",
-                before,
-                history_rounds,
-                {"history_rounds": history_rounds},
-            )
-        )
-
-    return system_msgs + non_system, actions
+    return result_list, actions
 
 
 class AgentError(ExoError):
@@ -1480,11 +1554,25 @@ class Agent:
         history.append(UserMessage(content=input))
         msg_list = build_messages(instructions, history)
 
+        # ---- Token tracking: look up context window (needed by windowing hooks) ----
+        _context_window_tokens = _get_context_window_tokens(self.model_name)
+
         # ---- Context: apply windowing and summarization ----
         # Skip initial windowing when loaded from snapshot — it IS the
         # already-windowed state.  Mid-run budget triggers still fire.
         if self.context is not None and not _snapshot_loaded:
-            msg_list, _ = await _apply_context_windowing(msg_list, self.context, provider)
+            msg_list, _ = await _apply_context_windowing(
+                msg_list,
+                self.context,
+                provider,
+                hook_manager=self.hook_manager,
+                agent=self,
+                step=-1,
+                max_steps=self.max_steps,
+                agent_name=self.name,
+                model_name=self.model_name,
+                context_window_tokens=_context_window_tokens,
+            )
         # ---- end Context ----
 
         # ---- Long-term memory: inject relevant knowledge into system message ----
@@ -1492,8 +1580,7 @@ class Agent:
             msg_list = await _inject_long_term_knowledge(self.memory, input, msg_list)
         # ---- end Long-term memory ----
 
-        # ---- Token tracking: init per-run tracker and look up context window ----
-        _context_window_tokens = _get_context_window_tokens(self.model_name)
+        # ---- Token tracking: init per-run tracker ----
         _token_tracker: Any = None
         if self.context is not None:
             try:
@@ -1576,6 +1663,15 @@ class Agent:
                         self.context,
                         provider,
                         force_summarize=True,
+                        hook_manager=self.hook_manager,
+                        agent=self,
+                        step=_step,
+                        max_steps=self.max_steps,
+                        agent_name=self.name,
+                        model_name=self.model_name,
+                        context_window_tokens=_context_window_tokens,
+                        last_usage=output.usage,
+                        token_tracker=_token_tracker,
                     )
 
         # max_steps exhausted — save snapshot and return last output as-is

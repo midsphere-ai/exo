@@ -24,8 +24,9 @@ Use this skill when the developer needs to:
 2. **Need a different limit?** → `Agent(name="bot", context_limit=50)`
 3. **Want cheap, no-LLM context management?** → `Agent(name="bot", overflow="truncate")`
 4. **Want no context management at all?** → `Agent(name="bot", overflow="none")`
-5. **Want to persist context between runs?** → `Agent(name="bot", cache=True)`
-6. **Need full custom config?** → Use `ContextConfig(limit=..., overflow=..., ...)`
+5. **Want fully custom context management?** → `Agent(name="bot", overflow="hook")` + register a `CONTEXT_WINDOW` hook
+6. **Want to persist context between runs?** → `Agent(name="bot", cache=True)`
+7. **Need full custom config?** → Use `ContextConfig(limit=..., overflow=..., ...)`
 7. **Need modular prompt snippets?** → Use Neurons (composable prompt fragments with priority ordering)
 8. **Need hierarchical sub-tasks?** → Use `context.fork(child_name)` and `context.merge(child)`
 9. **Want the LLM to see its token usage?** → Set `budget_awareness="per-message"` on Agent
@@ -67,6 +68,7 @@ agent = Agent(name="bot")
 | `"summarize"` | Oldest messages compressed into a summary, recent kept verbatim | 1 extra LLM call | Agents that need long-term context |
 | `"truncate"` | Oldest messages dropped, recent kept | None | Stateless / cost-sensitive agents |
 | `"none"` | Nothing -- grows until model token limit | None | Short conversations, manual control |
+| `"hook"` | Delegated to `CONTEXT_WINDOW` hooks | Depends on hook | Custom strategies (semantic compression, importance scoring, etc.) |
 
 ### ContextConfig (Advanced)
 
@@ -130,6 +132,75 @@ Legacy mode presets:
 
 **Token pressure**: When input tokens exceed `token_pressure` ratio (default 0.8) of the model's context window, overflow fires early regardless of message count. This is automatic -- no configuration needed for most users.
 
+### Custom Context Management (overflow="hook")
+
+Delegate context windowing entirely to user-defined hooks. The hook receives a rich `ContextWindowInfo` snapshot with token pressure, message counts, trajectory, and more.
+
+```python
+from exo import Agent, HookPoint
+from exo.context.info import ContextWindowInfo
+from exo.types import SystemMessage
+
+async def my_context_hook(*, messages, info: ContextWindowInfo, **_):
+    """Custom strategy: keep messages until 60% of context window."""
+    if info.fill_ratio < 0.6:
+        return  # plenty of room
+    system = [m for m in messages if isinstance(m, SystemMessage)]
+    non_system = [m for m in messages if not isinstance(m, SystemMessage)]
+    messages.clear()
+    messages.extend(system + non_system[-info.limit:])
+
+agent = Agent(
+    name="bot",
+    overflow="hook",
+    hooks=[(HookPoint.CONTEXT_WINDOW, my_context_hook)],
+)
+```
+
+**How it works:**
+- `overflow="hook"` disables all built-in windowing (summarize/truncate cascade)
+- `CONTEXT_WINDOW` hook fires at both windowing sites (initial build + token pressure trigger)
+- Hook receives `messages` (mutable list — modify in place) and `info` (frozen snapshot)
+- Hook can also append `_ContextAction` items to `actions` list for streaming `ContextEvent`s
+
+**`ContextWindowInfo` fields:**
+
+| Category | Fields |
+|---|---|
+| Run position | `step` (-1 = initial), `max_steps`, `is_initial` |
+| Message counts | `total_messages`, `system_count`, `user_count`, `assistant_count`, `tool_result_count` |
+| Token pressure | `context_window`, `input_tokens`, `output_tokens`, `fill_ratio`, `token_pressure_threshold`, `force` |
+| Trajectory | `cumulative_input_tokens`, `cumulative_output_tokens`, `trajectory` (tuple of TokenStep) |
+| Config | `overflow`, `limit`, `keep_recent` |
+| Agent | `agent_name`, `model` |
+
+**Typed base class:**
+
+```python
+from exo.context.hook import ContextWindowHook
+
+class SemanticCompressor(ContextWindowHook):
+    async def window(self, *, messages, info, provider, **_):
+        # Use provider for custom LLM-based compression
+        ...
+
+agent = Agent(
+    name="bot",
+    overflow="hook",
+    hooks=[(HookPoint.CONTEXT_WINDOW, SemanticCompressor())],
+)
+```
+
+**Augmentation mode** — register a `CONTEXT_WINDOW` hook alongside `overflow="summarize"` or `"truncate"`. The hook fires after the built-in strategy as a post-processing pass:
+
+```python
+agent = Agent(
+    name="bot",
+    overflow="summarize",  # built-in runs first
+    hooks=[(HookPoint.CONTEXT_WINDOW, my_post_processing_hook)],
+)
+```
+
 ### Context Caching (Snapshots)
 
 When `cache=True`, the processed `msg_list` (after summarization, truncation, hook mutations) is persisted at the end of each agent run. On the next run, the cached context is loaded instead of rebuilding from raw history.
@@ -156,6 +227,33 @@ config = ContextConfig(limit=20, cache=True)
 - `branch()` does not copy cached context
 - `spawn_self()` children never load/save cached context
 - Requires memory to be configured
+
+### Accessing Raw (Unmutated) History
+
+Hooks, summarization, and truncation only mutate the in-memory `msg_list` sent to the LLM. The underlying memory store is **append-only** -- raw history is never touched. You can always recover it:
+
+```python
+# Option 1: Discard cached snapshot, next run rebuilds from raw history
+await agent.clear_snapshot()
+
+# Option 2: Load raw history directly (bypasses hooks/windowing)
+raw_messages = await agent._memory_persistence.load_history(
+    agent_name=agent.name,
+    conversation_id=agent.conversation_id,
+    rounds=100,
+)
+
+# Option 3: Query the store for individual raw memory items
+from exo.memory.base import MemoryMetadata
+
+meta = MemoryMetadata(agent_id=agent.name, task_id=agent.conversation_id)
+raw_items = await agent._memory_persistence.store.search(metadata=meta, limit=500)
+raw_items = [item for item in raw_items if item.memory_type != "snapshot"]
+```
+
+**Key point:** Two layers exist at runtime:
+1. **Raw store** -- append-only `HumanMemory`/`AIMemory`/`ToolMemory` items. Never mutated.
+2. **Processed msg_list** -- what the LLM sees. Hooks, windowing, and summarization operate here. If `cache=True`, this mutated version is persisted as a snapshot.
 
 ### Context Object
 
@@ -323,6 +421,9 @@ agent = Agent(
 - **`context_limit`/`overflow`/`cache` on Swarm propagates to ALL agents** -- overrides their individual context settings
 - **Default auto-creation:** If exo-context is installed and no context params are passed, the agent gets limit=20, overflow="summarize" automatically
 - **`context=None` vs not passing context:** `None` explicitly disables; not passing triggers auto-creation
+- **`overflow="hook"` with no hooks registered is safe** -- acts like `overflow="none"` (no-op)
+- **`overflow="hook"` still respects `context_limit`** -- the `limit` value is passed through in `info.limit` for hooks to reference, but built-in thresholds are disabled
+- **CONTEXT_WINDOW hook fires at two sites** -- initial windowing (before first LLM call, `info.step=-1`) and token budget trigger (mid-run, `info.force=True`)
 - **Cache requires memory persistence** -- `cache=True` has no effect if `memory` is not configured
 - **Cache-aware hooks must be idempotent** -- PRE_LLM_CALL hooks that inject messages should check before injecting (use `has_message_content(messages, "MARKER")` from `exo.memory.snapshot`)
 - **Cache excludes instruction SystemMessages** -- they are regenerated fresh each run. `[Conversation Summary]` SystemMessages are preserved.

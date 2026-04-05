@@ -274,3 +274,44 @@ Three overflow strategies: `"summarize"` (LLM compression), `"truncate"` (drop o
 - `compute_config_hash()` reads old field names — no snapshot invalidation on upgrade
 
 **Tests after changes:** exo-core 1524 ✓ · exo-memory 575 ✓ · exo-context 490 ✓ (2593 total, 0 failures)
+
+---
+
+### Session 4 — 2026-04-05: Hook-Based Custom Context Management
+
+**What was done:** New `overflow="hook"` strategy + `CONTEXT_WINDOW` hook point that lets users implement custom context management via hooks, with a rich `ContextWindowInfo` snapshot.
+
+**Problem:** The three built-in overflow strategies (`summarize`, `truncate`, `none`) were closed. Users needing custom context management (semantic compression, importance-based retention, external memory offload) had no extension point.
+
+**Design:**
+- `overflow="hook"` delegates context windowing entirely to `CONTEXT_WINDOW` hooks (built-in cascade skipped)
+- `overflow="summarize"|"truncate"` + registered `CONTEXT_WINDOW` hook fires as a post-processing augmentation pass
+- `overflow="none"` never fires the hook (user explicitly opted out)
+- Hooks mutate `messages` list in place (same pattern as `PRE_LLM_CALL`)
+- `ContextWindowInfo` frozen dataclass provides rich read-only context: step position, message counts by type, token pressure (fill_ratio, context_window, input/output tokens), cumulative trajectory, config values, and agent identity
+- `ContextWindowHook` ABC for typed convenience (optional — plain async functions work too)
+- Hook fires at both windowing sites: initial (pre-first-LLM, step=-1) and token budget trigger (mid-run, force=True)
+
+**Files created:**
+
+| Package | File | Content |
+|---|---|---|
+| exo-context | `info.py` | `ContextWindowInfo` dataclass, `build_context_window_info()` builder |
+| exo-context | `hook.py` | `ContextWindowHook` ABC |
+| exo-core | `tests/test_context_window_hook.py` | 9 integration tests |
+| exo-context | `tests/test_context_window_info.py` | 10 unit tests |
+
+**Files changed:**
+
+| Package | File | Change |
+|---|---|---|
+| exo-context | `config.py` | `HOOK = "hook"` in `OverflowStrategy`, `_normalize_api_fields` branch for hook |
+| exo-context | `__init__.py` | Exports for `ContextWindowInfo`, `ContextWindowHook`, `build_context_window_info` |
+| exo-core | `hooks.py` | `CONTEXT_WINDOW = "context_window"` in `HookPoint` |
+| exo-core | `agent.py` | `_apply_context_windowing()` gains hook dispatch (overflow="hook" and augmentation), new params threaded; call sites updated; summarize cascade indented under `elif` |
+| exo-core | `runner.py` | Model/context-window resolution moved before windowing; both call sites pass hook params |
+| exo-core | `tests/test_hooks.py` | Updated HookPoint count (7→8) and expected names |
+| skills | `hooks/SKILL.md` | `CONTEXT_WINDOW` in hook table, patterns, gotchas |
+| skills | `context/SKILL.md` | `overflow="hook"` in decision guide, strategies table, full reference section, gotchas |
+
+**Tests after changes:** exo-core 1533 ✓ · exo-context 500 ✓ (2033 total, 0 failures)

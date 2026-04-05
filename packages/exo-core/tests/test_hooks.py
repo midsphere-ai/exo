@@ -8,8 +8,8 @@ from exo.hooks import HookManager, HookPoint, run_hooks
 
 
 class TestHookPoint:
-    def test_has_seven_members(self) -> None:
-        assert len(HookPoint) == 7
+    def test_member_count(self) -> None:
+        assert len(HookPoint) == 8
 
     def test_all_values_distinct(self) -> None:
         values = [p.value for p in HookPoint]
@@ -25,6 +25,7 @@ class TestHookPoint:
             "POST_LLM_CALL",
             "PRE_TOOL_CALL",
             "POST_TOOL_CALL",
+            "CONTEXT_WINDOW",
         }
 
 
