@@ -672,69 +672,73 @@ async def _stream(
             msg_list.append(AssistantMessage(content=full_text, tool_calls=tool_calls))
             msg_list.extend(tool_results)
 
-            # Check token budget trigger → force early summarization before next step
-            if (
-                _stream_token_tracker is not None
-                and _stream_context_window
-                and _agent_context is not None
-                and step_usage.input_tokens > 0
-            ):
-                _fill_ratio = step_usage.input_tokens / _stream_context_window
-                _cfg_r = getattr(_agent_context, "config", _agent_context)
-                _trigger = getattr(
-                    _cfg_r, "token_pressure", getattr(_cfg_r, "token_budget_trigger", 0.8)
-                )
-                if _fill_ratio > _trigger:
-                    _log.info(
-                        "stream token budget trigger: %.0f%% full (%d/%d tokens) on '%s'",
-                        100.0 * _fill_ratio,
-                        step_usage.input_tokens,
-                        _stream_context_window,
-                        agent.name,
+            # Apply context windowing every step (CONTEXT_WINDOW hook fires each turn).
+            # Token budget check sets force_summarize for aggressive compression.
+            if _agent_context is not None:
+                _force_summarize = False
+                if (
+                    _stream_token_tracker is not None
+                    and _stream_context_window
+                    and step_usage.input_tokens > 0
+                ):
+                    _fill_ratio = step_usage.input_tokens / _stream_context_window
+                    _cfg_r = getattr(_agent_context, "config", _agent_context)
+                    _trigger = getattr(
+                        _cfg_r, "token_pressure", getattr(_cfg_r, "token_budget_trigger", 0.8)
                     )
-                    _tb_ev = ContextEvent(
-                        action="token_budget",
-                        agent_name=_agent_name,
-                        before_count=len(msg_list),
-                        after_count=len(msg_list),
-                        details={
-                            "fill_ratio": _fill_ratio,
-                            "input_tokens": step_usage.input_tokens,
-                            "context_window_tokens": _stream_context_window,
-                            "trigger": _trigger,
-                        },
-                    )
-                    if _passes_filter(_tb_ev):
-                        yield _tb_ev
-                    from exo.agent import (
-                        _apply_context_windowing as _acw,  # pyright: ignore[reportMissingImports]
-                    )
-
-                    msg_list, _budget_actions = await _acw(
-                        msg_list,
-                        _agent_context,
-                        resolved,
-                        force_summarize=True,
-                        hook_manager=agent.hook_manager,
-                        agent=agent,
-                        step=step_num,
-                        max_steps=getattr(agent, "max_steps", 0),
-                        agent_name=_agent_name,
-                        model_name=_model_name_only,
-                        context_window_tokens=_stream_context_window,
-                        last_usage=step_usage,
-                        token_tracker=_stream_token_tracker,
-                    )
-                    for _ba in _budget_actions:
-                        _ba_ev = ContextEvent(
-                            action=_ba.action,
-                            agent_name=_agent_name,
-                            before_count=_ba.before_count,
-                            after_count=_ba.after_count,
-                            details=_ba.details,
+                    if _fill_ratio > _trigger:
+                        _log.info(
+                            "stream token budget trigger: %.0f%% full (%d/%d tokens) on '%s'",
+                            100.0 * _fill_ratio,
+                            step_usage.input_tokens,
+                            _stream_context_window,
+                            agent.name,
                         )
-                        if _passes_filter(_ba_ev):
-                            yield _ba_ev
+                        _force_summarize = True
+                        _tb_ev = ContextEvent(
+                            action="token_budget",
+                            agent_name=_agent_name,
+                            before_count=len(msg_list),
+                            after_count=len(msg_list),
+                            details={
+                                "fill_ratio": _fill_ratio,
+                                "input_tokens": step_usage.input_tokens,
+                                "context_window_tokens": _stream_context_window,
+                                "trigger": _trigger,
+                            },
+                        )
+                        if _passes_filter(_tb_ev):
+                            yield _tb_ev
+
+                from exo.agent import (
+                    _apply_context_windowing as _acw,  # pyright: ignore[reportMissingImports]
+                )
+
+                msg_list, _step_actions = await _acw(
+                    msg_list,
+                    _agent_context,
+                    resolved,
+                    force_summarize=_force_summarize,
+                    hook_manager=agent.hook_manager,
+                    agent=agent,
+                    step=step_num,
+                    max_steps=getattr(agent, "max_steps", 0),
+                    agent_name=_agent_name,
+                    model_name=_model_name_only,
+                    context_window_tokens=_stream_context_window,
+                    last_usage=step_usage,
+                    token_tracker=_stream_token_tracker,
+                )
+                for _sa in _step_actions:
+                    _sa_ev = ContextEvent(
+                        action=_sa.action,
+                        agent_name=_agent_name,
+                        before_count=_sa.before_count,
+                        after_count=_sa.after_count,
+                        details=_sa.details,
+                    )
+                    if _passes_filter(_sa_ev):
+                        yield _sa_ev
 
         except Exception as exc:
             _ev = ErrorEvent(

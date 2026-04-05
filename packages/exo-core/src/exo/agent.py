@@ -1640,39 +1640,42 @@ class Agent:
             msg_list.append(AssistantMessage(content=output.text, tool_calls=output.tool_calls))
             msg_list.extend(tool_results)
 
-            # Check token budget trigger → force early summarization before next LLM call
-            if (
-                _token_tracker is not None
-                and _context_window_tokens
-                and self.context is not None
-                and output.usage.input_tokens > 0
-            ):
-                _fill_ratio = output.usage.input_tokens / _context_window_tokens
-                _ctx_cfg = getattr(self.context, "config", self.context)
-                _trigger = getattr(_ctx_cfg, "token_budget_trigger", 0.8)
-                if _fill_ratio > _trigger:
-                    _log.info(
-                        "token budget trigger: %.0f%% full (%d/%d tokens), forcing summarization on '%s'",
-                        100.0 * _fill_ratio,
-                        output.usage.input_tokens,
-                        _context_window_tokens,
-                        self.name,
-                    )
-                    msg_list, _ = await _apply_context_windowing(
-                        msg_list,
-                        self.context,
-                        provider,
-                        force_summarize=True,
-                        hook_manager=self.hook_manager,
-                        agent=self,
-                        step=_step,
-                        max_steps=self.max_steps,
-                        agent_name=self.name,
-                        model_name=self.model_name,
-                        context_window_tokens=_context_window_tokens,
-                        last_usage=output.usage,
-                        token_tracker=_token_tracker,
-                    )
+            # Apply context windowing every step (CONTEXT_WINDOW hook fires each turn).
+            # Token budget check sets force_summarize for aggressive compression.
+            if self.context is not None:
+                _force_summarize = False
+                if (
+                    _token_tracker is not None
+                    and _context_window_tokens
+                    and output.usage.input_tokens > 0
+                ):
+                    _fill_ratio = output.usage.input_tokens / _context_window_tokens
+                    _ctx_cfg = getattr(self.context, "config", self.context)
+                    _trigger = getattr(_ctx_cfg, "token_budget_trigger", 0.8)
+                    if _fill_ratio > _trigger:
+                        _log.info(
+                            "token budget trigger: %.0f%% full (%d/%d tokens), forcing summarization on '%s'",
+                            100.0 * _fill_ratio,
+                            output.usage.input_tokens,
+                            _context_window_tokens,
+                            self.name,
+                        )
+                        _force_summarize = True
+                msg_list, _ = await _apply_context_windowing(
+                    msg_list,
+                    self.context,
+                    provider,
+                    force_summarize=_force_summarize,
+                    hook_manager=self.hook_manager,
+                    agent=self,
+                    step=_step,
+                    max_steps=self.max_steps,
+                    agent_name=self.name,
+                    model_name=self.model_name,
+                    context_window_tokens=_context_window_tokens,
+                    last_usage=output.usage,
+                    token_tracker=_token_tracker,
+                )
 
         # max_steps exhausted — save snapshot and return last output as-is
         await self._save_snapshot_if_enabled(_active_conv, msg_list, output)
