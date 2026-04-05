@@ -190,3 +190,87 @@ The session above did **not** address any items from the audit's Recommended Fix
 | 3 | **B-4** | `routes/webhooks.py:146-236` | Webhook trigger `POST /api/v1/webhooks/{workflow_id}/{hook_id}` has no auth. `url_token` stored in DB is never validated. Fix: fetch the hook row and compare `url_token` from the query param against the stored value. |
 
 After those three, continue with **B-8** (token in logs), **L-2** (stream_agent bypasses tool loop), **B-15** (async callable instructions never awaited).
+
+---
+
+### Session 2 — 2026-04-04: Context Snapshot Persistence
+
+**What was done:** New feature — persist the processed msg_list (after summarization, truncation, hook mutations) at end of each run as a `SnapshotMemory`. On the next run, load the snapshot instead of rebuilding from raw history. Non-destructive: raw history preserved for restoration.
+
+**Key design decisions:**
+- Toggle via `ContextConfig.enable_snapshots` (off by default, on for `navigator` mode)
+- Instruction SystemMessages excluded from snapshots (regenerated fresh each run). `[Conversation Summary]` SystemMessages preserved.
+- Deterministic IDs (`snapshot_{agent}_{conversation}`) — upsert replaces previous snapshot
+- Freshness check: latest raw item ID + context config hash
+- External `messages` parameter invalidates snapshot (handoff/swarm safety)
+- `branch()` never copies snapshots to forks
+- All snapshot operations wrapped in try/except — never breaks a run
+
+**Files created:**
+
+| Package | File | Content |
+|---|---|---|
+| exo-memory | `snapshot.py` | `SnapshotMemory`, `serialize_msg_list()`, `deserialize_msg_list()`, `compute_config_hash()`, `has_message_content()`, `make_snapshot()` |
+| exo-memory | `tests/test_snapshot_persistence.py` | 26 unit tests |
+| exo-core | `tests/test_context_snapshot.py` | 8 integration tests |
+
+**Files changed:**
+
+| Package | File | Change |
+|---|---|---|
+| exo-context | `config.py` | Added `enable_snapshots` field + navigator preset |
+| exo-memory | `persistence.py` | Added `save_snapshot()`, `load_snapshot()`, `is_snapshot_fresh()` |
+| exo-memory | `__init__.py` | Exports for `SnapshotMemory`, serialization helpers |
+| exo-memory | `backends/sqlite.py` | `_extra_fields()` + `_row_to_item()` snapshot dispatch |
+| exo-memory | `backends/postgres.py` | Same as sqlite |
+| exo-core | `agent.py` | Snapshot load/save in `_run_inner()`, `_save_snapshot_if_enabled()`, `clear_snapshot()`, `branch()` exclusion |
+| exo-core | `runner.py` | Snapshot load/save in `_stream()`, `_save_stream_snapshot()` helper |
+
+**Tests after changes:** exo-core 1524 ✓ · exo-memory 575 ✓ · exo-context 490 ✓
+
+---
+
+### Session 3 — 2026-04-05: Simplified Context Management API
+
+**What was done:** Added a human-friendly API for context management (`context_limit`, `overflow`, `cache`) alongside the existing legacy API. Zero breaking changes — all 2593 tests pass without modification.
+
+**Problem:** The old API exposed three interdependent thresholds (`history_rounds`, `summary_threshold`, `offload_threshold`) that formed a hidden priority cascade. Users had to understand internal implementation details to configure one simple concept: "what happens when the conversation gets too long."
+
+**New API:**
+
+```python
+# Simple — on Agent directly
+Agent(name="bot", context_limit=30, overflow="summarize", cache=True)
+
+# Full control — ContextConfig
+ContextConfig(limit=20, overflow="summarize", keep_recent=5, token_pressure=0.8, cache=True)
+```
+
+Three overflow strategies: `"summarize"` (LLM compression), `"truncate"` (drop oldest), `"none"` (no management).
+
+**Design:**
+- New fields are primary API; old fields stay as internal plumbing
+- `model_validator(mode="before")` keeps both field sets in sync bidirectionally
+- When new-API fields provided → old fields derived automatically
+- When only old-API fields provided → new fields back-filled to match
+- `OverflowStrategy` StrEnum exported from `exo.context`
+
+**Files changed:**
+
+| Package | File | Change |
+|---|---|---|
+| exo-context | `config.py` | `OverflowStrategy` enum, 5 new fields (`limit`, `overflow`, `keep_recent`, `token_pressure`, `cache`), `_normalize_api_fields` validator |
+| exo-context | `__init__.py` | Export `OverflowStrategy` |
+| exo-core | `agent.py` | 3 new Agent params (`context_limit`, `overflow`, `cache`), mutual exclusion with `context`/`context_mode`, overflow dispatch in `_apply_context_windowing()` |
+| exo-core | `runner.py` | Fixed token_budget_trigger to unwrap `.config` (was reading from Context directly, using fallback by coincidence) |
+| exo-core | `swarm.py` | 3 new Swarm params, propagation to member agents |
+| skills | `context/SKILL.md` | Rewritten with new API as primary, legacy as secondary |
+| exo-context | `README.md` | Updated quick start with new API |
+
+**Key backward-compat decisions:**
+- `ContextConfig()` bare constructor produces identical behavior to before (old defaults unchanged)
+- `make_config()` and `AutomationMode` still work (old fields passed, new fields back-filled)
+- `getattr(_cfg, "overflow", "summarize")` fallback means old duck-typed FakeConfig objects in tests work unchanged
+- `compute_config_hash()` reads old field names — no snapshot invalidation on upgrade
+
+**Tests after changes:** exo-core 1524 ✓ · exo-memory 575 ✓ · exo-context 490 ✓ (2593 total, 0 failures)

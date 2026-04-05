@@ -24,14 +24,41 @@ class AutomationMode(StrEnum):
     NAVIGATOR = "navigator"
 
 
+class OverflowStrategy(StrEnum):
+    """What happens when the conversation exceeds ``limit``.
+
+    - summarize: Oldest messages are compressed into a summary, recent kept verbatim.
+    - truncate: Oldest messages are dropped, recent kept.
+    - none: No context management — grows until model token limit.
+    """
+
+    SUMMARIZE = "summarize"
+    TRUNCATE = "truncate"
+    NONE = "none"
+
+
+# Keys that indicate the caller is using the new simplified API.
+_NEW_API_KEYS = frozenset({"limit", "overflow", "keep_recent", "token_pressure", "cache"})
+
+
 class ContextConfig(BaseModel, frozen=True):
     """Immutable configuration for the context engine.
 
-    Controls automation level, history windowing, summarization thresholds,
-    context offloading, retrieval, and neuron selection.
+    **Simple API** (preferred)::
+
+        ContextConfig(limit=20, overflow="summarize", cache=True)
+
+    **Legacy API** (still fully supported)::
+
+        ContextConfig(history_rounds=20, summary_threshold=10, offload_threshold=50)
+
+    Both field sets are always present and kept in sync by an internal
+    normalisation validator.
     """
 
     mode: AutomationMode = AutomationMode.COPILOT
+
+    # ── Legacy fields (internal plumbing, kept for backward compat) ──────
 
     # History windowing
     history_rounds: int = Field(default=20, ge=1, description="Max conversation rounds to keep")
@@ -67,7 +94,46 @@ class ContextConfig(BaseModel, frozen=True):
         default=0.8,
         ge=0.0,
         le=1.0,
-        description="Token fill ratio (0–1) above which summarization triggers early",
+        description="Token fill ratio (0-1) above which summarization triggers early",
+    )
+
+    # Context snapshot persistence
+    enable_snapshots: bool = Field(
+        default=False,
+        description="Persist processed msg_list at end of each run and load it "
+        "on the next run instead of rebuilding from raw history. "
+        "Saves LLM summarization costs and preserves hook mutations.",
+    )
+
+    # ── New simplified API ───────────────────────────────────────────────
+
+    limit: int = Field(
+        default=20,
+        ge=1,
+        description="Max non-system messages to keep in the conversation window",
+    )
+
+    overflow: OverflowStrategy = Field(
+        default=OverflowStrategy.SUMMARIZE,
+        description="Strategy when limit is exceeded: summarize, truncate, or none",
+    )
+
+    keep_recent: int = Field(
+        default=5,
+        ge=1,
+        description="Messages to keep verbatim after summarization (overflow='summarize')",
+    )
+
+    token_pressure: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Token fill ratio (0-1) that triggers early overflow",
+    )
+
+    cache: bool = Field(
+        default=False,
+        description="Persist processed messages between runs (avoids re-summarizing)",
     )
 
     # Extensible metadata
@@ -75,6 +141,58 @@ class ContextConfig(BaseModel, frozen=True):
         default_factory=dict,
         description="Additional configuration for custom processors or neurons",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_api_fields(cls, data: Any) -> Any:
+        """Keep new and legacy field sets in sync.
+
+        When the caller uses the new API (``limit``, ``overflow``, etc.) the
+        legacy fields are derived automatically.  When only legacy fields are
+        provided the new fields are back-filled to match.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        has_new = bool(_NEW_API_KEYS & data.keys())
+
+        if has_new:
+            # ── New API → derive legacy fields ───────────────────────
+            limit = data.get("limit", 20)
+            overflow = str(data.get("overflow", "summarize"))
+
+            if overflow == "summarize":
+                data.setdefault("history_rounds", limit)
+                data.setdefault("limit", limit)
+                data.setdefault("summary_threshold", limit)
+                data.setdefault("offload_threshold", max(limit, int(limit * 2.5)))
+            elif overflow == "truncate":
+                data.setdefault("history_rounds", limit)
+                data.setdefault("limit", limit)
+                data.setdefault("summary_threshold", 10_000)
+                data.setdefault("offload_threshold", 10_000)
+            elif overflow == "none":
+                data.setdefault("history_rounds", 10_000)
+                data.setdefault("limit", 10_000)
+                data.setdefault("summary_threshold", 10_000)
+                data.setdefault("offload_threshold", 10_000)
+
+            # Alias pairs
+            if "token_pressure" in data:
+                data.setdefault("token_budget_trigger", data["token_pressure"])
+            if "cache" in data:
+                data.setdefault("enable_snapshots", data["cache"])
+        else:
+            # ── Legacy-only (or bare constructor) → back-fill new fields ─
+            data.setdefault("limit", data.get("history_rounds", 20))
+            data.setdefault("overflow", "summarize")
+            data.setdefault(
+                "keep_recent", max(2, data.get("summary_threshold", 10) // 2)
+            )
+            data.setdefault("token_pressure", data.get("token_budget_trigger", 0.8))
+            data.setdefault("cache", data.get("enable_snapshots", False))
+
+        return data
 
     @model_validator(mode="before")
     @classmethod
@@ -113,18 +231,21 @@ def make_config(mode: AutomationMode | str = "copilot", **overrides: Any) -> Con
             "summary_threshold": 100,
             "offload_threshold": 100,
             "enable_retrieval": False,
+            "enable_snapshots": False,
         },
         AutomationMode.COPILOT: {
             "history_rounds": 20,
             "summary_threshold": 10,
             "offload_threshold": 50,
             "enable_retrieval": False,
+            "enable_snapshots": False,
         },
         AutomationMode.NAVIGATOR: {
             "history_rounds": 10,
             "summary_threshold": 5,
             "offload_threshold": 20,
             "enable_retrieval": True,
+            "enable_snapshots": True,
         },
     }
     defaults = presets[mode]

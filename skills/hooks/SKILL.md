@@ -142,6 +142,8 @@ agent.inject_message("New priority: focus on security aspects first.")
 
 **Use case:** Live steering of a running agent from external code (e.g., a web socket handler, a monitoring system, or a parent agent).
 
+**Snapshot interaction:** Injected messages become part of the context snapshot at end-of-run (when `enable_snapshots=True`). They will persist across runs without needing re-injection.
+
 ## Patterns
 
 ### Execution Timer
@@ -221,6 +223,27 @@ async def maybe_load_tools(agent_name: str, input: str, **_):
 agent = Agent(name="bot", hooks=[(HookPoint.START, maybe_load_tools)])
 ```
 
+### Snapshot-Aware Context Injection (Idempotent)
+
+```python
+from exo.memory.snapshot import has_message_content
+
+MARKER = "[INJECTED_CONTEXT]"
+
+async def inject_context(agent, messages, **_):
+    """Inject persistent context — safe with snapshots enabled."""
+    if not has_message_content(messages, MARKER):
+        messages.insert(1, UserMessage(content=f"{MARKER}\n{load_my_data()}"))
+
+agent = Agent(
+    name="bot",
+    hooks=[(HookPoint.PRE_LLM_CALL, inject_context)],
+    context_mode="navigator",  # snapshots enabled
+)
+```
+
+When `enable_snapshots=True`, hook-injected messages are saved in the snapshot and loaded on the next run. The idempotency check prevents duplicate injection.
+
 ### Fire-and-Forget Hook (Exception-Safe)
 
 ```python
@@ -243,3 +266,5 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **Tool schemas are re-enumerated each step** — so dynamically added/removed tools take effect on the next LLM call, not retroactively.
 - **inject_message is async-safe** — uses `asyncio.Queue.put_nowait()`, can be called from any coroutine.
 - **Hook data kwargs may evolve** — always use `**_` or `**data` to absorb unknown kwargs for forward compatibility.
+- **PRE_LLM_CALL mutations persist in snapshots** — when `enable_snapshots=True`, messages injected by PRE_LLM_CALL hooks become part of the snapshot. On the next run, the hook fires again on the snapshot-loaded messages. Hooks that inject messages must be idempotent (check before injecting) to avoid duplicates. Use `has_message_content()` from `exo.memory.snapshot`.
+- **inject_message persists in snapshots** — injected messages are part of the final `msg_list` and get saved in the snapshot. They survive across runs without re-injection.

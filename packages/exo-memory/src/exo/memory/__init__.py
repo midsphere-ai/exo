@@ -71,6 +71,12 @@ from exo.memory.search import (  # pyright: ignore[reportMissingImports]
 from exo.memory.short_term import (  # pyright: ignore[reportMissingImports]
     ShortTermMemory,
 )
+from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+    SnapshotMemory,
+    deserialize_msg_list,
+    has_message_content,
+    serialize_msg_list,
+)
 from exo.memory.summary import (  # pyright: ignore[reportMissingImports]
     Summarizer,
     SummaryConfig,
@@ -114,6 +120,7 @@ __all__ = [
     "ReasoningBankStrategy",
     "SearchManager",
     "ShortTermMemory",
+    "SnapshotMemory",
     "Summarizer",
     "SummaryConfig",
     "SummaryResult",
@@ -125,5 +132,8 @@ __all__ = [
     "VectorMemoryStore",
     "VertexEmbeddings",
     "check_trigger",
+    "deserialize_msg_list",
     "generate_summary",
+    "has_message_content",
+    "serialize_msg_list",
 ]

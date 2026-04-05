@@ -10,9 +10,53 @@ pip install exo-context
 
 Requires Python 3.11+ and `exo-core`.
 
+## Quick Start
+
+```python
+from exo import Agent
+
+# Set a conversation limit with automatic summarization
+agent = Agent(name="bot", context_limit=30, overflow="summarize")
+
+# Cheaper: just drop old messages
+agent = Agent(name="bot", context_limit=20, overflow="truncate")
+
+# Persist context between runs (avoids re-summarizing)
+agent = Agent(name="bot", context_limit=20, cache=True)
+
+# No context management
+agent = Agent(name="bot", overflow="none")
+```
+
+### Overflow Strategies
+
+| Strategy | What happens at limit | LLM cost |
+|---|---|---|
+| `"summarize"` | Oldest messages compressed into summary, recent kept verbatim | 1 extra call |
+| `"truncate"` | Oldest messages dropped, recent kept | None |
+| `"none"` | No management -- grows until model token limit | None |
+
+### Advanced: ContextConfig
+
+```python
+from exo.context import ContextConfig, Context
+
+config = ContextConfig(
+    limit=20,             # Max non-system messages
+    overflow="summarize", # "summarize", "truncate", or "none"
+    keep_recent=5,        # Messages kept verbatim after summarization
+    token_pressure=0.8,   # Auto-trigger overflow at this token fill ratio
+    cache=True,           # Persist processed messages between runs
+)
+ctx = Context(task_id="task-123", config=config)
+agent = Agent(name="bot", context=ctx)
+```
+
 ## What's Included
 
 - **Context** -- core context object with hierarchical state, fork/merge, and lifecycle management.
+- **ContextConfig** -- configuration with `limit`, `overflow`, `cache`, and advanced tuning.
+- **OverflowStrategy** -- enum: `summarize`, `truncate`, `none`.
 - **ContextState** -- hierarchical key-value store with parent inheritance.
 - **PromptBuilder** -- composable prompt construction from prioritized neurons.
 - **Neurons** -- 9 built-in neurons: System, Task, History, Todo, Knowledge, Workspace, Skill, Fact, Entity.
@@ -21,41 +65,14 @@ Requires Python 3.11+ and `exo-core`.
 - **TokenTracker** -- per-agent per-step token usage tracking.
 - **Checkpoint** -- save/restore state for long-running tasks.
 - **Context Tools** -- planning, knowledge, and file tools for agents.
-- **DynamicVariables** -- template variable resolution for prompt templates.
-
-## Quick Example
-
-```python
-from exo.context import Context, ContextConfig
-
-config = ContextConfig(automation_mode="copilot")
-ctx = Context(config=config)
-
-# Set state values
-ctx.state.set("user_name", "Alice")
-ctx.state.set("task", "Research quantum computing")
-
-# Build prompts from neurons
-messages = ctx.build_prompt(agent_name="researcher")
-
-# Store artifacts in workspace
-ctx.workspace.store("notes.md", "# Research Notes\n...")
-```
-
-## Automation Modes
-
-| Mode | Description |
-|------|-------------|
-| `pilot` | Fully autonomous -- agent decides everything |
-| `copilot` | Agent proposes, human approves critical steps |
-| `navigator` | Human guides, agent executes |
 
 ## Public API
 
 ```python
 from exo.context import (
     Context,             # Core context object
-    ContextConfig,       # Configuration with automation mode
+    ContextConfig,       # Configuration (limit, overflow, cache, ...)
+    OverflowStrategy,    # Enum: SUMMARIZE, TRUNCATE, NONE
     ContextState,        # Hierarchical key-value state
     PromptBuilder,       # Composable prompt builder
     Neuron,              # Base class for prompt neurons

@@ -137,6 +137,17 @@ ToolMemory(content="Tool result",                # memory_type = "tool"
            tool_name="search",
            is_error=False)
 SystemMemory(content="System message")           # memory_type = "system"
+
+# Snapshot (context snapshot persistence):
+from exo.memory.snapshot import SnapshotMemory
+SnapshotMemory(                                  # memory_type = "snapshot"
+    content="[serialized msg_list JSON]",
+    snapshot_version=1,
+    raw_item_count=42,
+    latest_raw_id="item-99",
+    latest_raw_created_at="2026-01-01T00:00:00",
+    config_hash="abc123",
+)
 ```
 
 ### MemoryMetadata
@@ -282,6 +293,46 @@ persistence.attach(agent)
 - Every tool result → `ToolMemory` with tool_name, result, error status
 - User input → `HumanMemory` (saved at run start)
 
+### Context Snapshot Persistence
+
+`MemoryPersistence` also handles context snapshot save/load when `ContextConfig.enable_snapshots=True`:
+
+```python
+# Save snapshot (called automatically at end of agent.run/run.stream)
+await persistence.save_snapshot(
+    agent_name="bot",
+    conversation_id="conv-1",
+    msg_list=processed_messages,
+    context_config=ctx_config,
+)
+
+# Load snapshot
+snap = await persistence.load_snapshot("bot", "conv-1")
+if snap is not None:
+    # Check freshness (stale if raw items are newer or config changed)
+    if await persistence.is_snapshot_fresh(snap, "bot", "conv-1", context_config=cfg):
+        messages = deserialize_msg_list(snap.content)
+
+# Clear snapshot (force rebuild from raw)
+await agent.clear_snapshot()  # or clear_snapshot(conversation_id="conv-1")
+```
+
+**Serialization helpers** (in `exo.memory.snapshot`):
+
+```python
+from exo.memory.snapshot import serialize_msg_list, deserialize_msg_list, has_message_content
+
+# Serialize msg_list to JSON (excludes instruction SystemMessages)
+json_str = serialize_msg_list(msg_list)
+
+# Deserialize back to Message objects
+messages = deserialize_msg_list(json_str)
+
+# Check if a marker exists (for idempotent hook injection)
+if not has_message_content(messages, "[MY_MARKER]"):
+    messages.insert(1, UserMessage(content="[MY_MARKER] injected context"))
+```
+
 ### Long-Term Memory Search (Knowledge Injection)
 
 Long-term memory is automatically searched before each LLM call:
@@ -399,3 +450,5 @@ agent = Agent(name="bot", memory=AgentMemory(
 - **ShortTermMemory is in-memory only** — data is lost when the process exits. Use a persistent backend for long-term.
 - **OpenAIEmbeddingProvider uses OPENAI_API_KEY env var** — ensure it's set for vector search
 - **Search results injected as `<knowledge>` blocks** — the LLM sees them in the system message, not as separate messages
+- **Context snapshots use the same MemoryStore** — `SnapshotMemory` items are stored alongside regular items with `memory_type="snapshot"`. They use deterministic IDs (`snapshot_{agent}_{conversation}`) so upsert replaces the previous.
+- **`load_history()` excludes snapshots** — raw history loading filters by `memory_type` so snapshots never leak into the regular history path

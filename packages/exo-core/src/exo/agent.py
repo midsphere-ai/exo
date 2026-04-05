@@ -357,29 +357,31 @@ async def _apply_context_windowing(
     *,
     force_summarize: bool = False,
 ) -> tuple[list[Message], list[_ContextAction]]:
-    """Apply ContextConfig windowing and optional summarization to msg_list.
+    """Apply context windowing and optional summarization to *msg_list*.
 
-    Called before the LLM call when context is set. Applies (in order):
+    Behaviour depends on the ``overflow`` strategy:
 
-    1. Offload threshold: when exceeded, aggressively trims to summary_threshold
-    2. Summary threshold: when exceeded (or forced via *force_summarize*),
-       attempts LLM summarization via exo-memory
-    3. History windowing: always applied last, keeps last history_rounds messages
+    - **none**: no windowing at all — messages grow unbounded.
+    - **truncate**: drop oldest non-system messages when count > limit.
+    - **summarize** (default): three-stage cascade —
+      1. Emergency offload when far over limit.
+      2. LLM summarization when over threshold.
+      3. Hard window to ``history_rounds``.
 
-    When *force_summarize* is ``True``, summarization fires regardless of
-    message count threshold (used when token budget is exceeded).
-
-    Falls back gracefully when exo-memory is not installed.
+    When *force_summarize* is ``True`` (token pressure exceeded), summarization
+    fires regardless of message count.
 
     Returns:
-        A tuple of (processed message list, list of actions that were applied).
-        Callers can use the actions list to emit streaming ``ContextEvent`` s.
+        ``(processed_msg_list, actions)`` — callers use *actions* to emit
+        streaming ``ContextEvent`` instances.
     """
     # Resolve config attrs: supports both Context (has .config) and ContextConfig directly
     _cfg = getattr(context, "config", context)
+    overflow_strategy: str = getattr(_cfg, "overflow", "summarize")
     history_rounds: int = getattr(_cfg, "history_rounds", 20)
     summary_threshold: int = getattr(_cfg, "summary_threshold", 10)
     offload_threshold: int = getattr(_cfg, "offload_threshold", 50)
+    keep_recent_cfg: int = getattr(_cfg, "keep_recent", 5)
 
     actions: list[_ContextAction] = []
 
@@ -387,6 +389,32 @@ async def _apply_context_windowing(
     system_msgs: list[Message] = [m for m in msg_list if isinstance(m, SystemMessage)]
     non_system: list[Message] = [m for m in msg_list if not isinstance(m, SystemMessage)]
     msg_count = len(non_system)
+
+    # ── overflow="none" — no context management ──────────────────────────
+    if overflow_strategy == "none":
+        return system_msgs + non_system, actions
+
+    # ── overflow="truncate" — simple drop of oldest messages ─────────────
+    if overflow_strategy == "truncate":
+        if msg_count > history_rounds:
+            before = msg_count
+            _log.debug(
+                "context truncate: %d messages > limit=%d, dropping oldest",
+                msg_count,
+                history_rounds,
+            )
+            non_system = non_system[-history_rounds:]
+            actions.append(
+                _ContextAction(
+                    "truncate",
+                    before,
+                    len(non_system),
+                    {"limit": history_rounds},
+                )
+            )
+        return system_msgs + non_system, actions
+
+    # ── overflow="summarize" — three-stage cascade ───────────────────────
 
     # 1. Offload threshold: aggressive trim when far over limit
     if msg_count > offload_threshold:
@@ -441,7 +469,7 @@ async def _apply_context_windowing(
             if force_summarize:
                 keep_recent = max(2, msg_count // 2)
             else:
-                keep_recent = max(2, summary_threshold // 2)
+                keep_recent = max(2, keep_recent_cfg)
             summary_cfg = SummaryConfig(
                 message_threshold=summary_threshold,
                 keep_recent=keep_recent,
@@ -603,6 +631,9 @@ class Agent:
         memory: Any = _MEMORY_UNSET,
         context_mode: Any = _CONTEXT_UNSET,
         context: Any = _CONTEXT_UNSET,
+        context_limit: int | None = None,
+        overflow: str | None = None,
+        cache: bool | None = None,
         allow_self_spawn: bool = False,
         max_spawn_depth: int = 3,
         max_spawn_children: int = 4,
@@ -652,11 +683,43 @@ class Agent:
             self._memory_is_auto = False
         self.memory: Any = memory
         self.conversation_id: str | None = None
-        # Resolve context: explicit context takes precedence over context_mode; both
-        # unset triggers auto-creation of ContextConfig(mode='copilot').
-        if context is not _CONTEXT_UNSET:
+        # Resolve context: new shorthand params → context_mode → context → default.
+        _has_new_ctx = any(x is not None for x in (context_limit, overflow, cache))
+        if _has_new_ctx and context is not _CONTEXT_UNSET:
+            raise AgentError(
+                "Cannot combine 'context' with 'context_limit'/'overflow'/'cache'. "
+                "Use either context= or the shorthand params."
+            )
+        if _has_new_ctx and context_mode is not _CONTEXT_UNSET:
+            raise AgentError(
+                "Cannot combine 'context_mode' with 'context_limit'/'overflow'/'cache'. "
+                "Use either context_mode= or the shorthand params."
+            )
+
+        if _has_new_ctx:
+            try:
+                from exo.context.config import (  # pyright: ignore[reportMissingImports]
+                    ContextConfig as _CtxConfig,
+                )
+                from exo.context.context import (  # pyright: ignore[reportMissingImports]
+                    Context as _CtxClass,
+                )
+
+                _kw: dict[str, Any] = {}
+                if context_limit is not None:
+                    _kw["limit"] = context_limit
+                if overflow is not None:
+                    _kw["overflow"] = overflow
+                if cache is not None:
+                    _kw["cache"] = cache
+                self.context = _CtxClass(task_id="__default__", config=_CtxConfig(**_kw))
+                self._context_is_auto: bool = False
+            except ImportError:
+                self.context = None
+                self._context_is_auto = True
+        elif context is not _CONTEXT_UNSET:
             self.context = context
-            self._context_is_auto: bool = False
+            self._context_is_auto = False
         elif context_mode is not _CONTEXT_UNSET:
             self.context = None if context_mode is None else _make_context_from_mode(context_mode)
             self._context_is_auto = False
@@ -994,8 +1057,7 @@ class Agent:
             except SkillError:
                 available = registry.list_names()
                 return (
-                    f"[Error: Skill '{name}' not found. "
-                    f"Available skills: {', '.join(available)}]"
+                    f"[Error: Skill '{name}' not found. Available skills: {', '.join(available)}]"
                 )
 
             # Resolve and add tools (skip duplicates)
@@ -1009,6 +1071,85 @@ class Agent:
             return skill.usage or f"[Skill '{name}' activated (no usage instructions)]"
 
         return FunctionTool(activate_skill, name="activate_skill")
+
+    # -----------------------------------------------------------------------
+    # Context snapshot persistence
+    # -----------------------------------------------------------------------
+
+    async def _save_snapshot_if_enabled(
+        self,
+        conversation_id: str | None,
+        msg_list: list[Message],
+        output: Any = None,
+    ) -> None:
+        """Save a context snapshot at end of run if enabled.
+
+        Wrapped in try/except so a snapshot failure never breaks the run.
+        """
+        if self._memory_persistence is None or conversation_id is None or self.context is None:
+            return
+        _cfg = getattr(self.context, "config", self.context)
+        if not getattr(_cfg, "enable_snapshots", False):
+            return
+        try:
+            # Append the final assistant message to snapshot if available.
+            snap_list = list(msg_list)
+            if output is not None and hasattr(output, "text"):
+                snap_list.append(
+                    AssistantMessage(content=output.text, tool_calls=output.tool_calls or [])
+                )
+            await self._memory_persistence.save_snapshot(
+                agent_name=self.name,
+                conversation_id=conversation_id,
+                msg_list=snap_list,
+                context_config=_cfg,
+            )
+        except Exception:
+            _log.warning("snapshot save failed", exc_info=True)
+
+    async def clear_snapshot(self, conversation_id: str | None = None) -> bool:
+        """Discard the context snapshot, forcing next run to rebuild from raw.
+
+        Args:
+            conversation_id: Conversation scope.  Defaults to
+                ``self.conversation_id``.
+
+        Returns:
+            ``True`` if a snapshot was found and removed, ``False`` otherwise.
+        """
+        if self._memory_persistence is None:
+            return False
+        cid = conversation_id or self.conversation_id
+        if cid is None:
+            return False
+        snap = await self._memory_persistence.load_snapshot(self.name, cid)
+        if snap is None:
+            return False
+        from exo.memory.base import MemoryMetadata  # pyright: ignore[reportMissingImports]
+
+        meta = MemoryMetadata(agent_id=self.name, task_id=cid)
+        # Clear only snapshot items for this scope.
+        items = await self._memory_persistence.store.search(
+            metadata=meta,
+            memory_type="snapshot",
+            limit=10,
+        )
+        removed = 0
+        for item in items:
+            # For backends that support soft-delete, use clear with metadata.
+            # For ShortTermMemory, removing from the list works.
+            try:
+                item.transition(
+                    __import__("exo.memory.base", fromlist=["MemoryStatus"]).MemoryStatus.DISCARD
+                )
+                removed += 1
+            except Exception:
+                pass
+        if removed == 0:
+            # Fallback: clear all snapshots for this conversation.
+            await self._memory_persistence.store.clear(metadata=meta)
+        _log.debug("clear_snapshot: agent=%s conversation=%s removed=%d", self.name, cid, removed)
+        return removed > 0
 
     # -----------------------------------------------------------------------
     # Runtime mutation API — asyncio-safe via _tools_lock
@@ -1261,6 +1402,8 @@ class Agent:
 
         # ---- Memory: load history and persist user input before LLM call ----
         history: list[Message] = list(messages) if messages else []
+        _active_conv: str | None = None
+        _snapshot_loaded = False
         if self._memory_persistence is not None:
             _active_conv = conversation_id or self.conversation_id
             if _active_conv is None:
@@ -1276,12 +1419,49 @@ class Agent:
                 agent_id=self.name,
                 task_id=_active_conv,
             )
-            _db_history = await self._memory_persistence.load_history(
-                agent_name=self.name,
-                conversation_id=_active_conv,
-                rounds=self.max_steps,
-            )
-            history = list(_db_history) + history
+
+            # ---- Snapshot load: try to use persisted processed context ----
+            _ctx_cfg = getattr(self.context, "config", self.context) if self.context else None
+            if (
+                _ctx_cfg is not None
+                and getattr(_ctx_cfg, "enable_snapshots", False)
+                and not messages  # external messages invalidate snapshot
+            ):
+                try:
+                    _snap = await self._memory_persistence.load_snapshot(
+                        agent_name=self.name,
+                        conversation_id=_active_conv,
+                    )
+                    if _snap is not None and await self._memory_persistence.is_snapshot_fresh(
+                        _snap, self.name, _active_conv, context_config=_ctx_cfg
+                    ):
+                        from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+                            deserialize_msg_list,
+                        )
+
+                        history = deserialize_msg_list(_snap.content)
+                        _snapshot_loaded = True
+                        _log.debug(
+                            "snapshot loaded: agent=%s conversation=%s",
+                            self.name,
+                            _active_conv,
+                        )
+                except Exception:
+                    _log.warning(
+                        "snapshot load failed, falling back to raw history",
+                        exc_info=True,
+                    )
+            # ---- end Snapshot load ----
+
+            if not _snapshot_loaded:
+                _db_history = await self._memory_persistence.load_history(
+                    agent_name=self.name,
+                    conversation_id=_active_conv,
+                    rounds=self.max_steps,
+                )
+                history = list(_db_history) + history
+
+            # Always persist the user input.
             await self._memory_persistence.store.add(
                 HumanMemory(
                     content=input,
@@ -1289,10 +1469,10 @@ class Agent:
                 )
             )
             _log.debug(
-                "memory pre-run: agent=%s conversation=%s db_history=%d",
+                "memory pre-run: agent=%s conversation=%s snapshot=%s",
                 self.name,
                 _active_conv,
-                len(_db_history),
+                _snapshot_loaded,
             )
         # ---- end Memory ----
 
@@ -1301,7 +1481,9 @@ class Agent:
         msg_list = build_messages(instructions, history)
 
         # ---- Context: apply windowing and summarization ----
-        if self.context is not None:
+        # Skip initial windowing when loaded from snapshot — it IS the
+        # already-windowed state.  Mid-run budget triggers still fire.
+        if self.context is not None and not _snapshot_loaded:
             msg_list, _ = await _apply_context_windowing(msg_list, self.context, provider)
         # ---- end Context ----
 
@@ -1354,8 +1536,13 @@ class Agent:
             if _token_tracker is not None and output.usage.total_tokens > 0:
                 _token_tracker.add_usage(self.name, output.usage)
 
-            # No tool calls — return the final text response
+            # No tool calls — save snapshot and return the final text response
             if not output.tool_calls:
+                await self._save_snapshot_if_enabled(
+                    _active_conv,
+                    msg_list,
+                    output,
+                )
                 return output
 
             # Execute tool calls and collect results
@@ -1391,7 +1578,8 @@ class Agent:
                         force_summarize=True,
                     )
 
-        # max_steps exhausted — return last output as-is
+        # max_steps exhausted — save snapshot and return last output as-is
+        await self._save_snapshot_if_enabled(_active_conv, msg_list, output)
         return output
 
     async def branch(self, from_message_id: str) -> str:
@@ -1476,7 +1664,10 @@ class Agent:
             raise AgentError("exo-memory is required for branch()") from exc
 
         branch_meta = MemoryMetadata(agent_id=self.name, task_id=branch_conv_id)
-        items_to_copy = raw_items[: cutoff_idx + 1]
+        # Exclude snapshot items from branch — the branch rebuilds its own.
+        items_to_copy = [
+            item for item in raw_items[: cutoff_idx + 1] if item.memory_type != "snapshot"
+        ]
         for item in items_to_copy:
             copied = item.model_copy(update={"id": uuid.uuid4().hex, "metadata": branch_meta})
             await store.add(copied)

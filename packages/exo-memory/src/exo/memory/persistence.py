@@ -171,3 +171,148 @@ class MemoryPersistence:
             len(messages),
         )
         return messages
+
+    # -- Context snapshot persistence ------------------------------------------
+
+    async def save_snapshot(
+        self,
+        agent_name: str,
+        conversation_id: str,
+        msg_list: list[Any],
+        context_config: Any,
+    ) -> None:
+        """Persist the processed msg_list as a context snapshot.
+
+        Saves a :class:`~exo.memory.snapshot.SnapshotMemory` with a
+        deterministic ID so subsequent calls upsert (replace) the
+        previous snapshot for this agent+conversation.
+
+        Args:
+            agent_name: Agent name for scoping.
+            conversation_id: Conversation scope.
+            msg_list: The processed message list to snapshot.
+            context_config: Active context config (for config hash).
+        """
+        from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+            make_snapshot,
+        )
+
+        # Determine the latest raw item for freshness anchoring.
+        meta = MemoryMetadata(agent_id=agent_name, task_id=conversation_id)
+        raw_items = await self.store.search(metadata=meta, limit=500)
+        # Exclude snapshot items from the raw list.
+        raw_items = [it for it in raw_items if it.memory_type != "snapshot"]
+        raw_items = sorted(raw_items, key=lambda x: x.created_at)
+
+        latest_raw_id = raw_items[-1].id if raw_items else ""
+        latest_raw_created_at = raw_items[-1].created_at if raw_items else ""
+        raw_item_count = len(raw_items)
+
+        snap = make_snapshot(
+            agent_name=agent_name,
+            conversation_id=conversation_id,
+            msg_list=msg_list,
+            context_config=context_config,
+            raw_item_count=raw_item_count,
+            latest_raw_id=latest_raw_id,
+            latest_raw_created_at=latest_raw_created_at,
+        )
+
+        await self.store.add(snap)
+        logger.debug(
+            "saved snapshot id=%s agent=%s conversation=%s raw_items=%d",
+            snap.id,
+            agent_name,
+            conversation_id,
+            raw_item_count,
+        )
+
+    async def load_snapshot(
+        self,
+        agent_name: str,
+        conversation_id: str,
+    ) -> Any | None:
+        """Load the context snapshot for an agent+conversation.
+
+        Returns:
+            A :class:`~exo.memory.snapshot.SnapshotMemory` if one exists,
+            otherwise ``None``.
+        """
+        from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+            SnapshotMemory,
+            snapshot_id,
+        )
+
+        sid = snapshot_id(agent_name, conversation_id)
+        item = await self.store.get(sid)
+        if item is not None and isinstance(item, SnapshotMemory):
+            logger.debug("loaded snapshot id=%s agent=%s", sid, agent_name)
+            return item
+        # Fallback: search by metadata + type in case the store doesn't
+        # support direct get (e.g., some vector stores).
+        meta = MemoryMetadata(agent_id=agent_name, task_id=conversation_id)
+        results = await self.store.search(metadata=meta, memory_type="snapshot", limit=1)
+        if results and isinstance(results[0], SnapshotMemory):
+            logger.debug("loaded snapshot via search agent=%s", agent_name)
+            return results[0]
+        return None
+
+    async def is_snapshot_fresh(
+        self,
+        snapshot: Any,
+        agent_name: str,
+        conversation_id: str,
+        context_config: Any | None = None,
+    ) -> bool:
+        """Check whether a snapshot is still fresh.
+
+        A snapshot is stale if:
+        1. The raw store has newer items than the snapshot's anchor.
+        2. The context config hash has changed (windowing params changed).
+
+        Args:
+            snapshot: A ``SnapshotMemory`` instance.
+            agent_name: Agent name for scoping.
+            conversation_id: Conversation scope.
+            context_config: Current context config for hash comparison.
+                If ``None``, the config hash check is skipped.
+
+        Returns:
+            ``True`` if the snapshot is fresh and can be used.
+        """
+        from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+            compute_config_hash,
+        )
+
+        # 1. Config hash check
+        if context_config is not None:
+            current_hash = compute_config_hash(context_config)
+            if snapshot.config_hash and snapshot.config_hash != current_hash:
+                logger.debug(
+                    "snapshot stale: config_hash mismatch (snap=%s current=%s)",
+                    snapshot.config_hash,
+                    current_hash,
+                )
+                return False
+
+        # 2. Raw item freshness check
+        meta = MemoryMetadata(agent_id=agent_name, task_id=conversation_id)
+        raw_items = await self.store.search(metadata=meta, limit=500)
+        raw_items = [it for it in raw_items if it.memory_type != "snapshot"]
+        raw_items = sorted(raw_items, key=lambda x: x.created_at)
+
+        if not raw_items:
+            # No raw history — snapshot is fresh (conversation may have
+            # been cleared or never had raw items).
+            return True
+
+        latest = raw_items[-1]
+        if latest.id != snapshot.latest_raw_id:
+            logger.debug(
+                "snapshot stale: latest_raw_id mismatch (snap=%s actual=%s)",
+                snapshot.latest_raw_id,
+                latest.id,
+            )
+            return False
+
+        return True

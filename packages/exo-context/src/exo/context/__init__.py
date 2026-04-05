@@ -7,6 +7,7 @@ from exo.context.checkpoint import (  # pyright: ignore[reportMissingImports]
 from exo.context.config import (  # pyright: ignore[reportMissingImports]
     AutomationMode,
     ContextConfig,
+    OverflowStrategy,
     make_config,
 )
 from exo.context.context import (  # pyright: ignore[reportMissingImports]
@@ -57,6 +58,7 @@ __all__ = [
     "DialogueCompressor",
     "MessageOffloader",
     "Neuron",
+    "OverflowStrategy",
     "ProcessorPipeline",
     "PromptBuilder",
     "RoundWindowProcessor",

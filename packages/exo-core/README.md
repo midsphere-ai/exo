@@ -12,7 +12,7 @@ Requires Python 3.11+. Dependencies: `pydantic>=2.0`, `pyyaml>=6.0`.
 
 ## What's Included
 
-- **Agent** -- the core autonomous unit. Wraps an LLM model, tools, handoffs, hooks, and optional structured output.
+- **Agent** -- the core autonomous unit. Wraps an LLM model, tools, handoffs, hooks, and optional structured output. Supports context snapshot persistence across runs (`clear_snapshot()` to restore from raw history).
 - **Tool** -- `@tool` decorator for turning functions into LLM-callable tools with auto-generated JSON schemas. `Tool` ABC for custom tools.
 - **Runner** -- `run()` (async), `run.sync()` (blocking), `run.stream()` (streaming). State tracking, loop detection, retry logic. All three modes fire the same lifecycle hooks (`PRE_LLM_CALL`, `POST_LLM_CALL`, etc.).
 - **Swarm** -- multi-agent orchestration with three modes: `workflow`, `handoff`, `team`. Flow DSL: `"a >> b >> c"`.

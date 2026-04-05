@@ -264,6 +264,17 @@ def _extra_fields(item: MemoryItem) -> dict[str, Any]:
         data["tool_name"] = item.tool_name  # type: ignore[attr-defined]
     if hasattr(item, "is_error"):
         data["is_error"] = item.is_error  # type: ignore[attr-defined]
+    # Snapshot-specific fields
+    if hasattr(item, "snapshot_version"):
+        data["snapshot_version"] = item.snapshot_version  # type: ignore[attr-defined]
+    if hasattr(item, "raw_item_count"):
+        data["raw_item_count"] = item.raw_item_count  # type: ignore[attr-defined]
+    if hasattr(item, "latest_raw_id"):
+        data["latest_raw_id"] = item.latest_raw_id  # type: ignore[attr-defined]
+    if hasattr(item, "latest_raw_created_at"):
+        data["latest_raw_created_at"] = item.latest_raw_created_at  # type: ignore[attr-defined]
+    if hasattr(item, "config_hash"):
+        data["config_hash"] = item.config_hash  # type: ignore[attr-defined]
     return data
 
 
@@ -303,4 +314,13 @@ def _row_to_item(row: Any) -> MemoryItem:
         kwargs["tool_name"] = extra.get("tool_name", "")
         kwargs["is_error"] = extra.get("is_error", False)
         return ToolMemory(**kwargs)
+    if memory_type == "snapshot":
+        from exo.memory.snapshot import SnapshotMemory  # pyright: ignore[reportMissingImports]
+
+        kwargs["snapshot_version"] = extra.get("snapshot_version", 1)
+        kwargs["raw_item_count"] = extra.get("raw_item_count", 0)
+        kwargs["latest_raw_id"] = extra.get("latest_raw_id", "")
+        kwargs["latest_raw_created_at"] = extra.get("latest_raw_created_at", "")
+        kwargs["config_hash"] = extra.get("config_hash", "")
+        return SnapshotMemory(**kwargs)
     return MemoryItem(**kwargs)

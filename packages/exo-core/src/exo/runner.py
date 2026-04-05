@@ -277,6 +277,8 @@ async def _stream(
     # ---- Memory: load history and persist user input before streaming ----
     history: list[Message] = list(messages) if messages else []
     _persistence = getattr(agent, "_memory_persistence", None)
+    _active_conv: str | None = None
+    _snapshot_loaded = False
     if _persistence is not None:
         import uuid as _uuid
 
@@ -294,12 +296,45 @@ async def _stream(
             agent_id=agent.name,
             task_id=_active_conv,
         )
-        _db_history = await _persistence.load_history(
-            agent_name=agent.name,
-            conversation_id=_active_conv,
-            rounds=max_steps or agent.max_steps,
-        )
-        history = list(_db_history) + history
+
+        # ---- Snapshot load ----
+        _agent_ctx = getattr(agent, "context", None)
+        _snap_cfg = getattr(_agent_ctx, "config", _agent_ctx) if _agent_ctx else None
+        if _snap_cfg is not None and getattr(_snap_cfg, "enable_snapshots", False) and not messages:
+            try:
+                _snap = await _persistence.load_snapshot(
+                    agent_name=agent.name,
+                    conversation_id=_active_conv,
+                )
+                if _snap is not None and await _persistence.is_snapshot_fresh(
+                    _snap, agent.name, _active_conv, context_config=_snap_cfg
+                ):
+                    from exo.memory.snapshot import (  # pyright: ignore[reportMissingImports]
+                        deserialize_msg_list,
+                    )
+
+                    history = deserialize_msg_list(_snap.content)
+                    _snapshot_loaded = True
+                    _log.debug(
+                        "stream snapshot loaded: agent=%s conversation=%s",
+                        agent.name,
+                        _active_conv,
+                    )
+            except Exception:
+                _log.warning(
+                    "stream snapshot load failed, falling back to raw",
+                    exc_info=True,
+                )
+        # ---- end Snapshot load ----
+
+        if not _snapshot_loaded:
+            _db_history = await _persistence.load_history(
+                agent_name=agent.name,
+                conversation_id=_active_conv,
+                rounds=max_steps or agent.max_steps,
+            )
+            history = list(_db_history) + history
+
         await _persistence.store.add(
             HumanMemory(
                 content=input,
@@ -307,10 +342,10 @@ async def _stream(
             )
         )
         _log.debug(
-            "memory stream pre-run: agent=%s conversation=%s db_history=%d",
+            "memory stream pre-run: agent=%s conversation=%s snapshot=%s",
             agent.name,
             _active_conv,
-            len(_db_history),
+            _snapshot_loaded,
         )
     # ---- end Memory ----
 
@@ -321,7 +356,8 @@ async def _stream(
     # ---- Context: apply windowing and summarization ----
     _agent_context = getattr(agent, "context", None)
     _agent_name = getattr(agent, "name", "")
-    if _agent_context is not None:
+    # Skip initial windowing when loaded from snapshot.
+    if _agent_context is not None and not _snapshot_loaded:
         from exo.agent import _apply_context_windowing  # pyright: ignore[reportMissingImports]
 
         msg_list, _ctx_actions = await _apply_context_windowing(
@@ -530,6 +566,15 @@ async def _stream(
                         yield _ev
                 # Fire FINISHED hook (parity with run() path)
                 await agent.hook_manager.run(HookPoint.FINISHED, agent=agent, output=full_text)
+                # Save context snapshot at end of stream.
+                await _save_stream_snapshot(
+                    agent,
+                    _persistence,
+                    _active_conv,
+                    msg_list,
+                    full_text,
+                    tool_calls,
+                )
                 _record_stream_metrics()
                 return
 
@@ -628,7 +673,10 @@ async def _stream(
                 and step_usage.input_tokens > 0
             ):
                 _fill_ratio = step_usage.input_tokens / _stream_context_window
-                _trigger = getattr(_agent_context, "token_budget_trigger", 0.8)
+                _cfg_r = getattr(_agent_context, "config", _agent_context)
+                _trigger = getattr(
+                    _cfg_r, "token_pressure", getattr(_cfg_r, "token_budget_trigger", 0.8)
+                )
                 if _fill_ratio > _trigger:
                     _log.info(
                         "stream token budget trigger: %.0f%% full (%d/%d tokens) on '%s'",
@@ -694,6 +742,42 @@ async def _stream(
             await agent.hook_manager.run(HookPoint.ERROR, agent=agent, error=exc)
             _record_stream_metrics()
             raise
+
+
+async def _save_stream_snapshot(
+    agent: Any,
+    persistence: Any | None,
+    conversation_id: str | None,
+    msg_list: list[Any],
+    final_text: str = "",
+    tool_calls: list[Any] | None = None,
+) -> None:
+    """Save a context snapshot at the end of a stream run.
+
+    Fails silently — snapshot save should never break the stream.
+    """
+    if persistence is None or conversation_id is None:
+        return
+    _ctx = getattr(agent, "context", None)
+    if _ctx is None:
+        return
+    _cfg = getattr(_ctx, "config", _ctx)
+    if not getattr(_cfg, "enable_snapshots", False):
+        return
+    try:
+        from exo.types import AssistantMessage  # pyright: ignore[reportMissingImports]
+
+        snap_list = list(msg_list)
+        if final_text:
+            snap_list.append(AssistantMessage(content=final_text, tool_calls=tool_calls or []))
+        await persistence.save_snapshot(
+            agent_name=agent.name,
+            conversation_id=conversation_id,
+            msg_list=snap_list,
+            context_config=_cfg,
+        )
+    except Exception:
+        _log.warning("stream snapshot save failed", exc_info=True)
 
 
 def _resolve_provider(agent: Any) -> Any:

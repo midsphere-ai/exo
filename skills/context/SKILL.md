@@ -1,6 +1,6 @@
 ---
 name: exo:context
-description: "Use when configuring Exo context management — automation modes (pilot/copilot/navigator), ContextConfig, history windowing, summarization, offloading, neurons, fork/merge, budget awareness, token tracking. Triggers on: context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget."
+description: "Use when configuring Exo context management — context_limit, overflow strategy (summarize/truncate/none), cache, ContextConfig, neurons, fork/merge, budget awareness, token tracking. Triggers on: context_limit, overflow, cache, context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -11,8 +11,8 @@ description: "Use when configuring Exo context management — automation modes (
 
 Use this skill when the developer needs to:
 - Configure how an agent manages conversation history length
-- Choose an automation mode (pilot, copilot, navigator)
-- Tune summarization and offloading thresholds
+- Choose an overflow strategy (summarize, truncate, or none)
+- Enable caching of processed context between runs
 - Use neurons for modular prompt composition
 - Fork/merge context for hierarchical task decomposition
 - Enable budget awareness for token tracking
@@ -20,123 +20,165 @@ Use this skill when the developer needs to:
 
 ## Decision Guide
 
-1. **Want minimal automation, manual control?** → `context_mode="pilot"` (keeps 100 rounds, no auto-summarization)
-2. **Want sensible defaults?** → `context_mode="copilot"` (default — 20 rounds, summarize at 10, offload at 50)
-3. **Want aggressive context management?** → `context_mode="navigator"` (10 rounds, summarize at 5, offload at 20, retrieval enabled)
-4. **Need custom thresholds?** → Use `make_config(mode, history_rounds=..., ...)` and pass explicit `Context`
-5. **Need modular prompt snippets?** → Use Neurons (composable prompt fragments with priority ordering)
-6. **Need hierarchical sub-tasks?** → Use `context.fork(child_name)` and `context.merge(child)`
-7. **Want the LLM to see its token usage?** → Set `budget_awareness="per-message"` on Agent
-8. **Want to disable context entirely?** → `Agent(context=None)`
+1. **Want sensible defaults?** → Just use `Agent(name="bot")` (default: limit=20, overflow="summarize")
+2. **Need a different limit?** → `Agent(name="bot", context_limit=50)`
+3. **Want cheap, no-LLM context management?** → `Agent(name="bot", overflow="truncate")`
+4. **Want no context management at all?** → `Agent(name="bot", overflow="none")`
+5. **Want to persist context between runs?** → `Agent(name="bot", cache=True)`
+6. **Need full custom config?** → Use `ContextConfig(limit=..., overflow=..., ...)`
+7. **Need modular prompt snippets?** → Use Neurons (composable prompt fragments with priority ordering)
+8. **Need hierarchical sub-tasks?** → Use `context.fork(child_name)` and `context.merge(child)`
+9. **Want the LLM to see its token usage?** → Set `budget_awareness="per-message"` on Agent
+10. **Want to disable context entirely?** → `Agent(context=None)`
 
 ## Reference
-
-### Automation Modes
-
-| Mode | `history_rounds` | `summary_threshold` | `offload_threshold` | `enable_retrieval` | Use Case |
-|------|-------------------|---------------------|---------------------|--------------------|----------|
-| `pilot` | 100 | 100 | 100 | False | Long conversations, manual control |
-| `copilot` | 20 | 10 | 50 | False | General-purpose (default) |
-| `navigator` | 10 | 5 | 20 | True | Agentic workflows, heavy tool use |
 
 ### Setting Context on Agent
 
 ```python
 from exo import Agent
 
-# Option 1: Mode string shorthand (creates Context internally)
-agent = Agent(name="bot", context_mode="navigator")
+# Simple: set a limit (default overflow is "summarize")
+agent = Agent(name="bot", context_limit=30)
 
-# Option 2: Explicit Context object
-from exo.context.config import make_config
-from exo.context.context import Context
+# With explicit strategy
+agent = Agent(name="bot", context_limit=20, overflow="summarize")
 
-config = make_config("copilot", history_rounds=30, summary_threshold=15)
-ctx = Context(task_id="task-123", config=config)
-agent = Agent(name="bot", context=ctx)
+# Cheaper: drop old messages instead of summarizing
+agent = Agent(name="bot", context_limit=20, overflow="truncate")
 
-# Option 3: Disable context entirely
+# No management: grows until model token limit
+agent = Agent(name="bot", overflow="none")
+
+# Persist processed context between runs (avoids re-summarizing)
+agent = Agent(name="bot", context_limit=20, cache=True)
+
+# Disable context entirely
 agent = Agent(name="bot", context=None)
 
-# Default (if exo-context is installed): auto-creates copilot mode
-agent = Agent(name="bot")  # context = Context(mode="copilot")
+# Default (if exo-context is installed): limit=20, overflow="summarize"
+agent = Agent(name="bot")
 ```
 
-**Precedence:** Explicit `context=` takes precedence over `context_mode=`. Both unset triggers auto-creation.
+### Overflow Strategies
 
-### ContextConfig
+| Strategy | What happens at `context_limit` | LLM cost | Good for |
+|---|---|---|---|
+| `"summarize"` | Oldest messages compressed into a summary, recent kept verbatim | 1 extra LLM call | Agents that need long-term context |
+| `"truncate"` | Oldest messages dropped, recent kept | None | Stateless / cost-sensitive agents |
+| `"none"` | Nothing -- grows until model token limit | None | Short conversations, manual control |
+
+### ContextConfig (Advanced)
+
+For full control, use `ContextConfig` directly:
 
 ```python
-from exo.context.config import ContextConfig, make_config
+from exo.context.config import ContextConfig
+from exo.context.context import Context
+
+# New simplified API
+config = ContextConfig(
+    limit=20,             # Max non-system messages to keep
+    overflow="summarize", # Strategy: "summarize", "truncate", or "none"
+    keep_recent=5,        # Messages kept verbatim after summarization
+    token_pressure=0.8,   # Auto-trigger overflow when token fill exceeds this
+    cache=True,           # Persist processed messages between runs
+)
+ctx = Context(task_id="task-123", config=config)
+agent = Agent(name="bot", context=ctx)
+```
+
+**Legacy API** (still fully supported):
+
+```python
+from exo.context.config import make_config
 
 # Factory with mode presets + overrides
 config = make_config(
-    "copilot",                    # Base mode
+    "copilot",                    # Base mode (pilot/copilot/navigator)
     history_rounds=30,            # Override: keep 30 rounds
     summary_threshold=15,         # Override: summarize at 15 messages
-    offload_threshold=60,         # Override: offload at 60 messages
-    enable_retrieval=True,        # Override: enable RAG retrieval
-    neuron_names=("system", "task", "knowledge"),  # Select neurons
-    token_budget_trigger=0.75,    # Override: trigger at 75% context fill
 )
+ctx = Context(task_id="task-123", config=config)
+agent = Agent(name="bot", context=ctx)
 
-# Or build directly
-config = ContextConfig(
-    mode="copilot",
-    history_rounds=20,
-    summary_threshold=10,
-    offload_threshold=50,
-    enable_retrieval=False,
-    neuron_names=(),
-    token_budget_trigger=0.8,
-    extra={},                     # Extensible metadata for custom processors
-)
+# Mode shorthand
+agent = Agent(name="bot", context_mode="navigator")
 ```
 
-**Validation:** `summary_threshold` must be <= `offload_threshold`.
+Legacy mode presets:
 
-### Three-Stage Windowing Pipeline
+| Mode | `history_rounds` | `summary_threshold` | `offload_threshold` | `enable_retrieval` | `enable_snapshots` |
+|------|-------------------|---------------------|---------------------|--------------------|--------------------
+| `pilot` | 100 | 100 | 100 | False | False |
+| `copilot` | 20 | 10 | 50 | False | False |
+| `navigator` | 10 | 5 | 20 | True | True |
 
-Applied before each LLM call, in order:
+### How Overflow Works
 
-**Stage 1 — Offload** (when messages > `offload_threshold`):
-- Aggressively trims to `summary_threshold` messages
-- Keeps the most recent messages
-- Emits `ContextEvent(action="offload")`
+**overflow="summarize"** (default):
+1. At `limit`, uses LLM to compress older messages into a `[Conversation Summary]` system message
+2. Keeps `keep_recent` most recent messages verbatim
+3. Emergency fallback: if messages exceed 2.5x limit, aggressively truncates first
+4. **Requires exo-memory installed** -- falls back gracefully if not
 
-**Stage 2 — Summarize** (when messages >= `summary_threshold`):
-- Uses LLM-powered summarization via exo-memory
-- Compresses older messages into a `[Conversation Summary]` system message
-- Keeps `keep_recent` most recent messages intact
-- Emits `ContextEvent(action="summarize")`
-- **Requires exo-memory installed** — falls back gracefully if not
+**overflow="truncate"**:
+- At `limit`, drops oldest non-system messages, keeps the most recent
 
-**Stage 3 — Window** (always applied):
-- Keeps last `history_rounds` messages
-- Emits `ContextEvent(action="window")`
+**overflow="none"**:
+- No windowing at all -- conversation grows unbounded
+
+**Token pressure**: When input tokens exceed `token_pressure` ratio (default 0.8) of the model's context window, overflow fires early regardless of message count. This is automatic -- no configuration needed for most users.
+
+### Context Caching (Snapshots)
+
+When `cache=True`, the processed `msg_list` (after summarization, truncation, hook mutations) is persisted at the end of each agent run. On the next run, the cached context is loaded instead of rebuilding from raw history.
+
+```python
+# Simple
+agent = Agent(name="bot", context_limit=20, cache=True)
+
+# Or via ContextConfig
+config = ContextConfig(limit=20, cache=True)
+```
+
+**How it works:**
+1. **Save**: At end of run, processed messages are serialized and stored
+2. **Load**: On next run, if the cache is fresh, it's loaded directly (skipping windowing)
+3. **Invalidation**: Cache is invalidated if: new raw items exist, context config changed, or external `messages` parameter is passed
+
+**Restore**: To force rebuild from raw history, call `await agent.clear_snapshot()`.
+
+**Key rules:**
+- Instruction SystemMessages excluded (regenerated fresh each run)
+- `[Conversation Summary]` SystemMessages ARE included
+- `messages` parameter invalidates cache
+- `branch()` does not copy cached context
+- `spawn_self()` children never load/save cached context
+- Requires memory to be configured
 
 ### Context Object
 
 ```python
 from exo.context.context import Context
-from exo.context.config import make_config
+from exo.context.config import ContextConfig
 
 ctx = Context(
     task_id="task-123",          # Required: unique task identifier
-    config=make_config("copilot"),  # Optional: defaults to ContextConfig()
+    config=ContextConfig(limit=20),  # Optional: defaults to ContextConfig()
     parent=None,                  # Optional: parent context for fork/merge
     state=None,                   # Optional: initial ContextState
 )
 ```
 
 **Properties:**
-- `ctx.config` — The immutable ContextConfig
-- `ctx.state` — Hierarchical ContextState (key-value store with parent chain)
-- `ctx.task_id` — Task identifier
+- `ctx.config` -- The immutable ContextConfig
+- `ctx.state` -- Hierarchical ContextState (key-value store with parent chain)
+- `ctx.task_id` -- Task identifier
 
 ### Fork and Merge
 
-For hierarchical task decomposition — child contexts inherit parent state but write in isolation:
+For hierarchical task decomposition -- child contexts inherit parent state but write in isolation:
 
 ```python
 # Create a child context
@@ -152,7 +194,7 @@ parent_ctx.merge(child_ctx)
 # Consolidates child state with net token calculation
 ```
 
-**Used internally by `spawn_self()`** — spawned agents get a forked context automatically.
+**Used internally by `spawn_self()`** -- spawned agents get a forked context automatically.
 
 ### Neurons
 
@@ -190,11 +232,9 @@ neuron_registry.register("custom", CustomNeuron())
 
 Lower priority = earlier in the assembled prompt.
 
-**Selecting neurons:** Use `ContextConfig(neuron_names=("system", "task", "knowledge"))` to pick which neurons contribute.
-
 ### Budget Awareness
 
-Set on Agent (not Context) — injects token usage info:
+Set on Agent (not Context) -- injects token usage info:
 
 ```python
 # Per-message: LLM sees token usage in system message each call
@@ -217,9 +257,9 @@ agent = Agent(
 ### Context Tools
 
 When context is set (not None), 7 tools are auto-loaded:
-- `add_todo` — Add a todo/checklist item
-- `search_knowledge` — Search the knowledge base
-- `read_file` — Read a workspace file
+- `add_todo` -- Add a todo/checklist item
+- `search_knowledge` -- Search the knowledge base
+- `read_file` -- Read a workspace file
 - And others
 
 These tools have `_is_context_tool=True` and are:
@@ -232,14 +272,12 @@ These tools have `_is_context_tool=True` and are:
 ### Long-Running Conversation Agent
 
 ```python
-config = make_config(
-    "copilot",
-    history_rounds=50,           # Keep more history
-    summary_threshold=30,        # Summarize later
-    offload_threshold=100,       # Offload much later
+agent = Agent(
+    name="assistant",
+    context_limit=50,         # Keep more history
+    overflow="summarize",     # Compress old messages
+    cache=True,               # Don't re-summarize between runs
 )
-ctx = Context(task_id="chat-session", config=config)
-agent = Agent(name="assistant", context=ctx)
 ```
 
 ### Aggressive Context for Tool-Heavy Agent
@@ -247,9 +285,20 @@ agent = Agent(name="assistant", context=ctx)
 ```python
 agent = Agent(
     name="researcher",
-    context_mode="navigator",    # Aggressive: 10 rounds, summarize at 5
-    budget_awareness="limit:70", # Force summarize at 70% token fill
+    context_limit=10,              # Tight window
+    overflow="summarize",          # Summarize aggressively
+    budget_awareness="limit:70",   # Force summarize at 70% token fill
     tools=[search, fetch, analyze],
+)
+```
+
+### Cost-Sensitive Agent
+
+```python
+agent = Agent(
+    name="helper",
+    context_limit=20,
+    overflow="truncate",     # No LLM calls for context management
 )
 ```
 
@@ -267,10 +316,13 @@ agent = Agent(
 
 ## Gotchas
 
-- **`summary_threshold` must be <= `offload_threshold`** — validated at creation, raises `ValueError`
-- **Summarization requires exo-memory** — without it installed, the summarize stage is silently skipped
-- **`token_budget_trigger` default is 0.8** (80%) — when input tokens exceed this ratio of context window, forced summarization fires
-- **Context tools have `_is_context_tool=True`** — they are excluded from `spawn_self` child agents and serialization
-- **`context_mode` on Swarm propagates to ALL agents** — overrides their individual context settings
-- **Default auto-creation:** If exo-context is installed and no `context`/`context_mode` is passed, the agent gets `copilot` mode automatically
+- **`context_limit`/`overflow`/`cache` cannot be combined with `context=` or `context_mode=`** -- use one approach or the other
+- **Summarization requires exo-memory** -- without it installed, the summarize stage is silently skipped
+- **Token pressure default is 0.8** (80%) -- when input tokens exceed this ratio of context window, forced summarization fires
+- **Context tools have `_is_context_tool=True`** -- they are excluded from `spawn_self` child agents and serialization
+- **`context_limit`/`overflow`/`cache` on Swarm propagates to ALL agents** -- overrides their individual context settings
+- **Default auto-creation:** If exo-context is installed and no context params are passed, the agent gets limit=20, overflow="summarize" automatically
 - **`context=None` vs not passing context:** `None` explicitly disables; not passing triggers auto-creation
+- **Cache requires memory persistence** -- `cache=True` has no effect if `memory` is not configured
+- **Cache-aware hooks must be idempotent** -- PRE_LLM_CALL hooks that inject messages should check before injecting (use `has_message_content(messages, "MARKER")` from `exo.memory.snapshot`)
+- **Cache excludes instruction SystemMessages** -- they are regenerated fresh each run. `[Conversation Summary]` SystemMessages are preserved.

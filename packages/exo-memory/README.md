@@ -17,11 +17,12 @@ Requires Python 3.11+ and `exo-core`.
 
 ## What's Included
 
-- **MemoryItem** -- typed base class with subtypes: `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`.
+- **MemoryItem** -- typed base class with subtypes: `SystemMemory`, `HumanMemory`, `AIMemory`, `ToolMemory`, `SnapshotMemory`.
 - **ShortTermMemory** -- conversation-scoped memory with scope-based filtering and round limiting.
 - **LongTermMemory** -- persistent memory with LLM-based extraction via `MemoryOrchestrator`.
 - **Summary** -- configurable trigger + multi-template summary generation.
-- **MemoryPersistence** -- hook-based auto-persistence. Attach to an agent to automatically save LLM responses (`AIMemory`) and tool results (`ToolMemory`) during `run()` or `run.stream()`.
+- **MemoryPersistence** -- hook-based auto-persistence. Attach to an agent to automatically save LLM responses (`AIMemory`) and tool results (`ToolMemory`) during `run()` or `run.stream()`. Also handles context snapshot save/load when `enable_snapshots=True`.
+- **Context Snapshots** -- `SnapshotMemory` persists the processed message list at end of each run. `serialize_msg_list()` / `deserialize_msg_list()` handle serialization. `has_message_content()` utility for idempotent hook injection.
 - **Backends** -- in-memory (default), SQLite, PostgreSQL, and ChromaDB vector storage.
 
 ## Quick Example

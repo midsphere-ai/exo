@@ -65,6 +65,9 @@ class Swarm:
         mode: str = "workflow",
         max_handoffs: int = 10,
         context_mode: Any = _SWARM_CONTEXT_UNSET,
+        context_limit: int | None = None,
+        overflow: str | None = None,
+        cache: bool | None = None,
     ) -> None:
         if not agents:
             raise SwarmError("Swarm requires at least one agent")
@@ -104,8 +107,37 @@ class Swarm:
 
         self.flow = flow
 
-        # Propagate context_mode to all member agents when explicitly provided
-        if context_mode is not _SWARM_CONTEXT_UNSET:
+        # Propagate context to all member agents when explicitly provided.
+        _has_new_ctx = any(x is not None for x in (context_limit, overflow, cache))
+        if _has_new_ctx and context_mode is not _SWARM_CONTEXT_UNSET:
+            raise SwarmError(
+                "Cannot combine 'context_mode' with 'context_limit'/'overflow'/'cache'. "
+                "Use either context_mode= or the shorthand params."
+            )
+
+        if _has_new_ctx:
+            try:
+                from exo.context.config import (  # pyright: ignore[reportMissingImports]
+                    ContextConfig as _CtxConfig,
+                )
+                from exo.context.context import (  # pyright: ignore[reportMissingImports]
+                    Context as _CtxClass,
+                )
+
+                _kw: dict = {}
+                if context_limit is not None:
+                    _kw["limit"] = context_limit
+                if overflow is not None:
+                    _kw["overflow"] = overflow
+                if cache is not None:
+                    _kw["cache"] = cache
+                ctx = _CtxClass(task_id="__default__", config=_CtxConfig(**_kw))
+            except ImportError:
+                ctx = None
+            for agent in self.agents.values():
+                agent.context = ctx
+                agent._context_is_auto = False
+        elif context_mode is not _SWARM_CONTEXT_UNSET:
             from exo.agent import _make_context_from_mode  # avoid circular at module level
 
             ctx = None if context_mode is None else _make_context_from_mode(context_mode)
