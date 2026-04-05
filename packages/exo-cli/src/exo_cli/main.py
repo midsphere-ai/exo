@@ -466,6 +466,15 @@ def task_list(
 # Subcommand group: worker
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Subcommand group: tool (tool offloading)
+# ---------------------------------------------------------------------------
+
+from exo_cli.tool_commands import tool_app  # noqa: E402
+
+app.add_typer(tool_app, name="tool")
+
+
 worker_app = typer.Typer(
     name="worker",
     help="Manage and monitor distributed workers.",

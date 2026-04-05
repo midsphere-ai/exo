@@ -69,6 +69,7 @@ exo-mcp server test NAME                               # Ping test + latency rep
 exo-mcp tool list SERVER [--json]                      # List tools with schemas
 exo-mcp tool call SERVER TOOL --arg key=value          # Call with key=value args
 exo-mcp tool call SERVER TOOL --json '{"k": "v"}'     # Call with JSON args
+exo-mcp tool call SERVER TOOL --inject k=v             # Injected args (auto-filled, LLM doesn't specify)
 exo-mcp tool call SERVER TOOL --raw                    # Output raw JSON result
 
 # Resource operations
@@ -204,6 +205,33 @@ Results in mcp.json:
 
 The raw value `sk-secret123` is stored only in the encrypted vault file.
 
+### Injected Arguments (`--inject` / `-i` and `EXO_MCP_TOOL_INJECT`)
+
+The CLI equivalent of `injected_tool_args` from the Exo agent runtime. These arguments are merged into every tool call without being explicitly specified each time — useful for API keys, trace IDs, user context, etc.
+
+**Precedence (lowest → highest):** `EXO_MCP_TOOL_INJECT` → `--inject` → `--json` → `--arg`
+
+```bash
+# 1. Environment variable (set once, always active — JSON object)
+export EXO_MCP_TOOL_INJECT='{"api_key": "sk-123", "user_id": "u42"}'
+exo-mcp tool call my-server search --arg query=hello
+# → calls with {"query": "hello", "api_key": "sk-123", "user_id": "u42"}
+
+# 2. CLI flag (per-call)
+exo-mcp tool call my-server search --arg query=hello -i trace_id=abc -i user_id=u42
+
+# 3. Both (flag overrides env for overlapping keys)
+export EXO_MCP_TOOL_INJECT='{"user_id": "env-default"}'
+exo-mcp tool call my-server search --arg query=hello -i user_id=override
+# → user_id="override" (flag wins)
+
+# 4. --arg overrides everything
+exo-mcp tool call my-server search -i key=injected --arg key=explicit
+# → key="explicit" (--arg wins)
+```
+
+**Malformed `EXO_MCP_TOOL_INJECT`** (not valid JSON) is silently ignored.
+
 ## Patterns
 
 ### Pattern 1: Quick Tool Execution
@@ -280,7 +308,22 @@ async def main():
 asyncio.run(main())
 ```
 
-### Pattern 5: Building Standalone Binary
+### Pattern 5: Agent Tool Offloading with Inject
+
+```bash
+# Set up once — agent bootstrap
+export EXO_MCP_TOOL_INJECT='{"user_id": "u42", "session_token": "tok_abc"}'
+export EXO_MCP_VAULT_KEY="my-passphrase"
+
+# Agent calls tools via bash — injected args auto-merged
+exo-mcp tool call my-server search --arg query="python docs"
+# → MCP server receives: {"query": "python docs", "user_id": "u42", "session_token": "tok_abc"}
+
+exo-mcp tool call my-server write_file --json '{"path": "/tmp/out.txt", "content": "hello"}'
+# → MCP server receives: {"path": "/tmp/out.txt", "content": "hello", "user_id": "u42", "session_token": "tok_abc"}
+```
+
+### Pattern 6: Building Standalone Binary
 
 ```bash
 cd packages/exo-mcp-cli
@@ -307,4 +350,7 @@ pyinstaller exo_mcp.spec --clean
 - **The `exo-mcp` binary is fully independent** — it does NOT depend on exo-core, exo-mcp, or any other workspace package. It uses the `mcp` library directly.
 - **`--arg` in `server add` is for command arguments** (stdio process args), while `--arg` in `tool call` is for tool parameters (key=value pairs). Different semantics, same flag name.
 - **Server test** does three things: connect, ping, list tools — to verify full server functionality, not just TCP reachability.
+- **`--inject` vs `--arg`:** `--inject` has lower precedence than `--json` and `--arg`. Use `--inject` for baseline values the LLM shouldn't override; use `--arg` for explicit per-call values.
+- **`EXO_MCP_TOOL_INJECT` must be valid JSON** — malformed values are silently ignored (no error, no args injected). Use an object: `'{"k": "v"}'`.
+- **`EXO_MCP_TOOL_INJECT` vs `EXO_MCP_VAULT_KEY`:** Different env vars for different purposes. INJECT provides tool arguments; VAULT_KEY unlocks the credential store.
 - **File paths in tests** must use `--config` pointing to a `tmp_path` mcp.json, and vault must use `Vault(vault_path=tmp_path / "v.enc")` to avoid touching the real vault.

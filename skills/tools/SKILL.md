@@ -1,6 +1,6 @@
 ---
 name: exo:tools
-description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, ToolContext for nested agent streaming, injected_tool_args, large_output, structured output (output_type), or MCP server integration. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, ToolContext, injected_tool_args, large_output, output_type, add_mcp_server, structured output, nested agent, inner agent events."
+description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, ToolContext for nested agent streaming, injected_tool_args, large_output, structured output (output_type), MCP server integration, or tool offloading via CLI. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, ToolContext, injected_tool_args, large_output, output_type, add_mcp_server, structured output, nested agent, inner agent events, tool offloading, exo tool call, exo tool list, exo tool schema, bash tool."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -17,6 +17,7 @@ Use this skill when the developer needs to:
 - Define structured output schemas (`output_type`)
 - Connect MCP servers to agents (`add_mcp_server`)
 - Understand how tool schemas are generated from function signatures
+- Offload tool execution to CLI (`exo tool list/call/schema`) for token-efficient agent operation
 
 ## Decision Guide
 
@@ -27,7 +28,7 @@ Ask these questions to pick the right pattern:
 3. **Need stateful tool with custom execute logic?** Subclass `Tool` ABC
 4. **Tool runs an inner agent and you want its events in the parent stream?** Declare `ctx: ToolContext` — auto-injected, hidden from LLM
 5. **Tool returns huge results (>10KB)?** Set `large_output=True` — result offloaded to workspace, LLM gets a pointer
-6. **Need the LLM to see a parameter it doesn't actually fill?** Use `injected_tool_args` on Agent
+6. **Need the LLM to fill a parameter the tool never receives?** Use `injected_tool_args` on Agent
 7. **Need validated structured output from the agent?** Set `output_type=MyPydanticModel` on Agent
 8. **Need tools from an MCP server?** Use `agent.add_mcp_server(config)`
 
@@ -227,22 +228,43 @@ async for event in run.stream(parent, "AI trends", provider=provider):
 
 ### injected_tool_args (Schema-Only Arguments)
 
-Arguments that appear in the LLM's tool schema but are filled by the runtime, not the LLM:
+Arguments that appear in the LLM's tool schema and the LLM fills in, but are **stripped before the tool executes**. The tool function never receives them.
+
+Use cases:
+- **Chain-of-thought elicitation:** Force the LLM to reason before calling a tool
+- **Confidence scoring:** Have the LLM declare confidence without the tool caring
+- **Correlation IDs:** Let the LLM echo back trace IDs visible in logs but irrelevant to tool logic
 
 ```python
 agent = Agent(
     name="assistant",
-    tools=[my_tool],
+    tools=[search, write_file],
     injected_tool_args={
-        "user_id": "The ID of the current user",
-        "session_token": "Authentication token for the current session",
+        "reasoning": "Explain why you are calling this tool",
+        "confidence": "Your confidence level: low, medium, or high",
     },
 )
 ```
 
-The LLM sees `user_id` and `session_token` in tool schemas but the runtime injects them. Useful for passing context that the LLM should be aware of but shouldn't generate.
+**How it works (implementation details):**
 
-**Validation:** Keys must be non-empty strings, values must be strings (descriptions).
+1. `Agent.get_tool_schemas()` deep-copies each tool schema and adds injected fields as **optional string properties**. The underlying `Tool.parameters` is never mutated.
+2. The LLM sees and fills these fields in its tool call JSON.
+3. `Agent._execute_tools()` strips all injected arg keys from `kwargs` before calling `tool.execute()`.
+
+```python
+# What the LLM returns:
+# {"reasoning": "Need to find the API docs", "query": "python requests library"}
+
+# What the tool receives (reasoning stripped):
+# {"query": "python requests library"}
+```
+
+**Collision safety:** If an injected arg name collides with a real tool parameter, the real parameter wins — the injected field is not added to that tool's schema.
+
+**Works with all tool types:** `@tool`, `FunctionTool`, `Tool` ABC, `MCPToolWrapper` — any tool registered on the agent gets augmented schemas and stripped execution args.
+
+**Validation:** Keys must be non-empty strings, values must be strings (used as the property description in the JSON schema).
 
 ### large_output (Workspace Offloading)
 
@@ -373,6 +395,120 @@ await agent.add_tool(new_tool)
 agent.remove_tool("old_tool_name")
 ```
 
+## Tool Offloading via CLI
+
+Tool offloading lets agents execute Exo tools via bash commands instead of LLM tool calling, keeping schemas out of the context window and reducing token usage.
+
+### Commands
+
+```bash
+# List available tools from a Python module or file
+exo tool list --from myapp.tools
+exo tool list --from ./tools.py
+exo tool list --from myapp.tools --json    # JSON output
+
+# Call a tool with key=value args (types auto-coerced from schema)
+exo tool call greet --from myapp.tools -a name=Alice -a greeting=Hey
+
+# Call a tool with JSON args (preserves types natively)
+exo tool call search --from myapp.tools -j '{"query": "python", "max_results": 5}'
+
+# Get full JSON schema for a specific tool
+exo tool schema search --from myapp.tools
+
+# Inject args (like injected_tool_args — auto-filled, LLM doesn't specify)
+exo tool call search --from myapp.tools -j '{"query": "test"}' -i api_key=sk-123 -i user_id=u42
+
+# Raw JSON output (for programmatic consumption)
+exo tool call greet --from myapp.tools -a name=X --raw
+```
+
+### Environment Variables
+
+Set these once (e.g., in `.bashrc`, `.zshenv`, or agent bootstrap) to avoid repeating flags:
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `EXO_TOOL_SOURCE` | Default for `--from` — Python module or file path | `myapp.tools` or `./tools.py` |
+| `EXO_TOOL_INJECT` | Default injected args — JSON object, merged into every call | `'{"user_id": "u42", "api_key": "sk-123"}'` |
+
+With both set, agents just run bare commands:
+```bash
+export EXO_TOOL_SOURCE=myproject.tools
+export EXO_TOOL_INJECT='{"user_id": "u42", "api_key": "sk-123"}'
+
+exo tool list                                     # no --from needed
+exo tool call search -j '{"query": "test"}'       # user_id + api_key auto-injected
+exo tool schema search                            # no --from needed
+```
+
+`--from` overrides `EXO_TOOL_SOURCE` when provided. Explicit `--arg`/`--json`/`--inject` values override `EXO_TOOL_INJECT`.
+
+### Injected Arguments (`--inject` / `-i` and `EXO_TOOL_INJECT`)
+
+The CLI equivalent of `injected_tool_args`. These arguments are:
+- Visible in the tool schema (LLM knows they exist via `exo tool schema`)
+- Auto-filled at call time (LLM doesn't need to specify them)
+- Overridable by higher-precedence sources if explicitly provided
+
+**Precedence (lowest → highest):** `EXO_TOOL_INJECT` → `--inject` → `--json` → `--arg`
+
+Two ways to configure:
+
+```bash
+# 1. Environment variable (set once, always active)
+export EXO_TOOL_INJECT='{"api_key": "sk-123", "user_id": "u42"}'
+exo tool call search -j '{"query": "test"}'
+
+# 2. CLI flag (per-call)
+exo tool call search -j '{"query": "test"}' -i api_key=sk-123 -i user_id=u42
+
+# 3. Both (flag overrides env for overlapping keys)
+export EXO_TOOL_INJECT='{"api_key": "sk-123", "user_id": "default"}'
+exo tool call search -j '{"query": "test"}' -i user_id=override
+```
+
+### How It Works
+
+The `--from` / `EXO_TOOL_SOURCE` accepts either:
+- **Dotted module path:** `myapp.tools` — imported via `importlib.import_module()`
+- **File path:** `./tools.py` or `/abs/path/tools.py` — imported via `importlib.util`
+
+Tool discovery scans all module-level attributes for `Tool` instances, plus items in a conventional `tools` list/tuple.
+
+### Type Coercion
+
+When using `--arg KEY=VALUE` or `--inject KEY=VALUE`, string values are auto-coerced based on the tool's JSON Schema:
+- `"integer"` → `int("42")` → `42`
+- `"number"` → `float("3.14")` → `3.14`
+- `"boolean"` → `"true"/"1"/"yes"` → `True`
+- `"array"/"object"` → `json.loads(value)`
+
+With `--json` and `EXO_TOOL_INJECT`, types are preserved natively from JSON.
+
+### Agent Integration Pattern
+
+An agent can offload tools to bash for token-efficient execution. With env vars pre-configured, instructions are minimal:
+
+```python
+# Bootstrap: set env vars before agent starts
+import os
+os.environ["EXO_TOOL_SOURCE"] = "myproject.tools"
+os.environ["EXO_TOOL_INJECT"] = '{"api_key": "sk-123", "user_id": "u42"}'
+
+agent = Agent(
+    name="efficient-bot",
+    instructions="""You have access to tools via the command line.
+To list available tools: exo tool list
+To call a tool: exo tool call <name> -j '{"arg": "val"}'
+To see a tool's schema: exo tool schema <name>
+Use the bash tool to execute these commands instead of calling tools directly.""",
+    tools=[bash_tool],  # Only needs a bash/shell tool
+)
+```
+
+### Source: `packages/exo-cli/src/exo_cli/tool_commands.py`
+
 ## Gotchas
 
 - **Tool names must be unique per agent** — duplicate names raise `AgentError` at registration
@@ -385,3 +521,6 @@ agent.remove_tool("old_tool_name")
 - **`ToolContext` only works with `@tool` / `FunctionTool`** — `Tool` ABC subclasses and MCP tools don't get auto-injection
 - **`ToolContext.emit()` is non-blocking** — events are buffered and drained after tool execution, not yielded in real-time
 - **Sync tools can't use `ToolContext`** — `emit()` calls `asyncio.Queue.put_nowait()` which is unsafe from a thread. Use async tools for inner agent streaming.
+- **Tool offloading: `--from` must be importable** — the module's dependencies must be installed in the current Python environment. If using a file path, it's loaded in isolation.
+- **Tool offloading: ToolContext not available** — CLI-invoked tools don't have an agent context, so `ToolContext`-dependent tools will fail. Use tools without `ToolContext` for offloading.
+- **Tool offloading: async tools work fine** — `asyncio.run()` drives async tool execution from the CLI.

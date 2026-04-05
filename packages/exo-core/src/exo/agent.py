@@ -1410,20 +1410,41 @@ class Agent:
         list — they are available as functions inside ``execute_code``
         instead.  Returns cached schemas when available; rebuilds after
         tool mutations.
+
+        When ``injected_tool_args`` is configured, each schema is deep-copied
+        and augmented with the injected fields as optional string properties.
+        The underlying ``Tool.parameters`` object is never mutated.
         """
         if self._cached_tool_schemas is None:
             if self.ptc:
                 from exo.ptc import get_ptc_eligible_tools
 
                 ptc_names = set(get_ptc_eligible_tools(self).keys())
-                self._cached_tool_schemas = [
+                schemas = [
                     t.to_schema()
                     for name, t in self.tools.items()
                     if name not in ptc_names
                 ]
             else:
-                self._cached_tool_schemas = [t.to_schema() for t in self.tools.values()]
+                schemas = [t.to_schema() for t in self.tools.values()]
+            if self.injected_tool_args:
+                schemas = [self._augment_schema(s) for s in schemas]
+            self._cached_tool_schemas = schemas
         return self._cached_tool_schemas
+
+    def _augment_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """Deep-copy *schema* and merge ``injected_tool_args`` as optional properties."""
+        import copy
+
+        schema = copy.deepcopy(schema)
+        params = schema.get("function", {}).get("parameters")
+        if params is None:
+            return schema
+        props = params.setdefault("properties", {})
+        for arg_name, description in self.injected_tool_args.items():
+            if arg_name not in props:
+                props[arg_name] = {"type": "string", "description": description}
+        return schema
 
     def describe(self) -> dict[str, Any]:
         """Return a summary of the agent's capabilities.
@@ -1951,6 +1972,11 @@ class Agent:
             else:
                 try:
                     kwargs = dict(action.arguments)
+                    # Strip injected_tool_args — schema-only fields the LLM
+                    # fills in but the tool must never receive.
+                    if self.injected_tool_args:
+                        for key in self.injected_tool_args:
+                            kwargs.pop(key, None)
                     # Inject ToolContext if the tool declares one
                     if isinstance(tool, FunctionTool) and tool._tool_context_param:
                         kwargs[tool._tool_context_param] = ToolContext(

@@ -218,6 +218,136 @@ class TestToolRegistration:
 
 
 # ---------------------------------------------------------------------------
+# Injected tool args — schema augmentation & argument stripping
+# ---------------------------------------------------------------------------
+
+
+class TestInjectedToolArgs:
+    def test_schemas_augmented_with_injected_args(self) -> None:
+        """injected_tool_args adds optional string properties to every tool schema."""
+        agent = Agent(
+            name="bot",
+            tools=[greet],
+            injected_tool_args={"reason": "Why you are calling this tool"},
+        )
+        schemas = agent.get_tool_schemas()
+        greet_schema = next(s for s in schemas if s["function"]["name"] == "greet")
+        props = greet_schema["function"]["parameters"]["properties"]
+        assert "reason" in props
+        assert props["reason"]["type"] == "string"
+        assert props["reason"]["description"] == "Why you are calling this tool"
+
+    def test_injected_args_are_optional(self) -> None:
+        """Injected fields must NOT appear in the required list."""
+        agent = Agent(
+            name="bot",
+            tools=[greet],
+            injected_tool_args={"trace_id": "Correlation identifier"},
+        )
+        schemas = agent.get_tool_schemas()
+        greet_schema = next(s for s in schemas if s["function"]["name"] == "greet")
+        required = greet_schema["function"]["parameters"].get("required", [])
+        assert "trace_id" not in required
+
+    def test_original_tool_parameters_not_mutated(self) -> None:
+        """The underlying Tool.parameters dict must never be mutated."""
+        agent = Agent(
+            name="bot",
+            tools=[greet],
+            injected_tool_args={"origin": "UI surface"},
+        )
+        original_props = greet.parameters.get("properties", {})
+        agent.get_tool_schemas()
+        assert "origin" not in original_props
+
+    def test_no_augmentation_when_empty(self) -> None:
+        """Empty injected_tool_args produces unchanged schemas."""
+        agent_plain = Agent(name="bot", tools=[greet])
+        agent_empty = Agent(name="bot", tools=[greet], injected_tool_args={})
+        schemas_plain = agent_plain.get_tool_schemas()
+        schemas_empty = agent_empty.get_tool_schemas()
+        # Both should have the same properties for greet
+        greet_plain = next(s for s in schemas_plain if s["function"]["name"] == "greet")
+        greet_empty = next(s for s in schemas_empty if s["function"]["name"] == "greet")
+        assert (
+            greet_plain["function"]["parameters"]["properties"]
+            == greet_empty["function"]["parameters"]["properties"]
+        )
+
+    def test_injected_does_not_overwrite_existing_params(self) -> None:
+        """If an injected arg name collides with a real param, the real param wins."""
+        agent = Agent(
+            name="bot",
+            tools=[greet],
+            injected_tool_args={"name": "Should NOT overwrite the real 'name' param"},
+        )
+        schemas = agent.get_tool_schemas()
+        greet_schema = next(s for s in schemas if s["function"]["name"] == "greet")
+        props = greet_schema["function"]["parameters"]["properties"]
+        # "name" should still be the original parameter, not the injected one
+        assert props["name"]["type"] == "string"
+        assert "Should NOT overwrite" not in props["name"].get("description", "")
+
+    async def test_injected_args_stripped_before_execution(self) -> None:
+        """Injected args filled by the LLM are stripped before tool.execute()."""
+        received_kwargs: dict[str, Any] = {}
+
+        @tool
+        def capture(**kwargs: Any) -> str:
+            """Capture all kwargs."""
+            received_kwargs.update(kwargs)
+            return "ok"
+
+        agent = Agent(
+            name="bot",
+            tools=[capture],
+            injected_tool_args={"reasoning": "Why you called this"},
+        )
+
+        # Simulate what the LLM returns: tool args including the injected field
+        call = ToolCall(
+            id="call_1",
+            name="capture",
+            arguments='{"reasoning": "because I need data", "real_arg": "value"}',
+        )
+        response = ModelResponse(
+            content="",
+            tool_calls=[call],
+        )
+
+        call_count = 0
+
+        async def mock_complete(messages: Any, **kwargs: Any) -> ModelResponse:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return response
+            return ModelResponse(content="done")
+
+        provider = AsyncMock()
+        provider.complete = mock_complete
+
+        await agent.run("test", provider=provider)
+
+        # "reasoning" should have been stripped; "real_arg" should pass through
+        assert "reasoning" not in received_kwargs
+        assert received_kwargs.get("real_arg") == "value"
+
+    def test_augmentation_applies_to_all_tools(self) -> None:
+        """Injected args are added to every tool's schema, not just the first."""
+        agent = Agent(
+            name="bot",
+            tools=[greet, add],
+            injected_tool_args={"trace": "Trace ID"},
+        )
+        schemas = agent.get_tool_schemas()
+        for schema in schemas:
+            props = schema["function"]["parameters"].get("properties", {})
+            if schema["function"]["name"] in ("greet", "add"):
+                assert "trace" in props, f"Missing 'trace' in {schema['function']['name']}"
+
+
+# ---------------------------------------------------------------------------
 # Handoff registration
 # ---------------------------------------------------------------------------
 

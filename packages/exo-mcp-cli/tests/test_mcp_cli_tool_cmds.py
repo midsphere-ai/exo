@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from exo_mcp_cli.main import app
@@ -398,3 +399,209 @@ class TestToolCall:
         )
         assert result.exit_code == 1
         assert "KEY=VALUE" in result.output or "Error" in result.output
+
+
+# ---------------------------------------------------------------------------
+# tool call — injected arguments
+# ---------------------------------------------------------------------------
+
+
+class TestToolCallInject:
+    def test_inject_flag_adds_args(self, tmp_path: Path) -> None:
+        """--inject key=value is merged into the arguments dict."""
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "search",
+                    "--arg",
+                    "query=hello",
+                    "--inject",
+                    "trace_id=abc123",
+                ],
+            )
+
+        assert result.exit_code == 0
+        session.call_tool.assert_called_once_with(
+            "search", {"query": "hello", "trace_id": "abc123"}
+        )
+
+    def test_inject_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """EXO_MCP_TOOL_INJECT env var provides baseline injected args."""
+
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+        monkeypatch.setenv("EXO_MCP_TOOL_INJECT", '{"user_id": "u42"}')
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "fetch",
+                    "--arg",
+                    "url=http://example.com",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_args = session.call_tool.call_args[0]
+        assert call_args[1]["user_id"] == "u42"
+        assert call_args[1]["url"] == "http://example.com"
+
+    def test_inject_flag_overrides_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--inject overrides overlapping keys from EXO_MCP_TOOL_INJECT."""
+
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+        monkeypatch.setenv("EXO_MCP_TOOL_INJECT", '{"user_id": "env-val"}')
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "fetch",
+                    "--inject",
+                    "user_id=flag-val",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_args = session.call_tool.call_args[0]
+        assert call_args[1]["user_id"] == "flag-val"
+
+    def test_arg_overrides_inject(self, tmp_path: Path) -> None:
+        """--arg has higher precedence than --inject."""
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "t",
+                    "--inject",
+                    "k=injected",
+                    "--arg",
+                    "k=explicit",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_args = session.call_tool.call_args[0]
+        assert call_args[1]["k"] == "explicit"
+
+    def test_json_overrides_inject(self, tmp_path: Path) -> None:
+        """--json has higher precedence than --inject."""
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "t",
+                    "--inject",
+                    "k=low",
+                    "--json",
+                    '{"k": "high"}',
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_args = session.call_tool.call_args[0]
+        assert call_args[1]["k"] == "high"
+
+    def test_inject_invalid_format_exits_1(self, tmp_path: Path) -> None:
+        """--inject without '=' exits 1."""
+        cfg = _make_config(tmp_path)
+        result = runner.invoke(
+            app,
+            [
+                "--config",
+                str(cfg),
+                "tool",
+                "call",
+                "test-srv",
+                "t",
+                "--inject",
+                "no-equals",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "KEY=VALUE" in result.output or "Error" in result.output
+
+    def test_malformed_env_inject_ignored(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Malformed EXO_MCP_TOOL_INJECT is silently ignored."""
+
+        cfg = _make_config(tmp_path)
+        session = _mock_session()
+        monkeypatch.setenv("EXO_MCP_TOOL_INJECT", "not-json{{{")
+
+        with patch(
+            "exo_mcp_cli.commands.tool.connect_to_server",
+            side_effect=lambda *a, **kw: _mock_connect_factory(session),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "--config",
+                    str(cfg),
+                    "tool",
+                    "call",
+                    "test-srv",
+                    "t",
+                    "--arg",
+                    "x=1",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_args = session.call_tool.call_args[0]
+        assert call_args[1] == {"x": "1"}
