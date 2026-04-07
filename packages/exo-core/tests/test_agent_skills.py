@@ -148,7 +148,7 @@ class TestActivateSkill:
         reg = _make_registry(WEBDEV_SKILL)
         agent = Agent(name="a", skills=reg)
         result = await agent.tools["activate_skill"].execute(name="nonexistent")
-        assert "[Error: Skill 'nonexistent' not found." in result
+        assert "Skill 'nonexistent' not found" in result
         assert "webdev" in result
 
     async def test_no_tool_list(self) -> None:
@@ -164,7 +164,8 @@ class TestActivateSkill:
         reg = _make_registry(skill)
         agent = Agent(name="a", skills=reg)
         result = await agent.tools["activate_skill"].execute(name="empty")
-        assert result == "[Skill 'empty' activated (no usage instructions)]"
+        assert "Skill 'empty' activated" in result
+        assert "no usage instructions" in result
 
     async def test_multiple_tools_resolved(self) -> None:
         skill = Skill(

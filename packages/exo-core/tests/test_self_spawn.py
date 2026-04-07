@@ -126,7 +126,7 @@ class TestSpawnSelfGuards:
         agent._current_provider = _mock_provider()
 
         result = await agent.tools["spawn_self"].execute(tasks=["task"])
-        assert "spawn_self error" in str(result)
+        assert "Maximum spawn depth" in str(result)
 
     @pytest.mark.asyncio
     async def test_spawn_self_returns_error_no_provider(self) -> None:

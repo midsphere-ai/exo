@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from exo.tool import Tool, ToolError, _extract_description, _generate_schema
+from exo.tool_result import tool_error, tool_ok
 
 from .task_loop_queue import TaskLoopEvent, TaskLoopEventType, TaskLoopQueue
 
@@ -58,9 +59,15 @@ async def _steer_agent(queue: TaskLoopQueue, content: str) -> str:
     Args:
         content: Instruction describing the new direction for the agent.
     """
-    event = TaskLoopEvent(type=TaskLoopEventType.STEER, content=content)
-    queue.push(event)
-    return f"Steering event queued: {content}"
+    try:
+        event = TaskLoopEvent(type=TaskLoopEventType.STEER, content=content)
+        queue.push(event)
+        return tool_ok(f"Steering event queued: {content}")
+    except Exception as exc:
+        return tool_error(
+            f"Failed to push steer event: {exc}",
+            hint="Retry the steer_agent call.",
+        )
 
 
 async def _abort_agent(queue: TaskLoopQueue, reason: str) -> str:
@@ -71,9 +78,15 @@ async def _abort_agent(queue: TaskLoopQueue, reason: str) -> str:
     Args:
         reason: Reason for aborting the agent run.
     """
-    event = TaskLoopEvent(type=TaskLoopEventType.ABORT, content=reason)
-    queue.push(event)
-    return f"Abort event queued: {reason}"
+    try:
+        event = TaskLoopEvent(type=TaskLoopEventType.ABORT, content=reason)
+        queue.push(event)
+        return tool_ok(f"Abort event queued: {reason}")
+    except Exception as exc:
+        return tool_error(
+            f"Failed to push abort event: {exc}",
+            hint="Retry the abort_agent call.",
+        )
 
 
 steer_agent_tool = _QueueTool(

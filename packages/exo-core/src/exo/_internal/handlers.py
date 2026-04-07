@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import json
 from collections.abc import AsyncIterator, Sequence
 from enum import StrEnum
 from typing import Any, Generic, TypeVar
@@ -319,7 +320,11 @@ class ToolHandler(Handler[dict[str, Any], ToolResult]):
             try:
                 _log.debug("Executing tool '%s' (call_id=%s)", tool_name, call_id)
                 output = await tool.execute(**arguments)
-                content = output if isinstance(output, str) else str(output)
+                content = (
+                    output
+                    if isinstance(output, str)
+                    else json.dumps(output) if isinstance(output, dict) else str(output)
+                )
                 results[idx] = ToolResult(
                     tool_call_id=call_id,
                     tool_name=tool_name,

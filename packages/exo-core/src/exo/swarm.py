@@ -25,7 +25,7 @@ from exo._internal.graph import GraphError, parse_flow_dsl, topological_sort
 from exo._internal.loop_node import BREAK_SENTINEL
 from exo._internal.workflow_checkpoint import WorkflowCheckpoint, WorkflowCheckpointStore
 from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
-from exo.tool import Tool
+from exo.tool import Tool, ToolError
 from exo.types import ExoError, Message, RunResult, StatusEvent, StreamEvent
 
 _log = get_logger(__name__)
@@ -1189,10 +1189,15 @@ class _DelegateTool(Tool):
             The worker agent's output text.
         """
         task: str = kwargs.get("task", "")
-        result = await call_runner(
-            self._worker,
-            task,
-            provider=self._provider,
-            max_retries=self._max_retries,
-        )
+        try:
+            result = await call_runner(
+                self._worker,
+                task,
+                provider=self._provider,
+                max_retries=self._max_retries,
+            )
+        except Exception as exc:
+            raise ToolError(
+                f"Delegation to '{self._worker.name}' failed: {exc}"
+            ) from exc
         return result.output

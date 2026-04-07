@@ -23,10 +23,9 @@ from typing import Any
 
 from exo._internal.call_runner import call_runner
 from exo._internal.message_builder import build_messages
-from exo._internal.output_parser import parse_tool_arguments
+from exo._internal.output_parser import OutputParseError, parse_tool_arguments
 from exo._internal.planner import prepare_planned_execution
 from exo.hooks import HookPoint
-from exo.ptc import PTC_TOOL_NAME
 from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from exo.observability.metrics import (  # pyright: ignore[reportMissingImports]
     HAS_OTEL,
@@ -37,6 +36,7 @@ from exo.observability.semconv import (  # pyright: ignore[reportMissingImports]
     METRIC_STREAM_EVENTS_EMITTED,
     STREAM_EVENT_TYPE,
 )
+from exo.ptc import PTC_TOOL_NAME
 from exo.types import (
     AssistantMessage,
     ContextEvent,
@@ -53,6 +53,7 @@ from exo.types import (
     ToolCall,
     ToolCallDeltaEvent,
     ToolCallEvent,
+    ToolResult,
     ToolResultEvent,
     Usage,
     UsageEvent,
@@ -657,9 +658,26 @@ async def _stream(
                     yield _ev
 
             # Execute tools and feed results back
-            actions = parse_tool_arguments(tool_calls)
+            try:
+                actions = parse_tool_arguments(tool_calls)
+            except OutputParseError as exc:
+                _log.warning(
+                    "Failed to parse tool arguments on '%s': %s", agent.name, exc
+                )
+                actions = []
+                tool_results = [
+                    ToolResult(
+                        tool_call_id=tc.id,
+                        tool_name=tc.name,
+                        error=f"Invalid tool arguments: {exc}",
+                    )
+                    for tc in tool_calls
+                ]
+            else:
+                tool_results = []
             tool_exec_start = time.time()
-            tool_results = await agent._execute_tools(actions)
+            if actions:
+                tool_results = await agent._execute_tools(actions)
             tool_exec_end = time.time()
 
             # Drain MCP progress queues and yield MCPProgressEvent items.

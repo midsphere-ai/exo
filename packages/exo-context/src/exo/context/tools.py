@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from exo.tool import Tool, ToolError, _extract_description, _generate_schema
+from exo.tool_result import tool_error, tool_ok
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +78,17 @@ async def _add_todo(ctx: Any, item: str) -> str:
     Args:
         item: The todo item text to add.
     """
-    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
-    todos = list(todos)  # defensive copy
-    todos.append({"item": item, "done": False})
-    ctx.state.set("todos", todos)
-    return f"Added todo: {item}"
+    try:
+        todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+        todos = list(todos)  # defensive copy
+        todos.append({"item": item, "done": False})
+        ctx.state.set("todos", todos)
+        return tool_ok(f"Added todo: {item}")
+    except Exception as exc:
+        return tool_error(
+            f"Failed to add todo: {exc}",
+            hint="Retry the add_todo call.",
+        )
 
 
 async def _complete_todo(ctx: Any, index: int) -> str:
@@ -90,15 +97,31 @@ async def _complete_todo(ctx: Any, index: int) -> str:
     Args:
         index: The 0-based index of the todo item to mark done.
     """
-    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
-    if not todos:
-        return "No todos found."
-    todos = [dict(t) for t in todos]  # defensive copy
-    if index < 0 or index >= len(todos):
-        return f"Invalid index {index}. Have {len(todos)} todos."
-    todos[index]["done"] = True
-    ctx.state.set("todos", todos)
-    return f"Marked todo #{index} as done: {todos[index]['item']}"
+    try:
+        todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+        if not todos:
+            return tool_error(
+                "No todos to complete",
+                hint="Add todos first using add_todo before completing them.",
+            )
+        todos = [dict(t) for t in todos]  # defensive copy
+        if index < 0 or index >= len(todos):
+            return tool_error(
+                f"Invalid index {index}",
+                hint=(
+                    "Use get_todo to see current items, then call "
+                    "complete_todo with a valid index."
+                ),
+                valid_range=f"0-{len(todos) - 1}",
+            )
+        todos[index]["done"] = True
+        ctx.state.set("todos", todos)
+        return tool_ok(f"Marked todo #{index} as done: {todos[index]['item']}")
+    except Exception as exc:
+        return tool_error(
+            f"Failed to complete todo: {exc}",
+            hint="Retry the complete_todo call.",
+        )
 
 
 async def _get_todo(ctx: Any) -> str:
@@ -106,14 +129,20 @@ async def _get_todo(ctx: Any) -> str:
 
     Returns the full checklist in markdown format.
     """
-    todos: list[dict[str, Any]] = ctx.state.get("todos", [])
-    if not todos:
-        return "No todos."
-    lines: list[str] = []
-    for i, t in enumerate(todos):
-        mark = "x" if t.get("done") else " "
-        lines.append(f"{i}. [{mark}] {t.get('item', '')}")
-    return "\n".join(lines)
+    try:
+        todos: list[dict[str, Any]] = ctx.state.get("todos", [])
+        if not todos:
+            return "No todos."
+        lines: list[str] = []
+        for i, t in enumerate(todos):
+            mark = "x" if t.get("done") else " "
+            lines.append(f"{i}. [{mark}] {t.get('item', '')}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return tool_error(
+            f"Failed to retrieve todos: {exc}",
+            hint="Retry the get_todo call.",
+        )
 
 
 planning_tool_add = _ContextTool(
@@ -153,13 +182,25 @@ async def _get_knowledge(ctx: Any, name: str) -> str:
     Args:
         name: The artifact name to retrieve.
     """
-    workspace = ctx.state.get("workspace")
-    if workspace is None:
-        return "No workspace attached to context."
-    content = workspace.read(name)
-    if content is None:
-        return f"Artifact '{name}' not found."
-    return content
+    try:
+        workspace = ctx.state.get("workspace")
+        if workspace is None:
+            return tool_error(
+                "No workspace attached to context",
+                hint="The agent has no workspace. Knowledge artifacts are not available.",
+            )
+        content = workspace.read(name)
+        if content is None:
+            return tool_error(
+                f"Artifact '{name}' not found",
+                hint="Use search_knowledge to find available artifacts.",
+            )
+        return content
+    except Exception as exc:
+        return tool_error(
+            f"Failed to retrieve artifact: {exc}",
+            hint="Retry get_knowledge or try search_knowledge to find artifacts.",
+        )
 
 
 async def _grep_knowledge(ctx: Any, name: str, pattern: str) -> str:
@@ -169,24 +210,48 @@ async def _grep_knowledge(ctx: Any, name: str, pattern: str) -> str:
         name: The artifact name to search in.
         pattern: A regex pattern to match against each line.
     """
-    workspace = ctx.state.get("workspace")
-    if workspace is None:
-        return "No workspace attached to context."
-    content = workspace.read(name)
-    if content is None:
-        return f"Artifact '{name}' not found."
     try:
-        compiled = re.compile(pattern, re.IGNORECASE)
-    except re.error as e:
-        return f"Invalid regex pattern: {e}"
-    lines = content.splitlines()
-    matches: list[str] = []
-    for i, line in enumerate(lines):
-        if compiled.search(line):
-            matches.append(f"{i + 1}: {line}")
-    if not matches:
-        return f"No matches for pattern '{pattern}' in '{name}'."
-    return "\n".join(matches)
+        workspace = ctx.state.get("workspace")
+        if workspace is None:
+            return tool_error(
+                "No workspace attached to context",
+                hint="The agent has no workspace. Knowledge artifacts are not available.",
+            )
+        content = workspace.read(name)
+        if content is None:
+            return tool_error(
+                f"Artifact '{name}' not found",
+                hint="Use search_knowledge to find available artifacts.",
+            )
+        try:
+            compiled = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            return tool_error(
+                f"Invalid regex pattern: {e}",
+                hint=(
+                    "Fix the regex pattern syntax. Common issues: unmatched "
+                    "brackets [], unescaped special characters."
+                ),
+            )
+        lines = content.splitlines()
+        matches: list[str] = []
+        for i, line in enumerate(lines):
+            if compiled.search(line):
+                matches.append(f"{i + 1}: {line}")
+        if not matches:
+            return tool_error(
+                f"No matches for pattern '{pattern}' in '{name}'",
+                hint=(
+                    "Try a broader pattern or use get_knowledge to see "
+                    "the full artifact content."
+                ),
+            )
+        return "\n".join(matches)
+    except Exception as exc:
+        return tool_error(
+            f"Failed to search artifact: {exc}",
+            hint="Retry grep_knowledge or try search_knowledge.",
+        )
 
 
 async def _search_knowledge(ctx: Any, query: str, top_k: int = 5) -> str:
@@ -196,18 +261,33 @@ async def _search_knowledge(ctx: Any, query: str, top_k: int = 5) -> str:
         query: The search query string.
         top_k: Maximum number of results to return.
     """
-    knowledge_store = ctx.state.get("knowledge_store")
-    if knowledge_store is None:
-        return "No knowledge store attached to context."
-    results = knowledge_store.search(query, top_k=top_k)
-    if not results:
-        return f"No results for query '{query}'."
-    lines: list[str] = []
-    for r in results:
-        lines.append(
-            f"[{r.chunk.artifact_name}#{r.chunk.index}] (score={r.score:.2f})\n{r.chunk.content[:200]}"
+    try:
+        knowledge_store = ctx.state.get("knowledge_store")
+        if knowledge_store is None:
+            return tool_error(
+                "No knowledge store attached to context",
+                hint="The agent has no knowledge store configured.",
+            )
+        results = knowledge_store.search(query, top_k=top_k)
+        if not results:
+            return tool_error(
+                f"No results for query '{query}'",
+                hint=(
+                    "Try different search terms or use get_knowledge "
+                    "with a specific artifact name."
+                ),
+            )
+        lines: list[str] = []
+        for r in results:
+            lines.append(
+                f"[{r.chunk.artifact_name}#{r.chunk.index}] (score={r.score:.2f})\n{r.chunk.content[:200]}"
+            )
+        return "\n---\n".join(lines)
+    except Exception as exc:
+        return tool_error(
+            f"Failed to search knowledge: {exc}",
+            hint="Retry search_knowledge with different terms.",
         )
-    return "\n---\n".join(lines)
 
 
 knowledge_tool_get = _ContextTool(
@@ -253,23 +333,49 @@ async def _read_file(ctx: Any, path: str) -> str:
     Args:
         path: Relative path to the file within the working directory.
     """
-    working_dir = ctx.state.get("working_dir")
-    if working_dir is None:
-        return "No working directory set in context."
-    base = Path(working_dir).resolve()
-    target = (base / path).resolve()
-    # Prevent path traversal outside working directory
-    if not target.is_relative_to(base):
-        logger.warning("path traversal blocked: %r resolved outside working dir %s", path, base)
-        return f"Access denied: '{path}' is outside the working directory."
-    if not target.is_file():
-        return f"File not found: '{path}'."
     try:
-        return target.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return f"Cannot read '{path}' as text."
-    except OSError as e:
-        return f"Error reading '{path}': {e}"
+        working_dir = ctx.state.get("working_dir")
+        if working_dir is None:
+            return tool_error(
+                "No working directory set in context",
+                hint="The agent has no working directory configured.",
+            )
+        base = Path(working_dir).resolve()
+        target = (base / path).resolve()
+        # Prevent path traversal outside working directory
+        if not target.is_relative_to(base):
+            logger.warning(
+                "path traversal blocked: %r resolved outside working dir %s", path, base
+            )
+            return tool_error(
+                f"Access denied: '{path}' is outside the working directory",
+                hint="Use a relative path within the working directory.",
+            )
+        if not target.is_file():
+            return tool_error(
+                f"File not found: '{path}'",
+                hint=(
+                    "Check the file path. Use a relative path from "
+                    "the working directory root."
+                ),
+            )
+        try:
+            return target.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return tool_error(
+                f"Cannot read '{path}' as text",
+                hint="The file may be binary. Try a different file.",
+            )
+        except OSError as e:
+            return tool_error(
+                f"Error reading '{path}': {e}",
+                hint="Check file permissions and retry.",
+            )
+    except Exception as exc:
+        return tool_error(
+            f"read_file failed: {exc}",
+            hint="Retry with a different file path.",
+        )
 
 
 file_tool_read = _ContextTool(

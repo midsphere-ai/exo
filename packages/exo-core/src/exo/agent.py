@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import os
 import uuid
 from collections.abc import Callable, Sequence
@@ -28,6 +29,7 @@ from exo.skills import DictToolResolver, SkillError, SkillRegistry, ToolResolver
 from exo.task_controller import TaskLoopEvent, TaskLoopEventType, TaskLoopQueue
 from exo.tool import FunctionTool, Tool, ToolError
 from exo.tool_context import ToolContext
+from exo.tool_result import tool_error, tool_ok
 from exo.types import (
     AgentOutput,
     AssistantMessage,
@@ -944,15 +946,39 @@ class Agent:
                     large_output tool.
 
             Returns:
-                The full content of the stored artifact, or an error message
-                if the artifact is not found.
+                The full content of the stored artifact, or a structured error
+                with recovery hint if retrieval fails.
             """
-            if agent_ref._workspace is None:
-                return "[Error: No workspace available — no artifacts have been stored yet]"
-            content = agent_ref._workspace.read(id)
-            if content is None:
-                return f"[Error: Artifact '{id}' not found in workspace]"
-            return content
+            try:
+                if agent_ref._workspace is None:
+                    return tool_error(
+                        "No workspace available",
+                        hint=(
+                            "No artifacts have been stored yet. Use a large_output "
+                            "tool first, then call retrieve_artifact with the "
+                            "returned artifact ID."
+                        ),
+                    )
+                content = agent_ref._workspace.read(id)
+                if content is None:
+                    return tool_error(
+                        f"Artifact '{id}' not found in workspace",
+                        hint=(
+                            "Check the artifact ID — use the exact string "
+                            "returned in the pointer message from the "
+                            "large_output tool."
+                        ),
+                    )
+                return content
+            except Exception as exc:
+                return tool_error(
+                    f"Failed to read artifact: {exc}",
+                    hint=(
+                        "Retry the retrieve_artifact call. If the error "
+                        "persists, re-run the original tool that produced "
+                        "the artifact."
+                    ),
+                )
 
         # Direct dict insertion avoids triggering the duplicate check in _register_tool
         # and the large_output auto-registration loop.
@@ -1071,84 +1097,123 @@ class Agent:
                 tasks: List of sub-task prompts, one per child agent to spawn.
 
             Returns:
-                The text results of the spawned agents' runs, or an error
-                string if limits are exceeded.
+                The text results of the spawned agents' runs, or a structured
+                error with recovery hint if spawning fails.
             """
-            if not tasks:
-                return "[spawn_self error] Empty tasks list. Provide at least one task."
+            try:
+                if not tasks:
+                    return tool_error(
+                        "Empty tasks list",
+                        hint=(
+                            "Provide at least one task string in the tasks "
+                            "list. Each task should describe a sub-problem "
+                            "to solve in parallel."
+                        ),
+                    )
 
-            if len(tasks) > parent.max_spawn_children:
-                return (
-                    f"[spawn_self error] Too many tasks ({len(tasks)}). "
-                    f"Maximum is {parent.max_spawn_children} per call."
-                )
+                if len(tasks) > parent.max_spawn_children:
+                    return tool_error(
+                        f"Too many tasks ({len(tasks)})",
+                        hint=(
+                            f"Reduce the tasks list to "
+                            f"{parent.max_spawn_children} or fewer items. "
+                            f"Split into multiple spawn_self calls if needed."
+                        ),
+                        max_children=parent.max_spawn_children,
+                    )
 
-            if parent._spawn_depth >= parent.max_spawn_depth:
-                return (
-                    f"[spawn_self error] Maximum spawn depth ({parent.max_spawn_depth}) "
-                    "reached. Cannot spawn further sub-agents."
-                )
+                if parent._spawn_depth >= parent.max_spawn_depth:
+                    return tool_error(
+                        f"Maximum spawn depth ({parent.max_spawn_depth}) reached",
+                        hint=(
+                            "Cannot spawn further sub-agents. Handle the "
+                            "remaining tasks directly without spawning."
+                        ),
+                    )
 
-            provider = parent._current_provider
-            if provider is None:
-                return "[spawn_self error] No provider available for spawned agent."
+                provider = parent._current_provider
+                if provider is None:
+                    return tool_error(
+                        "No provider available for spawned agent",
+                        hint=(
+                            "The agent has no active provider. Handle the "
+                            "tasks directly without spawning."
+                        ),
+                    )
 
-            # Build tools list once — exclude spawn_self and context tools.
-            child_tools = [
-                t
-                for name, t in parent.tools.items()
-                if name != "spawn_self" and not getattr(t, "_is_context_tool", False)
-            ]
+                # Build tools list once — exclude spawn_self and context tools.
+                child_tools = [
+                    t
+                    for name, t in parent.tools.items()
+                    if name != "spawn_self" and not getattr(t, "_is_context_tool", False)
+                ]
 
-            results: list[str] = [""] * len(tasks)
+                results: list[str] = [""] * len(tasks)
 
-            async def _run_child(idx: int) -> None:
-                task = tasks[idx]
-                child_memory = _build_child_memory(parent)
-                child_name = f"{parent.name}_spawn_{uuid.uuid4().hex[:8]}"
-                child_context = _build_child_context(parent, child_name)
+                async def _run_child(idx: int) -> None:
+                    try:
+                        task = tasks[idx]
+                        child_memory = _build_child_memory(parent)
+                        child_name = f"{parent.name}_spawn_{uuid.uuid4().hex[:8]}"
+                        child_context = _build_child_context(parent, child_name)
 
-                child_agent = Agent(
-                    name=child_name,
-                    model=parent.model,
-                    instructions=parent.instructions,
-                    tools=child_tools,
-                    max_steps=parent.max_steps,
-                    temperature=parent.temperature,
-                    max_tokens=parent.max_tokens,
-                    memory=child_memory,
-                    context=child_context,
-                    allow_self_spawn=False,
-                )
-                child_agent._spawn_depth = parent._spawn_depth + 1
+                        child_agent = Agent(
+                            name=child_name,
+                            model=parent.model,
+                            instructions=parent.instructions,
+                            tools=child_tools,
+                            max_steps=parent.max_steps,
+                            temperature=parent.temperature,
+                            max_tokens=parent.max_tokens,
+                            memory=child_memory,
+                            context=child_context,
+                            allow_self_spawn=False,
+                        )
+                        child_agent._spawn_depth = parent._spawn_depth + 1
 
-                _log.info(
-                    "spawn_self: parent=%s child=%s depth=%d task_idx=%d/%d task_len=%d",
-                    parent.name,
-                    child_agent.name,
-                    child_agent._spawn_depth,
-                    idx + 1,
-                    len(tasks),
-                    len(task),
-                )
+                        _log.info(
+                            "spawn_self: parent=%s child=%s depth=%d task_idx=%d/%d task_len=%d",
+                            parent.name,
+                            child_agent.name,
+                            child_agent._spawn_depth,
+                            idx + 1,
+                            len(tasks),
+                            len(task),
+                        )
+
+                        result = await child_agent.run(task, provider=provider)
+                        results[idx] = result.text or ""
+                    except Exception as exc:
+                        results[idx] = f"[child {idx + 1} error] {exc}"
 
                 try:
-                    result = await child_agent.run(task, provider=provider)
-                    results[idx] = result.text or ""
-                except Exception as exc:
-                    results[idx] = f"[child {idx + 1} error] {exc}"
+                    async with asyncio.TaskGroup() as tg:
+                        for i in range(len(tasks)):
+                            tg.create_task(_run_child(i))
+                except BaseException as exc:
+                    return tool_error(
+                        f"Spawn execution failed: {exc}",
+                        hint=(
+                            "One or more spawned agents failed. Handle the "
+                            "tasks directly without spawning."
+                        ),
+                    )
 
-            async with asyncio.TaskGroup() as tg:
-                for i in range(len(tasks)):
-                    tg.create_task(_run_child(i))
+                if len(tasks) == 1:
+                    return results[0]
 
-            if len(tasks) == 1:
-                return results[0]
-
-            parts = []
-            for i, result in enumerate(results):
-                parts.append(f"[Task {i + 1}]: {result}")
-            return "\n\n".join(parts)
+                parts = []
+                for i, result in enumerate(results):
+                    parts.append(f"[Task {i + 1}]: {result}")
+                return "\n\n".join(parts)
+            except Exception as exc:
+                return tool_error(
+                    f"spawn_self failed: {exc}",
+                    hint=(
+                        "Handle the tasks directly without spawning. "
+                        "Break the work into sequential steps if needed."
+                    ),
+                )
 
         return FunctionTool(spawn_self, name="spawn_self")
 
@@ -1166,27 +1231,56 @@ class Agent:
             Args:
                 name: The name of the skill to activate.
             """
-            registry = agent_ref._skill_registry
-            if registry is None:
-                return "[Error: No skill registry configured]"
-
             try:
-                skill = registry.get(name)
-            except SkillError:
-                available = registry.list_names()
-                return (
-                    f"[Error: Skill '{name}' not found. Available skills: {', '.join(available)}]"
+                registry = agent_ref._skill_registry
+                if registry is None:
+                    return tool_error(
+                        "No skill registry configured",
+                        hint=(
+                            "This agent was not initialized with skills. "
+                            "Skills must be provided when creating the Agent."
+                        ),
+                    )
+
+                try:
+                    skill = registry.get(name)
+                except SkillError:
+                    available = registry.list_names()
+                    return tool_error(
+                        f"Skill '{name}' not found",
+                        hint=(
+                            "Choose one of the available skills and call "
+                            "activate_skill with that name."
+                        ),
+                        available_skills=available,
+                    )
+
+                # Resolve and add tools (skip duplicates)
+                if agent_ref._tool_resolver is not None and skill.tool_list:
+                    tools = agent_ref._tool_resolver.resolve(skill)
+                    async with agent_ref._tools_lock:
+                        for t in tools:
+                            if t.name not in agent_ref.tools:
+                                agent_ref.tools[t.name] = t
+
+                return skill.usage or tool_ok(
+                    f"Skill '{name}' activated (no usage instructions)"
                 )
-
-            # Resolve and add tools (skip duplicates)
-            if agent_ref._tool_resolver is not None and skill.tool_list:
-                tools = agent_ref._tool_resolver.resolve(skill)
-                async with agent_ref._tools_lock:
-                    for t in tools:
-                        if t.name not in agent_ref.tools:
-                            agent_ref.tools[t.name] = t
-
-            return skill.usage or f"[Skill '{name}' activated (no usage instructions)]"
+            except Exception as exc:
+                available: list[str] = []
+                try:
+                    if agent_ref._skill_registry is not None:
+                        available = agent_ref._skill_registry.list_names()
+                except Exception:
+                    pass
+                return tool_error(
+                    f"Failed to activate skill '{name}': {exc}",
+                    hint=(
+                        "Retry the activate_skill call. If the error "
+                        "persists, continue without this skill."
+                    ),
+                    available_skills=available,
+                )
 
         return FunctionTool(activate_skill, name="activate_skill")
 
@@ -2013,7 +2107,9 @@ class Agent:
                     elif isinstance(output, str):
                         content = output
                     else:
-                        content = str(output)  # dict fallback
+                        content = (
+                            json.dumps(output) if isinstance(output, dict) else str(output)
+                        )
                     # Large-output offloading: store in workspace and inject pointer.
                     # Fires when large_output=True OR result exceeds the byte threshold.
                     # Only applies to string content (not multimodal content blocks).

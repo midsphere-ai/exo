@@ -19,6 +19,7 @@ from exo.runner import run
 from exo.swarm import Swarm
 from exo.tool import FunctionTool, Tool, tool
 from exo.tool_context import ToolContext
+from exo.tool_result import tool_error, tool_ok
 from exo.types import (
     AudioBlock,
     ContentBlock,
@@ -54,4 +55,6 @@ __all__ = [
     "get_logger",
     "run",
     "tool",
+    "tool_error",
+    "tool_ok",
 ]
