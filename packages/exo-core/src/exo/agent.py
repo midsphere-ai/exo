@@ -852,15 +852,15 @@ class Agent:
         self.hitl_tools = normalized_hitl_tools
         self._validate_hitl_tools()
 
-        # PTC: register synthetic execute_code tool when programmatic tool calling is on
+        # PTC: register synthetic PTC tool when programmatic tool calling is on
         if self.ptc:
-            from exo.ptc import PTCTool
+            from exo.ptc import PTC_TOOL_NAME, PTCTool
 
-            if "execute_code" in self.tools:
+            if PTC_TOOL_NAME in self.tools:
                 raise AgentError(
-                    "Cannot enable ptc: a tool named 'execute_code' is already registered"
+                    f"Cannot enable ptc: a tool named '{PTC_TOOL_NAME}' is already registered"
                 )
-            self.tools["execute_code"] = PTCTool(agent=self, timeout=self.ptc_timeout)
+            self.tools[PTC_TOOL_NAME] = PTCTool(agent=self, timeout=self.ptc_timeout)
             self._cached_tool_schemas = None
 
         # Lifecycle hooks
@@ -1407,7 +1407,7 @@ class Agent:
         """Return OpenAI-format tool schemas for all registered tools.
 
         When ``ptc=True``, PTC-eligible tools are excluded from the schema
-        list — they are available as functions inside ``execute_code``
+        list — they are available as functions inside the PTC tool
         instead.  Returns cached schemas when available; rebuilds after
         tool mutations.
 
@@ -2085,7 +2085,7 @@ class Agent:
 
         # Serialize tools as importable dotted paths.
         # Skip retrieve_artifact (auto-registered), spawn_self (auto-registered),
-        # context tools (auto-loaded), and execute_code (PTC auto-registered).
+        # context tools (auto-loaded), and __exo_ptc__ (PTC auto-registered).
         user_tools = [
             t
             for name, t in self.tools.items()

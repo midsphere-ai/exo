@@ -21,6 +21,7 @@ from exo.types import (
     StreamEvent,
     TextEvent,
     ToolCall,
+    ToolCallDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     Usage,
@@ -658,6 +659,218 @@ class TestRunStreamToolCalls:
         assert any(isinstance(e, TextEvent) and e.text == "Tool failed." for e in events)
 
 
+# ---------------------------------------------------------------------------
+# ToolCallDeltaEvent streaming tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunStreamToolCallDeltas:
+    async def test_stream_tool_call_delta_events_detailed(self) -> None:
+        """detailed=True emits ToolCallDeltaEvent for each provider delta."""
+
+        @tool
+        def greet(name: str) -> str:
+            """Greet someone."""
+            return f"Hi {name}!"
+
+        agent = Agent(name="bot", tools=[greet])
+
+        round1 = [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc1", name="greet"),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='{"name":'),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='"Alice"}'),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [
+            ev async for ev in run.stream(agent, "Greet Alice", provider=provider, detailed=True)
+        ]
+
+        deltas = [e for e in events if isinstance(e, ToolCallDeltaEvent)]
+        assert len(deltas) == 3
+
+        # First delta carries id and name
+        assert deltas[0].tool_call_id == "tc1"
+        assert deltas[0].tool_name == "greet"
+        assert deltas[0].arguments_delta == ""
+        assert deltas[0].index == 0
+        assert deltas[0].agent_name == "bot"
+
+        # Subsequent deltas carry argument fragments
+        assert deltas[1].tool_call_id == ""
+        assert deltas[1].tool_name == ""
+        assert deltas[1].arguments_delta == '{"name":'
+
+        assert deltas[2].arguments_delta == '"Alice"}'
+
+    async def test_tool_call_delta_not_emitted_without_detailed(self) -> None:
+        """Default detailed=False produces no ToolCallDeltaEvent."""
+
+        @tool
+        def greet(name: str) -> str:
+            """Greet someone."""
+            return f"Hi {name}!"
+
+        agent = Agent(name="bot", tools=[greet])
+
+        round1 = [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc1", name="greet"),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='{"name":"Alice"}'),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "Greet Alice", provider=provider)]
+
+        assert not any(isinstance(e, ToolCallDeltaEvent) for e in events)
+
+    async def test_tool_call_event_includes_arguments(self) -> None:
+        """ToolCallEvent now carries the fully assembled arguments."""
+
+        @tool
+        def greet(name: str) -> str:
+            """Greet someone."""
+            return f"Hi {name}!"
+
+        agent = Agent(name="bot", tools=[greet])
+
+        round1 = [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc1", name="greet"),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='{"name":"Alice"}'),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "Greet Alice", provider=provider)]
+
+        tc_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert len(tc_events) == 1
+        assert tc_events[0].arguments == '{"name":"Alice"}'
+
+    async def test_parallel_tool_call_deltas(self) -> None:
+        """Parallel tool calls emit deltas with correct index values."""
+
+        @tool
+        def add(a: int, b: int) -> str:
+            """Add numbers."""
+            return str(a + b)
+
+        @tool
+        def mul(a: int, b: int) -> str:
+            """Multiply numbers."""
+            return str(a * b)
+
+        agent = Agent(name="calc", tools=[add, mul])
+
+        round1 = [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc1", name="add"),
+                    _FakeToolCallDelta(index=1, id="tc2", name="mul"),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='{"a":2,"b":3}'),
+                    _FakeToolCallDelta(index=1, arguments='{"a":4,"b":5}'),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+        round2 = [_FakeStreamChunk(delta="Results ready.")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [
+            ev async for ev in run.stream(agent, "compute", provider=provider, detailed=True)
+        ]
+
+        deltas = [e for e in events if isinstance(e, ToolCallDeltaEvent)]
+        # 2 deltas in first chunk (one per tool) + 2 in second chunk
+        assert len(deltas) == 4
+
+        # First chunk: names and ids
+        idx0_deltas = [d for d in deltas if d.index == 0]
+        idx1_deltas = [d for d in deltas if d.index == 1]
+        assert len(idx0_deltas) == 2
+        assert len(idx1_deltas) == 2
+        assert idx0_deltas[0].tool_name == "add"
+        assert idx1_deltas[0].tool_name == "mul"
+        assert idx0_deltas[1].arguments_delta == '{"a":2,"b":3}'
+        assert idx1_deltas[1].arguments_delta == '{"a":4,"b":5}'
+
+    async def test_tool_call_delta_event_types_filter(self) -> None:
+        """event_types filter can select only tool_call_delta events."""
+
+        @tool
+        def greet(name: str) -> str:
+            """Greet someone."""
+            return f"Hi {name}!"
+
+        agent = Agent(name="bot", tools=[greet])
+
+        round1 = [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc1", name="greet"),
+                ]
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments='{"name":"Alice"}'),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [
+            ev
+            async for ev in run.stream(
+                agent,
+                "Greet Alice",
+                provider=provider,
+                detailed=True,
+                event_types={"tool_call_delta"},
+            )
+        ]
+
+        assert len(events) == 2
+        assert all(isinstance(e, ToolCallDeltaEvent) for e in events)
+
+
 class TestRunStreamCompletion:
     async def test_stream_completes_on_text_only(self) -> None:
         """Stream ends after a text-only response (no tool calls)."""
@@ -803,6 +1016,7 @@ class TestRunStreamDetailedFalse:
 
         for ev in events:
             assert isinstance(ev, (TextEvent, ToolCallEvent))
+            assert not isinstance(ev, ToolCallDeltaEvent)
 
 
 # ---------------------------------------------------------------------------
@@ -959,8 +1173,10 @@ class TestRunStreamDetailedToolCalls:
         assert type_names == [
             "StatusEvent",  # starting
             "StepEvent",  # step 1 started
+            "ToolCallDeltaEvent",  # delta: id + name
+            "ToolCallDeltaEvent",  # delta: arguments
             "UsageEvent",  # usage after LLM call
-            "ToolCallEvent",  # tool call notification
+            "ToolCallEvent",  # tool call notification (complete)
             "ToolResultEvent",  # tool result
             "StepEvent",  # step 1 completed
             # Step 2: text response

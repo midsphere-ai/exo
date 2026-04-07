@@ -30,6 +30,7 @@ from exo.types import (  # pyright: ignore[reportMissingImports]
     StepEvent,
     StreamEvent,
     TextEvent,
+    ToolCallDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     UsageEvent,
@@ -39,6 +40,7 @@ from exo.types import (  # pyright: ignore[reportMissingImports]
 _EVENT_TYPE_MAP: dict[str, type[Any]] = {
     "text": TextEvent,
     "tool_call": ToolCallEvent,
+    "tool_call_delta": ToolCallDeltaEvent,
     "step": StepEvent,
     "tool_result": ToolResultEvent,
     "reasoning": ReasoningEvent,

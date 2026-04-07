@@ -26,6 +26,7 @@ from exo._internal.message_builder import build_messages
 from exo._internal.output_parser import parse_tool_arguments
 from exo._internal.planner import prepare_planned_execution
 from exo.hooks import HookPoint
+from exo.ptc import PTC_TOOL_NAME
 from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from exo.observability.metrics import (  # pyright: ignore[reportMissingImports]
     HAS_OTEL,
@@ -50,6 +51,7 @@ from exo.types import (
     StreamEvent,
     TextEvent,
     ToolCall,
+    ToolCallDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     Usage,
@@ -538,6 +540,24 @@ async def _stream(
                     if getattr(tcd, "thought_signature", None) is not None:
                         tc_acc[idx]["thought_signature"] = tcd.thought_signature
 
+                    # Emit incremental delta event when detailed.
+                    # Suppress PTC tool deltas — inner tool events are
+                    # emitted transparently by the PTC wrapper instead.
+                    _is_ptc = agent.ptc and (
+                        tcd.name == PTC_TOOL_NAME
+                        or tc_acc.get(idx, {}).get("name") == PTC_TOOL_NAME
+                    )
+                    if detailed and not _is_ptc:
+                        _delta_ev = ToolCallDeltaEvent(
+                            index=idx,
+                            tool_call_id=tcd.id or "",
+                            tool_name=tcd.name or "",
+                            arguments_delta=tcd.arguments,
+                            agent_name=agent.name,
+                        )
+                        if _passes_filter(_delta_ev):
+                            yield _delta_ev
+
                 # Capture usage from final chunk
                 if chunk.usage and chunk.usage.total_tokens > 0:
                     step_usage = Usage(
@@ -622,11 +642,15 @@ async def _stream(
                 _record_stream_metrics()
                 return
 
-            # Yield ToolCallEvent for each tool call
+            # Yield ToolCallEvent for each tool call.
+            # PTC tool is suppressed — inner tool events emitted via queue.
             for tc in tool_calls:
+                if agent.ptc and tc.name == PTC_TOOL_NAME:
+                    continue
                 _ev = ToolCallEvent(
                     tool_name=tc.name,
                     tool_call_id=tc.id,
+                    arguments=tc.arguments,
                     agent_name=agent.name,
                 )
                 if _passes_filter(_ev):
@@ -673,13 +697,16 @@ async def _stream(
                 except Exception:
                     break
 
-            # Emit ToolResultEvent for each tool execution when detailed
+            # Emit ToolResultEvent for each tool execution when detailed.
+            # PTC tool is suppressed — inner tool events emitted via queue.
             if detailed:
                 total_tool_duration_ms = (tool_exec_end - tool_exec_start) * 1000
                 per_tool_duration_ms = (
                     total_tool_duration_ms / len(tool_results) if tool_results else 0.0
                 )
                 for action, tr in zip(actions, tool_results, strict=False):
+                    if agent.ptc and tr.tool_name == PTC_TOOL_NAME:
+                        continue
                     _ev = ToolResultEvent(
                         tool_name=tr.tool_name,
                         tool_call_id=tr.tool_call_id,

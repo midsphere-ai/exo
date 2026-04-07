@@ -1,10 +1,14 @@
 """Programmatic Tool Calling (PTC) for Exo agents.
 
 When ``ptc=True`` on an Agent, the LLM writes Python code that calls
-tools as async functions inside a single ``execute_code`` tool call,
+tools as async functions inside a single ``__exo_ptc__`` tool call,
 instead of requiring separate LLM round-trips per tool.  This reduces
 latency and token consumption — especially for batch operations,
 filtering, and multi-step workflows.
+
+The PTC tool is fully transparent to the event stream: consumers see
+individual ``ToolCallEvent``/``ToolResultEvent`` per inner tool call,
+as if PTC were not enabled.
 
 Provider-agnostic: works with any LLM that supports tool calling.
 """
@@ -21,14 +25,24 @@ import json
 import math
 import re
 import textwrap
+import time
 import traceback
+import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from exo.tool import FunctionTool, Tool
+from exo.types import ToolCallEvent, ToolResultEvent
 
 if TYPE_CHECKING:
     from exo.agent import Agent
+
+# ---------------------------------------------------------------------------
+# PTC tool name — intentionally obscure to avoid collision with user tools.
+# Imported by agent.py and runner.py.
+# ---------------------------------------------------------------------------
+
+PTC_TOOL_NAME = "__exo_ptc__"
 
 # ---------------------------------------------------------------------------
 # Internal tool names that should NOT be wrapped by PTC.
@@ -37,7 +51,7 @@ if TYPE_CHECKING:
 
 _PTC_EXCLUDED_NAMES: frozenset[str] = frozenset(
     {
-        "execute_code",
+        PTC_TOOL_NAME,
         "retrieve_artifact",
         "spawn_self",
         "activate_skill",
@@ -148,17 +162,22 @@ Available tool functions:
 
 
 class PTCTool(Tool):
-    """Synthetic ``execute_code`` tool injected when ``ptc=True``.
+    """Synthetic ``__exo_ptc__`` tool injected when ``ptc=True``.
 
     Its description is built dynamically from the agent's current tools
     so that dynamic tool mutations (``add_tool`` / ``remove_tool``) are
     reflected automatically when the schema cache is invalidated.
+
+    The tool is fully transparent to the event stream: individual
+    ``ToolCallEvent``/``ToolResultEvent`` are emitted per inner tool
+    call via the agent's event queue, and the runner suppresses events
+    for the outer PTC tool itself.
     """
 
     _is_ptc_tool: bool = True
 
     def __init__(self, agent: Agent, timeout: int = 60) -> None:
-        self.name = "execute_code"
+        self.name = PTC_TOOL_NAME
         self._agent = agent
         self._timeout = timeout
         self.parameters: dict[str, Any] = {
@@ -288,10 +307,27 @@ class PTCExecutor:
         return ns
 
     def _make_tool_fn(self, tool_obj: Tool) -> Callable[..., Any]:
-        """Create an async wrapper function for a tool."""
+        """Create an async wrapper function for a tool.
+
+        The wrapper emits ``ToolCallEvent`` / ``ToolResultEvent`` to the
+        agent's event queue so the stream is transparent — consumers see
+        individual tool events instead of the opaque PTC tool.
+        """
         agent = self._agent
 
         async def wrapper(**kwargs: Any) -> str:
+            tool_call_id = f"ptc_{uuid.uuid4().hex[:8]}"
+
+            # Emit ToolCallEvent BEFORE execution (transparent to stream)
+            agent._event_queue.put_nowait(
+                ToolCallEvent(
+                    tool_name=tool_obj.name,
+                    tool_call_id=tool_call_id,
+                    arguments=json.dumps(kwargs),
+                    agent_name=agent.name,
+                )
+            )
+
             # Fire PRE_TOOL_CALL hook
             await agent.hook_manager.run(
                 _hook_point("PRE_TOOL_CALL"),
@@ -309,14 +345,31 @@ class PTCExecutor:
                     queue=agent._event_queue,
                 )
 
+            start = time.time()
             try:
                 raw = await tool_obj.execute(**kwargs)
             except Exception as exc:
+                duration_ms = (time.time() - start) * 1000
+
+                # Emit error ToolResultEvent (transparent to stream)
+                agent._event_queue.put_nowait(
+                    ToolResultEvent(
+                        tool_name=tool_obj.name,
+                        tool_call_id=tool_call_id,
+                        arguments=kwargs,
+                        result="",
+                        error=str(exc),
+                        success=False,
+                        duration_ms=duration_ms,
+                        agent_name=agent.name,
+                    )
+                )
+
                 # Fire POST_TOOL_CALL with error result
                 from exo.types import ToolResult
 
                 err_result = ToolResult(
-                    tool_call_id="ptc",
+                    tool_call_id=tool_call_id,
                     tool_name=tool_obj.name,
                     error=str(exc),
                 )
@@ -328,6 +381,8 @@ class PTCExecutor:
                 )
                 raise
 
+            duration_ms = (time.time() - start) * 1000
+
             # Normalise to string
             if isinstance(raw, str):
                 output = raw
@@ -336,11 +391,25 @@ class PTCExecutor:
             else:
                 output = str(raw)
 
+            # Emit success ToolResultEvent (transparent to stream)
+            agent._event_queue.put_nowait(
+                ToolResultEvent(
+                    tool_name=tool_obj.name,
+                    tool_call_id=tool_call_id,
+                    arguments=kwargs,
+                    result=output,
+                    error=None,
+                    success=True,
+                    duration_ms=duration_ms,
+                    agent_name=agent.name,
+                )
+            )
+
             # Fire POST_TOOL_CALL hook
             from exo.types import ToolResult
 
             result_obj = ToolResult(
-                tool_call_id="ptc",
+                tool_call_id=tool_call_id,
                 tool_name=tool_obj.name,
                 content=output,
             )

@@ -1,6 +1,6 @@
 ---
 name: exo:ptc
-description: "Use when enabling Programmatic Tool Calling on Exo agents — ptc=True, ptc_timeout, execute_code tool, PTCExecutor, PTCTool, batch tool calls in code, reduce LLM round-trips, context-efficient multi-tool workflows, PTC-eligible tools, HITL exclusion, Swarm PTC propagation. Triggers on: ptc, programmatic tool calling, execute_code, ptc=True, ptc_timeout, PTCExecutor, PTCTool, batch tools, reduce round-trips, code execution tool."
+description: "Use when enabling Programmatic Tool Calling on Exo agents — ptc=True, ptc_timeout, PTCExecutor, PTCTool, batch tool calls in code, reduce LLM round-trips, context-efficient multi-tool workflows, PTC-eligible tools, HITL exclusion, Swarm PTC propagation, transparent streaming events. Triggers on: ptc, programmatic tool calling, ptc=True, ptc_timeout, PTCExecutor, PTCTool, batch tools, reduce round-trips, code execution tool."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -40,14 +40,14 @@ agent = Agent(
     model="openai:gpt-4o",
     instructions="Analyze data efficiently. Use code to batch operations.",
     tools=[search, query_db, get_expenses],
-    ptc=True,           # Registers execute_code tool automatically
+    ptc=True,           # Registers PTC tool automatically
     ptc_timeout=60,     # Timeout for code execution (seconds, default 60)
 )
 ```
 
 **Agent parameters:**
-- `ptc: bool = False` — When `True`, registers the `execute_code` tool and hides PTC-eligible tools from the schema list (they become functions inside `execute_code` instead)
-- `ptc_timeout: int = 60` — Maximum seconds for a single `execute_code` invocation. Long-running code is terminated with a `TimeoutError` message.
+- `ptc: bool = False` — When `True`, registers the internal PTC tool (`__exo_ptc__`) and hides PTC-eligible tools from the schema list (they become functions inside the PTC tool instead)
+- `ptc_timeout: int = 60` — Maximum seconds for a single PTC invocation. Long-running code is terminated with a `TimeoutError` message.
 
 ### How It Works
 
@@ -57,7 +57,7 @@ Without PTC (ptc=False):
   N tools = N round-trips, all results in context
 
 With PTC (ptc=True):
-  LLM → tool_use: execute_code(code="""
+  LLM → tool_use: __exo_ptc__(code="""
       results = {}
       for region in ["A", "B", "C", ...]:
           data = json.loads(await search(query=region))
@@ -68,6 +68,25 @@ With PTC (ptc=True):
   1 round-trip, only the summary in context
 ```
 
+### Stream Transparency
+
+PTC is **fully transparent** to the event stream. The internal `__exo_ptc__` tool never appears in events — instead, individual `ToolCallEvent`/`ToolResultEvent` are emitted for each inner tool call:
+
+```python
+# With ptc=True, calling add() then subtract() inside PTC code:
+# The stream shows:
+#   ToolCallEvent(tool_name="add", ...)
+#   ToolResultEvent(tool_name="add", result="5", ...)
+#   ToolCallEvent(tool_name="subtract", ...)
+#   ToolResultEvent(tool_name="subtract", result="6", ...)
+#
+# NOT:
+#   ToolCallEvent(tool_name="__exo_ptc__", ...)
+#   ToolResultEvent(tool_name="__exo_ptc__", ...)
+```
+
+This means UI consumers never need to know PTC exists. The event stream looks identical to non-PTC mode (except with fewer LLM steps).
+
 ### Tool Classification
 
 When `ptc=True`, tools are split into two groups:
@@ -76,21 +95,21 @@ When `ptc=True`, tools are split into two groups:
 |----------|----------------|----------------------|
 | User tools (`@tool`, `FunctionTool`, `Tool` subclass) | NO | YES — as `await tool_name(...)` |
 | MCP tools (`add_mcp_server`) | NO | YES — as `await mcp__server__tool(...)` |
-| `execute_code` | YES | NO (itself) |
+| `__exo_ptc__` (internal) | YES | NO (itself) |
 | Framework tools (`retrieve_artifact`, `spawn_self`, `activate_skill`) | YES | NO |
 | Context tools (`_is_context_tool`) | YES | NO |
 | HITL tools (`hitl_tools`) | YES | NO — approval flow preserved |
 | Handoff targets | YES | NO |
 
-The LLM sees `execute_code` plus any direct tools. Inside the code, user/MCP tools are callable as async functions.
+The LLM sees the PTC tool plus any direct tools. Inside the code, user/MCP tools are callable as async functions.
 
-### execute_code Tool
+### PTC Tool Internals
 
-Auto-registered when `ptc=True`. The LLM calls it with Python code:
+Auto-registered when `ptc=True` as `__exo_ptc__`. The LLM calls it with Python code:
 
 ```python
 # What the LLM sends:
-execute_code(code="""
+__exo_ptc__(code="""
 members = json.loads(await get_team_members(department="engineering"))
 over_budget = []
 for m in members:
@@ -139,15 +158,15 @@ agent = Agent(
     ptc=True,
     hooks=[(HookPoint.PRE_TOOL_CALL, log_tool_call)],
 )
-# When execute_code runs and calls search() + query_db() inside the code,
+# When PTC runs and calls search() + query_db() inside the code,
 # log_tool_call fires twice — once per inner tool call
 ```
 
 Hook arguments for inner PTC calls:
 - `agent`: the parent agent
-- `tool_name`: the actual tool name (e.g., `"search"`, not `"execute_code"`)
+- `tool_name`: the actual tool name (e.g., `"search"`, not `"__exo_ptc__"`)
 - `arguments`: the kwargs dict passed to the tool
-- `result` (POST only): `ToolResult` with `tool_call_id="ptc"`
+- `result` (POST only): `ToolResult` with the inner tool's call ID
 
 ### ToolContext Support
 
@@ -161,7 +180,7 @@ def emit_progress(status: str, ctx: ToolContext) -> str:
     return f"Reported: {status}"
 
 agent = Agent(name="bot", tools=[emit_progress, search], ptc=True)
-# Inside execute_code, await emit_progress(status="step 1") works — ToolContext injected
+# Inside PTC code, await emit_progress(status="step 1") works — ToolContext injected
 ```
 
 ### Swarm Propagation
@@ -188,10 +207,10 @@ PTC settings survive `to_dict()` / `from_dict()`:
 data = agent.to_dict()
 # data["ptc"] == True
 # data["ptc_timeout"] == 60
-# "execute_code" NOT in data["tools"] (auto-registered, not serialized)
+# "__exo_ptc__" NOT in data["tools"] (auto-registered, not serialized)
 
 restored = Agent.from_dict(data)
-# restored.ptc == True, execute_code re-registered
+# restored.ptc == True, PTC tool re-registered
 ```
 
 ## Patterns
@@ -263,7 +282,7 @@ agent = Agent(
     hitl_tools=["execute_trade"],  # Requires human approval
     ptc=True,
 )
-# get_portfolio and get_market_data → inside execute_code (batch-friendly)
+# get_portfolio and get_market_data → inside PTC code (batch-friendly)
 # execute_trade → stays as direct tool (approval flow preserved)
 # LLM can batch-read portfolio data in code, then call execute_trade directly
 ```
@@ -283,7 +302,7 @@ await agent.add_mcp_server(MCPServerConfig(
     transport="stdio",
 ))
 # MCP tools (mcp__github__search_repos, etc.) are now available
-# inside execute_code alongside local_analyzer
+# inside PTC code alongside local_analyzer
 ```
 
 ### Dynamic Tool Addition with PTC
@@ -293,11 +312,11 @@ agent = Agent(name="bot", tools=[search], ptc=True)
 
 # Later, at runtime:
 await agent.add_tool(query_db)
-# execute_code description now includes query_db
+# PTC tool description now includes query_db
 # Schema cache auto-invalidated
 
 agent.remove_tool("search")
-# execute_code description no longer includes search
+# PTC tool description no longer includes search
 ```
 
 ## Gotchas
@@ -306,11 +325,11 @@ agent.remove_tool("search")
 - **Code runs in-process** — there is no sandbox. The code executes in the same Python runtime as the agent. This is fast but means the LLM-generated code has access to the process environment. For untrusted models, consider additional guardrails.
 - **`asyncio.wait_for` timeout doesn't interrupt sync loops** — `ptc_timeout` catches `await asyncio.sleep(forever)` but not `while True: pass`. This is acceptable because the LLM writes the code and `max_steps` provides an outer guard.
 - **Tool results inside PTC are strings** — tools return strings (or JSON-serialized dicts/lists). The code must `json.loads()` to work with structured data.
-- **HITL tools are excluded from PTC** — they stay as direct schemas so the human approval flow is never bypassed. The LLM sees both `execute_code` and the HITL tools as separate callable tools.
+- **HITL tools are excluded from PTC** — they stay as direct schemas so the human approval flow is never bypassed. The LLM sees both the PTC tool and the HITL tools as separate callable tools.
 - **Handoff tools are excluded from PTC** — handoffs must be direct tool calls to trigger agent transitions correctly.
-- **`execute_code` name is reserved** — if a user tool is already named `execute_code`, setting `ptc=True` raises `AgentError`.
+- **`__exo_ptc__` name is reserved** — if a user tool is already named `__exo_ptc__`, setting `ptc=True` raises `AgentError`. This name uses dunder convention to avoid collisions.
 - **Dynamic tools are reflected automatically** — `add_tool()` / `remove_tool()` invalidate the schema cache, and PTCTool rebuilds its description from live `agent.tools` on next `get_tool_schemas()` call.
-- **Hooks fire per inner call, not per execute_code** — `PRE_TOOL_CALL` and `POST_TOOL_CALL` fire for each `await tool_name()` inside the code. The outer `execute_code` call also fires hooks via the normal `_execute_tools` path.
+- **Hooks fire per inner call** — `PRE_TOOL_CALL` and `POST_TOOL_CALL` fire for each `await tool_name()` inside the code.
 - **Guide the LLM via instructions** — be explicit: "Write code to batch-process all items and return only the summary." Without guidance, the model may still use individual tool calls if PTC-eligible tools happen to also be in the schema (they're not, but the model may not realize PTC is available without clear instructions).
-- **Streaming works unchanged** — `run.stream()` emits `ToolCallEvent` for `execute_code`, and inner tool events pushed via `ToolContext.emit()` are visible in the stream.
+- **Stream is fully transparent** — `run.stream()` emits individual `ToolCallEvent`/`ToolResultEvent` per inner tool call. The `__exo_ptc__` tool never appears in the event stream. UI consumers never need to know PTC exists.
 - **`output_type` works with PTC** — structured output validation happens after the tool loop ends, so PTC doesn't interfere.

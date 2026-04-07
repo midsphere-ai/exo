@@ -1,6 +1,6 @@
 ---
 name: exo:streaming
-description: "Use when consuming Exo agent output via streaming — run.stream(), StreamEvent types (TextEvent, ToolCallEvent, StepEvent, ToolResultEvent, UsageEvent, StatusEvent, ErrorEvent, ContextEvent, MCPProgressEvent, ReasoningEvent, MessageInjectedEvent, RalphIterationEvent, RalphStopEvent), ToolContext event forwarding from nested agents, event filtering, detailed mode. Triggers on: run.stream, streaming, TextEvent, ToolCallEvent, StepEvent, stream events, event_types, detailed, real-time output, ToolContext, nested streaming, inner agent events, RalphIterationEvent, RalphStopEvent."
+description: "Use when consuming Exo agent output via streaming — run.stream(), StreamEvent types (TextEvent, ToolCallEvent, ToolCallDeltaEvent, StepEvent, ToolResultEvent, UsageEvent, StatusEvent, ErrorEvent, ContextEvent, MCPProgressEvent, ReasoningEvent, MessageInjectedEvent, RalphIterationEvent, RalphStopEvent), ToolContext event forwarding from nested agents, event filtering, detailed mode. Triggers on: run.stream, streaming, TextEvent, ToolCallEvent, ToolCallDeltaEvent, StepEvent, stream events, event_types, detailed, real-time output, ToolContext, nested streaming, inner agent events, RalphIterationEvent, RalphStopEvent."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -11,7 +11,7 @@ description: "Use when consuming Exo agent output via streaming — run.stream()
 
 Use this skill when the developer needs to:
 - Stream agent output in real-time using `run.stream()`
-- Understand the 13 event types and when each is emitted
+- Understand the 14 event types and when each is emitted
 - Filter events by type
 - Use `detailed=True` mode for rich execution telemetry
 - Stream from Swarms with per-agent event attribution
@@ -48,7 +48,7 @@ async for event in run.stream(
     ...
 ```
 
-### All 13 Event Types
+### All 14 Event Types
 
 #### TextEvent (always emitted)
 
@@ -68,10 +68,25 @@ class ToolCallEvent:
     type: Literal["tool_call"] = "tool_call"
     tool_name: str                  # Name of tool being called
     tool_call_id: str               # Unique ID for this call
+    arguments: str = ""             # Fully assembled JSON arguments string
     agent_name: str = ""
 ```
 
-Emitted when the LLM requests a tool execution. One event per tool call.
+Emitted after all argument deltas for a tool call have been accumulated. Acts as the "complete" signal — one event per tool call.
+
+#### ToolCallDeltaEvent (detailed=True only)
+
+```python
+class ToolCallDeltaEvent:
+    type: Literal["tool_call_delta"] = "tool_call_delta"
+    index: int = 0                  # Position in multi-tool-call response (0-based)
+    tool_call_id: str = ""          # Non-empty on first delta only
+    tool_name: str = ""             # Non-empty on first delta only
+    arguments_delta: str = ""       # Incremental JSON fragment
+    agent_name: str = ""
+```
+
+Emitted during the LLM stream as tool call arguments arrive token-by-token. Use `index` to demux parallel tool calls. The `tool_call_id` and `tool_name` are only present on the first delta for a given index.
 
 #### ErrorEvent (always emitted)
 
@@ -239,6 +254,7 @@ Emitted for execution status changes. Particularly useful in Swarm mode for hand
 | `RalphIterationEvent` | Yes (during Ralph streaming) | Yes (during Ralph streaming) |
 | `RalphStopEvent` | Yes (during Ralph streaming) | Yes (during Ralph streaming) |
 | `ReasoningEvent` | Yes (when model supports) | Yes (when model supports) |
+| `ToolCallDeltaEvent` | No | Yes |
 | `StepEvent` | No | Yes |
 | `ToolResultEvent` | No | Yes |
 | `UsageEvent` | No | Yes |
@@ -268,9 +284,9 @@ async for event in run.stream(
 **Valid event_types strings:**
 ```python
 {
-    "text", "tool_call", "step", "tool_result", "reasoning",
-    "error", "status", "usage", "mcp_progress", "context",
-    "message_injected", "ralph_iteration", "ralph_stop"
+    "text", "tool_call", "tool_call_delta", "step", "tool_result",
+    "reasoning", "error", "status", "usage", "mcp_progress",
+    "context", "message_injected", "ralph_iteration", "ralph_stop"
 }
 ```
 
@@ -296,10 +312,13 @@ detailed=False:                    detailed=True:
 detailed=True:
   StatusEvent(starting)
   StepEvent(started, step=1)
-  ToolCallEvent(search, tc_1)
+  ToolCallDeltaEvent(index=0, id="tc_1", name="search")   ← first delta: id + name
+  ToolCallDeltaEvent(index=0, arguments_delta='{"query":') ← streaming args
+  ToolCallDeltaEvent(index=0, arguments_delta='"AI"}')     ← streaming args
   UsageEvent(...)
-  StepEvent(completed, step=1)       ← LLM call done
+  ToolCallEvent(search, tc_1, arguments='{"query":"AI"}')  ← complete signal
   ToolResultEvent(search, tc_1, result="...", duration_ms=150)
+  StepEvent(completed, step=1)       ← LLM call done
   StepEvent(started, step=2)         ← Next LLM call with tool result
   TextEvent("Based on the search...")
   TextEvent("...")
@@ -486,7 +505,7 @@ RalphStopEvent(stop_type="max_iterations", iterations=3)
 - **ErrorEvent is emitted before exception propagates** — the exception still reaches the caller
 - **`event_types` filter applies to ALL events including errors** — if you filter out `"error"`, you won't see ErrorEvents (but the exception still raises)
 - **`agent_name` defaults to `""`** — always set by the runtime for agent/swarm execution, but default is empty string
-- **Tool call accumulation** — tool calls are built incrementally from stream deltas. The `ToolCallEvent` is emitted after accumulation is complete, not during.
+- **Tool call accumulation** — tool calls are built incrementally from stream deltas. The `ToolCallEvent` is emitted after accumulation is complete. Use `ToolCallDeltaEvent` (requires `detailed=True`) to see arguments arriving in real-time.
 - **MCP progress is drained after tool execution** — not during. Progress events arrive in a batch after tools complete.
 - **ToolContext events are also drained after tool execution** — inner agent events are buffered and yielded after all tools complete, not during.
 - **ToolContext only works with `FunctionTool`** — custom `Tool` ABC subclasses and MCP tools don't support ToolContext injection. Use `FunctionTool` or `@tool` decorator.

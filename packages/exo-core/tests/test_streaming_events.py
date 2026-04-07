@@ -10,6 +10,7 @@ from exo.types import (
     StepEvent,
     StreamEvent,
     TextEvent,
+    ToolCallDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     Usage,
@@ -295,6 +296,56 @@ class TestUsageEvent:
             UsageEvent()  # type: ignore[call-arg]
 
 
+class TestToolCallDeltaEvent:
+    def test_create(self) -> None:
+        e = ToolCallDeltaEvent(
+            index=0,
+            tool_call_id="tc1",
+            tool_name="search",
+            arguments_delta='{"query":',
+            agent_name="bot",
+        )
+        assert e.type == "tool_call_delta"
+        assert e.index == 0
+        assert e.tool_call_id == "tc1"
+        assert e.tool_name == "search"
+        assert e.arguments_delta == '{"query":'
+        assert e.agent_name == "bot"
+
+    def test_defaults(self) -> None:
+        e = ToolCallDeltaEvent()
+        assert e.index == 0
+        assert e.tool_call_id == ""
+        assert e.tool_name == ""
+        assert e.arguments_delta == ""
+        assert e.agent_name == ""
+
+    def test_frozen(self) -> None:
+        e = ToolCallDeltaEvent()
+        with pytest.raises(ValidationError):
+            e.index = 1  # type: ignore[misc]
+
+    def test_roundtrip(self) -> None:
+        e = ToolCallDeltaEvent(
+            index=1,
+            tool_call_id="tc2",
+            tool_name="calc",
+            arguments_delta='"hello"}',
+            agent_name="bot",
+        )
+        data = e.model_dump()
+        assert data == {
+            "type": "tool_call_delta",
+            "index": 1,
+            "tool_call_id": "tc2",
+            "tool_name": "calc",
+            "arguments_delta": '"hello"}',
+            "agent_name": "bot",
+        }
+        restored = ToolCallDeltaEvent.model_validate(data)
+        assert restored == e
+
+
 class TestStreamEventUnion:
     def test_tool_result_event_is_stream_event(self) -> None:
         e: StreamEvent = ToolResultEvent(tool_name="x", tool_call_id="tc_1")
@@ -304,6 +355,7 @@ class TestStreamEventUnion:
         events: list[StreamEvent] = [
             TextEvent(text="hi"),
             ToolCallEvent(tool_name="search", tool_call_id="tc_1"),
+            ToolCallDeltaEvent(arguments_delta='{"q":'),
             StepEvent(
                 step_number=1,
                 agent_name="bot",
@@ -325,6 +377,7 @@ class TestStreamEventUnion:
         expected_types = [
             "text",
             "tool_call",
+            "tool_call_delta",
             "step",
             "tool_result",
             "reasoning",
@@ -338,6 +391,7 @@ class TestStreamEventUnion:
         events: list[StreamEvent] = [
             ToolResultEvent(tool_name="x", tool_call_id="tc_1"),
             TextEvent(text="hello"),
+            ToolCallDeltaEvent(index=0, arguments_delta="{}"),
             ReasoningEvent(text="thinking"),
             ErrorEvent(error="oops", error_type="ValueError"),
             StatusEvent(status="running"),
@@ -346,4 +400,12 @@ class TestStreamEventUnion:
             ),
         ]
         types = [e.type for e in events]
-        assert types == ["tool_result", "text", "reasoning", "error", "status", "usage"]
+        assert types == [
+            "tool_result",
+            "text",
+            "tool_call_delta",
+            "reasoning",
+            "error",
+            "status",
+            "usage",
+        ]

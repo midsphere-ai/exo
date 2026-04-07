@@ -15,6 +15,7 @@ from exo.agent import Agent, AgentError
 from exo.hooks import HookPoint
 from exo.models.types import ModelResponse  # pyright: ignore[reportMissingImports]
 from exo.ptc import (
+    PTC_TOOL_NAME,
     PTCExecutor,
     PTCTool,
     build_tool_signatures,
@@ -22,7 +23,7 @@ from exo.ptc import (
     schema_to_python_sig,
 )
 from exo.tool import Tool, tool
-from exo.types import ToolCall, Usage
+from exo.types import ToolCall, ToolCallEvent, ToolResultEvent, Usage
 
 # ---------------------------------------------------------------------------
 # Test tools
@@ -89,13 +90,13 @@ class TestPTCInit:
     def test_ptc_false_by_default(self) -> None:
         agent = Agent(name="bot", tools=[greet])
         assert agent.ptc is False
-        assert "execute_code" not in agent.tools
+        assert PTC_TOOL_NAME not in agent.tools
 
-    def test_ptc_true_registers_execute_code(self) -> None:
+    def test_ptc_true_registers_ptc_tool(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
         assert agent.ptc is True
-        assert "execute_code" in agent.tools
-        assert isinstance(agent.tools["execute_code"], PTCTool)
+        assert PTC_TOOL_NAME in agent.tools
+        assert isinstance(agent.tools[PTC_TOOL_NAME], PTCTool)
 
     def test_ptc_timeout_default(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
@@ -106,17 +107,17 @@ class TestPTCInit:
         assert agent.ptc_timeout == 120
 
     def test_ptc_collision_raises(self) -> None:
-        @tool(name="execute_code")
+        @tool(name=PTC_TOOL_NAME)
         def my_tool() -> str:
             """Conflicting name."""
             return "x"
 
-        with pytest.raises(AgentError, match=r"execute_code.*already registered"):
+        with pytest.raises(AgentError, match=r"already registered"):
             Agent(name="bot", tools=[my_tool], ptc=True)
 
     def test_ptc_tool_is_tool_subclass(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
-        assert isinstance(agent.tools["execute_code"], Tool)
+        assert isinstance(agent.tools[PTC_TOOL_NAME], Tool)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +132,7 @@ class TestPTCSchemas:
         schemas = agent.get_tool_schemas()
         schema_names = {s["function"]["name"] for s in schemas}
 
-        assert "execute_code" in schema_names
+        assert PTC_TOOL_NAME in schema_names
         assert "greet" not in schema_names
         assert "add" not in schema_names
         # retrieve_artifact is always auto-registered and should stay direct
@@ -148,13 +149,13 @@ class TestPTCSchemas:
         schemas = agent.get_tool_schemas()
         schema_names = {s["function"]["name"] for s in schemas}
 
-        assert "execute_code" in schema_names
+        assert PTC_TOOL_NAME in schema_names
         assert "greet" in schema_names  # HITL → stays direct
         assert "add" not in schema_names  # not HITL → PTC-wrapped
 
     def test_description_lists_tool_signatures(self) -> None:
         agent = Agent(name="bot", tools=[greet, search], ptc=True)
-        ptc_tool = agent.tools["execute_code"]
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
         desc = ptc_tool.description
 
         assert "async def greet" in desc
@@ -165,10 +166,10 @@ class TestPTCSchemas:
 
     def test_description_excludes_framework_tools(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
-        desc = agent.tools["execute_code"].description
+        desc = agent.tools[PTC_TOOL_NAME].description
 
         assert "retrieve_artifact" not in desc
-        assert "execute_code" not in desc
+        assert PTC_TOOL_NAME not in desc
 
     def test_description_excludes_hitl_tools(self) -> None:
         agent = Agent(
@@ -177,7 +178,7 @@ class TestPTCSchemas:
             hitl_tools=["greet"],
             ptc=True,
         )
-        desc = agent.tools["execute_code"].description
+        desc = agent.tools[PTC_TOOL_NAME].description
 
         assert "greet" not in desc  # HITL tools not in PTC namespace
         assert "async def add" in desc
@@ -197,8 +198,8 @@ class TestPTCSchemas:
         schema_names2 = {s["function"]["name"] for s in schemas2}
         # add should still not be in schemas (it's PTC-eligible)
         assert "add" not in schema_names2
-        # But should appear in execute_code description
-        desc = agent.tools["execute_code"].description
+        # But should appear in PTC tool description
+        desc = agent.tools[PTC_TOOL_NAME].description
         assert "async def add" in desc
 
 
@@ -439,7 +440,7 @@ class TestPTCEligible:
         agent = Agent(name="bot", tools=[greet], ptc=True)
         eligible = get_ptc_eligible_tools(agent)
         assert "greet" in eligible
-        assert "execute_code" not in eligible
+        assert PTC_TOOL_NAME not in eligible
         assert "retrieve_artifact" not in eligible
 
     def test_excludes_hitl_tools(self) -> None:
@@ -456,10 +457,10 @@ class TestPTCEligible:
 
 class TestPTCIntegration:
     async def test_end_to_end_run(self) -> None:
-        """MockProvider returns execute_code tool call → agent runs PTC → final text."""
+        """MockProvider returns PTC tool call → agent runs PTC → final text."""
         tc = ToolCall(
             id="tc-1",
-            name="execute_code",
+            name=PTC_TOOL_NAME,
             arguments=json.dumps({"code": 'r = await greet(name="World")\nprint(r)'}),
         )
         resp_tool = ModelResponse(
@@ -481,10 +482,10 @@ class TestPTCIntegration:
         assert provider.complete.await_count == 2
 
     async def test_ptc_tool_result_contains_output(self) -> None:
-        """The tool result from execute_code should contain the code output."""
+        """The tool result from PTC tool should contain the code output."""
         tc = ToolCall(
             id="tc-1",
-            name="execute_code",
+            name=PTC_TOOL_NAME,
             arguments=json.dumps({"code": 'r = await greet(name="Test")\nprint(r)'}),
         )
         # Track messages sent to provider
@@ -536,12 +537,12 @@ class TestPTCSerialization:
         data = agent.to_dict()
         assert data["ptc"] is False
 
-    def test_execute_code_not_in_serialized_tools(self) -> None:
+    def test_ptc_tool_not_in_serialized_tools(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
         data = agent.to_dict()
         if "tools" in data:
             tool_names = [t.get("name", t) if isinstance(t, dict) else t for t in data["tools"]]
-            assert "execute_code" not in str(tool_names)
+            assert PTC_TOOL_NAME not in str(tool_names)
 
     def test_describe_includes_ptc(self) -> None:
         agent = Agent(name="bot", tools=[greet], ptc=True)
@@ -576,3 +577,122 @@ class TestSwarmPTC:
         Swarm(agents=[a1, a2])  # ptc=None by default
         assert a1.ptc is True  # unchanged
         assert a2.ptc is False  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# PTC transparency tests — synthetic event emission
+# ---------------------------------------------------------------------------
+
+
+class TestPTCTransparency:
+    """Verify that PTC emits per-tool ToolCallEvent/ToolResultEvent to the queue."""
+
+    async def test_single_tool_emits_events(self) -> None:
+        agent = Agent(name="test", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="Alice")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+
+        assert len(call_events) == 1
+        assert call_events[0].tool_name == "greet"
+        assert call_events[0].agent_name == "test"
+        assert '"Alice"' in call_events[0].arguments
+
+        assert len(result_events) == 1
+        assert result_events[0].tool_name == "greet"
+        assert result_events[0].success is True
+        assert "Hello, Alice!" in str(result_events[0].result)
+
+    async def test_multiple_tools_emit_ordered_events(self) -> None:
+        agent = Agent(name="test", tools=[greet, add], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="A")\nawait add(a=1, b=2)')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        tool_events = [e for e in events if isinstance(e, (ToolCallEvent, ToolResultEvent))]
+
+        # Expect: call(greet), result(greet), call(add), result(add)
+        assert len(tool_events) == 4
+        assert tool_events[0].tool_name == "greet"
+        assert isinstance(tool_events[0], ToolCallEvent)
+        assert tool_events[1].tool_name == "greet"
+        assert isinstance(tool_events[1], ToolResultEvent)
+        assert tool_events[2].tool_name == "add"
+        assert isinstance(tool_events[2], ToolCallEvent)
+        assert tool_events[3].tool_name == "add"
+        assert isinstance(tool_events[3], ToolResultEvent)
+
+    async def test_error_tool_emits_failure_event(self) -> None:
+        agent = Agent(name="test", tools=[failing_tool], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await failing_tool(msg="boom")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+        assert len(result_events) == 1
+        assert result_events[0].success is False
+        assert "boom" in (result_events[0].error or "")
+
+    async def test_events_have_unique_call_ids(self) -> None:
+        agent = Agent(name="test", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="A")\nawait greet(name="B")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert len(call_events) == 2
+        assert call_events[0].tool_call_id != call_events[1].tool_call_id
+
+    async def test_call_and_result_share_call_id(self) -> None:
+        agent = Agent(name="test", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="X")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        call_ev = [e for e in events if isinstance(e, ToolCallEvent)][0]
+        result_ev = [e for e in events if isinstance(e, ToolResultEvent)][0]
+        assert call_ev.tool_call_id == result_ev.tool_call_id
+
+    async def test_result_has_duration(self) -> None:
+        agent = Agent(name="test", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="A")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+        assert result_events[0].duration_ms >= 0.0
+
+    async def test_no_ptc_tool_name_in_events(self) -> None:
+        """No event should reference the internal PTC tool name."""
+        agent = Agent(name="test", tools=[greet, add], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await greet(name="A")\nawait add(a=1, b=2)')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        for ev in events:
+            if hasattr(ev, "tool_name"):
+                assert ev.tool_name != PTC_TOOL_NAME

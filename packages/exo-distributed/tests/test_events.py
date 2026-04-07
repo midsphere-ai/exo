@@ -18,6 +18,7 @@ from exo.types import (  # pyright: ignore[reportMissingImports]
     StatusEvent,
     StepEvent,
     TextEvent,
+    ToolCallDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     Usage,
@@ -109,6 +110,20 @@ class TestDeserializeEvent:
         assert isinstance(event, UsageEvent)
         assert event.usage.total_tokens == 30
 
+    def test_tool_call_delta_event(self) -> None:
+        data = {
+            "type": "tool_call_delta",
+            "index": 0,
+            "tool_call_id": "tc-1",
+            "tool_name": "search",
+            "arguments_delta": '{"query":',
+            "agent_name": "agent-1",
+        }
+        event = _deserialize_event(data)
+        assert isinstance(event, ToolCallDeltaEvent)
+        assert event.tool_name == "search"
+        assert event.arguments_delta == '{"query":'
+
     def test_unknown_type_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown event type"):
             _deserialize_event({"type": "unknown_xyz"})
@@ -118,6 +133,7 @@ class TestDeserializeEvent:
         events = [
             TextEvent(text="hi"),
             ToolCallEvent(tool_name="t", tool_call_id="tc1"),
+            ToolCallDeltaEvent(index=0, tool_name="t", arguments_delta="{}"),
             StepEvent(step_number=1, agent_name="a", status="started", started_at=1.0),
             ToolResultEvent(tool_name="t", tool_call_id="tc1"),
             ReasoningEvent(text="hmm"),

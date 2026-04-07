@@ -268,10 +268,14 @@ class TextEvent(BaseModel):
 class ToolCallEvent(BaseModel):
     """Streaming event for a tool call notification.
 
+    Emitted after all argument deltas for a tool call have been
+    accumulated.  Acts as the "complete" signal.
+
     Args:
         type: Discriminator literal, always ``"tool_call"``.
         tool_name: Name of the tool being called.
         tool_call_id: Identifier for this tool call.
+        arguments: The fully assembled JSON arguments string.
         agent_name: Name of the agent producing this event.
     """
 
@@ -280,6 +284,36 @@ class ToolCallEvent(BaseModel):
     type: Literal["tool_call"] = "tool_call"
     tool_name: str
     tool_call_id: str
+    arguments: str = ""
+    agent_name: str = ""
+
+
+class ToolCallDeltaEvent(BaseModel):
+    """Streaming event for incremental tool call argument data.
+
+    Emitted during the LLM stream as tool call arguments arrive
+    token-by-token.  Consumers can use ``index`` to demux parallel
+    tool calls.  The ``tool_call_id`` and ``tool_name`` fields are
+    non-empty only on the first delta for a given index.
+
+    Only emitted when ``detailed=True``.
+
+    Args:
+        type: Discriminator literal, always ``"tool_call_delta"``.
+        index: Position in a multi-tool-call response (0-based).
+        tool_call_id: Tool call ID, non-empty on the first delta only.
+        tool_name: Tool name, non-empty on the first delta only.
+        arguments_delta: Incremental JSON fragment of arguments.
+        agent_name: Name of the agent producing this event.
+    """
+
+    model_config = {"frozen": True}
+
+    type: Literal["tool_call_delta"] = "tool_call_delta"
+    index: int = 0
+    tool_call_id: str = ""
+    tool_name: str = ""
+    arguments_delta: str = ""
     agent_name: str = ""
 
 
@@ -508,6 +542,7 @@ class RalphStopEvent(BaseModel):
 StreamEvent = (
     TextEvent
     | ToolCallEvent
+    | ToolCallDeltaEvent
     | StepEvent
     | ToolResultEvent
     | ReasoningEvent
