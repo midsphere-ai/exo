@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Sequence
 
 from exo.memory.base import (  # pyright: ignore[reportMissingImports]
@@ -10,6 +11,8 @@ from exo.memory.base import (  # pyright: ignore[reportMissingImports]
     MemoryItem,
     MemoryStore,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SearchManager:
@@ -47,12 +50,15 @@ class SearchManager:
         tasks = [
             store.search(query=query, category=category, limit=limit) for store in self._stores
         ]
-        results_per_store: list[list[MemoryItem]] = await asyncio.gather(*tasks)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Deduplicate by item ID, keeping the first occurrence.
         seen: dict[str, MemoryItem] = {}
-        for store_results in results_per_store:
-            for item in store_results:
+        for result in raw_results:
+            if isinstance(result, BaseException):
+                logger.warning("Memory store search failed: %s", result)
+                continue
+            for item in result:
                 if item.id not in seen:
                     seen[item.id] = item
 

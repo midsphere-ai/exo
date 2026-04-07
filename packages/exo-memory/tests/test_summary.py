@@ -130,15 +130,20 @@ class TestEstimateTokens:
 
     def test_single_item(self) -> None:
         items = [HumanMemory(content="a" * 40)]
-        assert _estimate_tokens(items, 4.0) == 10
+        # tiktoken-based: "a"*40 = 5 tokens (o200k_base)
+        assert _estimate_tokens(items, 4.0) == 5
 
     def test_multiple_items(self) -> None:
         items = [HumanMemory(content="a" * 20), AIMemory(content="b" * 20)]
-        assert _estimate_tokens(items, 4.0) == 10
+        # tiktoken-based: "a"*20 = 3, "b"*20 = 5 → total 8
+        assert _estimate_tokens(items, 4.0) == 8
 
-    def test_custom_ratio(self) -> None:
+    def test_ratio_ignored(self) -> None:
+        # ratio parameter is kept for backward compat but ignored
         items = [HumanMemory(content="a" * 100)]
-        assert _estimate_tokens(items, 2.0) == 50
+        result_default = _estimate_tokens(items, 4.0)
+        result_custom = _estimate_tokens(items, 2.0)
+        assert result_default == result_custom
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +181,8 @@ class TestCheckTrigger:
         assert "Message count" in result.reason
 
     def test_trigger_on_token_count(self) -> None:
-        # Each item has 100 chars, ratio 4.0 -> 25 tokens per item
-        cfg = SummaryConfig(message_threshold=100, token_threshold=50)
+        # tiktoken-based: "a"*100 = 13 tokens each, 3 items = 39 total
+        cfg = SummaryConfig(message_threshold=100, token_threshold=30)
         items = _make_items(3, content="a" * 100)
         result = check_trigger(items, cfg)
         assert result.triggered is True

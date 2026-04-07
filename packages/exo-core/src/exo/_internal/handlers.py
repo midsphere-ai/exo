@@ -313,7 +313,7 @@ class ToolHandler(Handler[dict[str, Any], ToolResult]):
                 results[idx] = ToolResult(
                     tool_call_id=call_id,
                     tool_name=tool_name,
-                    error=f"Unknown tool '{tool_name}'",
+                    error=f"Tool '{tool_name}' error: unknown tool '{tool_name}'",
                 )
                 return
 
@@ -334,7 +334,7 @@ class ToolHandler(Handler[dict[str, Any], ToolResult]):
                 results[idx] = ToolResult(
                     tool_call_id=call_id,
                     tool_name=tool_name,
-                    error=str(exc),
+                    error=f"Tool '{tool_name}' error: {exc}",
                 )
 
         async with asyncio.TaskGroup() as tg:

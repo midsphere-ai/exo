@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from enum import StrEnum
 from typing import Any
 
 from exo.types import ExoError
+
+logger = logging.getLogger(__name__)
 
 
 class EvalError(ExoError):
@@ -161,7 +164,13 @@ class Evaluator:
                 return EvalCaseResult(case_id=case_id, input=inp, output=output, scores=scores)
 
         tasks = [_run(case, r) for case in dataset for r in range(self._repeat_times)]
-        case_results = list(await asyncio.gather(*tasks))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("Scorer task failed, skipping case: %s", result)
+                continue
+            case_results.append(result)
 
         summary = self._summarize(case_results)
         pass_at_k = self._compute_pass_at_k(case_results, dataset)

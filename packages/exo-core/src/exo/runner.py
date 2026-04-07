@@ -669,7 +669,7 @@ async def _stream(
                     ToolResult(
                         tool_call_id=tc.id,
                         tool_name=tc.name,
-                        error=f"Invalid tool arguments: {exc}",
+                        error=f"Tool '{tc.name}' error: invalid arguments: {exc}",
                     )
                     for tc in tool_calls
                 ]
@@ -707,13 +707,38 @@ async def _stream(
                             break
 
             # Drain inner agent events pushed by tools via ToolContext.emit()
+            # and PTC inner tool events. ToolResultEvent respects the detailed
+            # flag — same contract as the non-PTC ToolResultEvent at line 720.
+            _queue_size = agent._event_queue.qsize()
+            if _queue_size:
+                _log.debug(
+                    "draining %d inner events from '%s' event queue",
+                    _queue_size,
+                    agent.name,
+                )
+            _drained = 0
             while not agent._event_queue.empty():
                 try:
                     inner_event = agent._event_queue.get_nowait()
+                    _drained += 1
+                    if isinstance(inner_event, ToolResultEvent) and not detailed:
+                        continue
                     if _passes_filter(inner_event):
                         yield inner_event
                 except Exception:
+                    _log.warning(
+                        "event queue drain interrupted on '%s' after %d/%d events",
+                        agent.name,
+                        _drained,
+                        _queue_size,
+                    )
                     break
+            if _queue_size and not _drained:
+                _log.warning(
+                    "event queue reported %d items but drained 0 on '%s'",
+                    _queue_size,
+                    agent.name,
+                )
 
             # Emit ToolResultEvent for each tool execution when detailed.
             # PTC tool is suppressed — inner tool events emitted via queue.

@@ -6,6 +6,7 @@ All tests use mock providers — no real API calls.
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -22,8 +23,9 @@ from exo.ptc import (
     get_ptc_eligible_tools,
     schema_to_python_sig,
 )
+from exo.runner import run
 from exo.tool import Tool, tool
-from exo.types import ToolCall, ToolCallEvent, ToolResultEvent, Usage
+from exo.types import AgentOutput, StreamEvent, TextEvent, ToolCall, ToolCallEvent, ToolResultEvent, Usage
 
 # ---------------------------------------------------------------------------
 # Test tools
@@ -700,3 +702,240 @@ class TestPTCTransparency:
         for ev in events:
             if hasattr(ev, "tool_name"):
                 assert ev.tool_name != PTC_TOOL_NAME
+
+
+# ---------------------------------------------------------------------------
+# Streaming + non-streaming integration helpers
+# ---------------------------------------------------------------------------
+
+
+class _FakeStreamChunk:
+    """Minimal stream chunk for PTC integration tests."""
+
+    def __init__(
+        self,
+        delta: str = "",
+        tool_call_deltas: list[Any] | None = None,
+        finish_reason: str | None = None,
+        usage: Usage | None = None,
+    ) -> None:
+        self.delta = delta
+        self.tool_call_deltas = tool_call_deltas or []
+        self.finish_reason = finish_reason
+        self.usage = usage or Usage()
+
+
+class _FakeToolCallDelta:
+    """Minimal tool call delta for PTC integration tests."""
+
+    def __init__(
+        self,
+        index: int = 0,
+        id: str | None = None,
+        name: str | None = None,
+        arguments: str = "",
+    ) -> None:
+        self.index = index
+        self.id = id
+        self.name = name
+        self.arguments = arguments
+
+
+def _make_stream_provider(stream_rounds: list[list[_FakeStreamChunk]]) -> Any:
+    """Create a mock provider returning pre-defined stream chunks."""
+    call_count = 0
+
+    async def stream(messages: Any, **kwargs: Any) -> AsyncIterator[Any]:
+        nonlocal call_count
+        chunks = stream_rounds[min(call_count, len(stream_rounds) - 1)]
+        call_count += 1
+        for c in chunks:
+            yield c
+
+    mock = AsyncMock()
+    mock.stream = stream
+    mock.complete = AsyncMock()
+    return mock
+
+
+def _ptc_tool_call(code: str) -> list[_FakeStreamChunk]:
+    """Build a stream round that calls the __exo_ptc__ tool with *code*."""
+    return [
+        _FakeStreamChunk(
+            tool_call_deltas=[
+                _FakeToolCallDelta(index=0, id="tc_ptc_1", name=PTC_TOOL_NAME),
+            ],
+        ),
+        _FakeStreamChunk(
+            tool_call_deltas=[
+                _FakeToolCallDelta(index=0, arguments=json.dumps({"code": code})),
+            ],
+            finish_reason="tool_calls",
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# PTC streaming integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestPTCStreamingIntegration:
+    """End-to-end: PTC events flow through run.stream()."""
+
+    async def test_ptc_events_in_stream_detailed(self) -> None:
+        """run.stream(detailed=True) yields inner ToolCallEvent + ToolResultEvent."""
+        agent = Agent(name="bot", tools=[greet], ptc=True)
+        round1 = _ptc_tool_call('await default_api.greet(name="Alice")')
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "hi", provider=provider, detailed=True)]
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+
+        assert len(call_events) == 1
+        assert call_events[0].tool_name == "greet"
+        assert call_events[0].agent_name == "bot"
+
+        assert len(result_events) == 1
+        assert result_events[0].tool_name == "greet"
+        assert result_events[0].success is True
+        assert "Hello, Alice!" in str(result_events[0].result)
+
+    async def test_ptc_tool_call_without_detailed(self) -> None:
+        """run.stream(detailed=False) yields ToolCallEvent but NOT ToolResultEvent."""
+        agent = Agent(name="bot", tools=[greet], ptc=True)
+        round1 = _ptc_tool_call('await default_api.greet(name="Bob")')
+        round2 = [_FakeStreamChunk(delta="Done!")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "hi", provider=provider, detailed=False)]
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+
+        assert len(call_events) == 1
+        assert call_events[0].tool_name == "greet"
+        # ToolResultEvent requires detailed=True
+        assert len(result_events) == 0
+
+    async def test_ptc_outer_tool_suppressed(self) -> None:
+        """No event should reference __exo_ptc__ in the stream."""
+        agent = Agent(name="bot", tools=[greet], ptc=True)
+        round1 = _ptc_tool_call('await default_api.greet(name="X")')
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "hi", provider=provider, detailed=True)]
+
+        for ev in events:
+            if hasattr(ev, "tool_name"):
+                assert ev.tool_name != PTC_TOOL_NAME
+
+    async def test_ptc_multiple_inner_tools_stream(self) -> None:
+        """Multiple PTC inner tool calls emit ordered events in stream."""
+        agent = Agent(name="bot", tools=[greet, add], ptc=True)
+        code = 'await default_api.greet(name="A")\nawait default_api.add(a=1, b=2)'
+        round1 = _ptc_tool_call(code)
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "hi", provider=provider, detailed=True)]
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+
+        assert len(call_events) == 2
+        assert call_events[0].tool_name == "greet"
+        assert call_events[1].tool_name == "add"
+        assert len(result_events) == 2
+        assert result_events[0].tool_name == "greet"
+        assert result_events[1].tool_name == "add"
+
+
+# ---------------------------------------------------------------------------
+# Non-streaming: queue drain prevents stale events
+# ---------------------------------------------------------------------------
+
+
+class TestPTCNonStreamingDrain:
+    """Verify that run() (non-streaming) drains PTC events from the queue."""
+
+    async def test_run_drains_ptc_event_queue(self) -> None:
+        """After run(), the agent's _event_queue should be empty."""
+        agent = Agent(name="bot", tools=[greet], ptc=True)
+        provider = _multi_step_provider(
+            ModelResponse(
+                id="r1",
+                model="test",
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="tc1",
+                        name=PTC_TOOL_NAME,
+                        arguments=json.dumps({"code": 'await default_api.greet(name="Z")'}),
+                    )
+                ],
+                usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            ),
+            ModelResponse(
+                id="r2",
+                model="test",
+                content="Done",
+                tool_calls=[],
+                usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            ),
+        )
+
+        result = await run(agent, "greet Z", provider=provider)
+
+        assert result.output == "Done"
+        assert agent._event_queue.empty(), (
+            "_event_queue should be empty after non-streaming run() — "
+            "PTC events must be drained to prevent memory leaks"
+        )
+
+    async def test_run_then_stream_no_stale_events(self) -> None:
+        """Stale PTC events from run() must not leak into a later stream()."""
+        agent = Agent(name="bot", tools=[greet], ptc=True)
+
+        # First: non-streaming run
+        provider1 = _multi_step_provider(
+            ModelResponse(
+                id="r1",
+                model="test",
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="tc1",
+                        name=PTC_TOOL_NAME,
+                        arguments=json.dumps({"code": 'await default_api.greet(name="Old")'}),
+                    )
+                ],
+                usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            ),
+            ModelResponse(
+                id="r2",
+                model="test",
+                content="done1",
+                tool_calls=[],
+                usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+            ),
+        )
+        await run(agent, "first", provider=provider1)
+
+        # Second: streaming run (text-only, no tool calls)
+        provider2 = _make_stream_provider(
+            [[_FakeStreamChunk(delta="Hello stream!")]]
+        )
+        events = [ev async for ev in run.stream(agent, "second", provider=provider2, detailed=True)]
+
+        # No stale ToolCallEvent/ToolResultEvent from the first run should appear
+        tool_events = [
+            e for e in events if isinstance(e, (ToolCallEvent, ToolResultEvent))
+        ]
+        assert len(tool_events) == 0, (
+            f"Expected no tool events in text-only stream, got {len(tool_events)}"
+        )

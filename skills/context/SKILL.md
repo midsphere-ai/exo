@@ -1,6 +1,6 @@
 ---
 name: exo:context
-description: "Use when configuring Exo context management — context_limit, overflow strategy (summarize/truncate/none), cache, ContextConfig, neurons, fork/merge, budget awareness, token tracking. Triggers on: context_limit, overflow, cache, context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget."
+description: "Use when configuring Exo context management — context_limit, overflow strategy (summarize/truncate/none), cache, ContextConfig, neurons, fork/merge, budget awareness, token tracking, token counting. Triggers on: context_limit, overflow, cache, context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget, TokenCounter, count_tokens, token counting, tiktoken."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -351,6 +351,47 @@ agent = Agent(
 ```
 
 **Valid values:** `"per-message"` or `"limit:<0-100>"`.
+
+### Token Counting (Pre-Call Estimation)
+
+Use `TokenCounter` or `count_tokens()` for accurate pre-call token estimation. These use tiktoken with provider-aware encoding selection — far more accurate than character-based heuristics.
+
+```python
+from exo import TokenCounter, count_tokens
+
+# Quick one-liner (caches counter per model)
+n = count_tokens("Hello, world!", model="openai:gpt-4o")
+
+# Class-based (reusable, useful for bulk counting)
+counter = TokenCounter("anthropic:claude-sonnet-4-6")
+n = counter.count("Hello, world!")
+
+# Count chat messages with per-message overhead
+total = counter.count_messages([
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Hi"},
+])
+
+# Convert between tokens and characters (encoding-aware)
+chars = counter.tokens_to_chars(4096)   # e.g., 15155 for cl100k_base
+tokens = counter.chars_to_tokens(10000) # inverse
+
+# Check provider/encoding info
+counter.provider        # "anthropic"
+counter.encoding_name   # "cl100k_base"
+counter.has_tiktoken    # True (when tiktoken is installed)
+```
+
+**Encoding selection per provider:**
+
+| Provider | Encoding | Accuracy |
+|----------|----------|----------|
+| `openai:gpt-4o*`, `o1*`, `o3*`, `o4*` | `o200k_base` | Exact |
+| `openai:gpt-4*`, `gpt-3.5*` | `cl100k_base` | Exact |
+| `anthropic:*` | `cl100k_base` | ~95% (best local approximation) |
+| `gemini:*`, `vertex:*` | `o200k_base` | ~85-90% (approximation) |
+
+**Note:** This is for *pre-call estimation* (counting tokens before sending to the LLM). For *post-call usage tracking* (actual tokens consumed), use `RunResult.usage` or `UsageEvent` from streaming — those come from the provider and are always exact.
 
 ### Context Tools
 

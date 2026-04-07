@@ -110,7 +110,7 @@ Each processor is independent, opt-in, and can be registered in any order
 | `OffloadManager` | `MessageOffloader` + `ToolResultOffloader` | Split into message-level and tool-result offloading |
 | `CompressManager` | `DialogueCompressor` | LLM-agnostic via injected summarizer callable |
 | `RoundManager` | `RoundWindowProcessor` | Uses `ContextConfig.history_rounds` for window size |
-| `TokenBudgetManager` | `TokenBudgetProcessor` + `TiktokenCounter` | Separate counter class for reuse |
+| `TokenBudgetManager` | `TokenBudgetProcessor` + `exo.TokenCounter` | Separate counter class for reuse |
 | `ContextConfig` | `ContextConfig` | Frozen dataclass with `extra` dict for extensibility |
 | `[[OFFLOAD: handle=<id>]]` markers | `[[OFFLOADED: handle=off_<hex>]]` markers | Same concept, slightly different format |
 | *(no equivalent)* | `Context` with fork/merge | Per-task hierarchical state with parent-chain inheritance |
@@ -211,7 +211,7 @@ config = make_config("pilot")      # minimal processing, large context window
 | `openjiuwen.core.context_engine.RoundManager` | `exo.context.RoundWindowProcessor` | Round-level history windowing |
 | `openjiuwen.core.context_engine.TokenBudgetManager` | `exo.context.TokenBudgetProcessor` | Hard token budget enforcement |
 | `openjiuwen.core.context_engine.ContextConfig` | `exo.context.ContextConfig` | Frozen config with `extra` dict for extensibility |
-| *(tiktoken usage inline)* | `exo.context.TiktokenCounter` | Standalone token counter with model→encoding mapping |
+| *(tiktoken usage inline)* | `exo.TokenCounter` | Provider-aware token counter with model→encoding mapping |
 | *(no equivalent)* | `exo.context.Context` | Per-task context with fork/merge lifecycle |
 | *(no equivalent)* | `exo.context.ContextState` | Hierarchical key-value state |
 | *(no equivalent)* | `exo.context.ContextProcessor` | ABC for event-driven processors |

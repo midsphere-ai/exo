@@ -17,6 +17,7 @@ from exo.observability.logging import (  # pyright: ignore[reportMissingImports]
 )
 from exo.runner import run
 from exo.swarm import Swarm
+from exo.token_counter import TokenCounter, count_tokens
 from exo.tool import FunctionTool, Tool, tool
 from exo.tool_context import ToolContext
 from exo.tool_result import tool_error, tool_ok
@@ -46,12 +47,14 @@ __all__ = [
     "Swarm",
     "SwarmNode",
     "TextBlock",
+    "TokenCounter",
     "Tool",
     "ToolContext",
     "VideoBlock",
     "WorkflowCheckpoint",
     "WorkflowCheckpointStore",
     "configure",
+    "count_tokens",
     "get_logger",
     "run",
     "tool",

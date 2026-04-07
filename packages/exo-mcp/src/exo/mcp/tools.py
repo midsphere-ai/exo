@@ -294,7 +294,13 @@ class MCPToolWrapper(Tool):
                             self._server_name,
                         )
                         conn = MCPServerConnection(self._server_config)
-                        await conn.connect()
+                        try:
+                            await conn.connect()
+                        except Exception as exc:
+                            raise MCPToolError(
+                                f"MCP server reconnection failed for server "
+                                f"'{self._server_name}'"
+                            ) from exc
                         self._connection = conn
                         self._call_fn = conn.call_tool
                     else:

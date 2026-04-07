@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from exo._internal.message_builder import build_messages
-from exo._internal.output_parser import parse_response, parse_tool_arguments
+from exo._internal.output_parser import OutputParseError, parse_response, parse_tool_arguments
 from exo.config import (
     parse_model_string,
     validate_budget_awareness,
@@ -433,6 +433,44 @@ async def _apply_context_windowing(
     non_system: list[Message] = [m for m in msg_list if not isinstance(m, SystemMessage)]
     msg_count = len(non_system)
 
+    # ── CONTEXT_WINDOW hook registered — bypass ALL built-in strategies ──
+    # When a user registers a CONTEXT_WINDOW hook, it becomes the sole owner
+    # of context reduction regardless of the configured overflow strategy.
+    _has_ctx_hook = (
+        hook_manager is not None
+        and hook_manager.has_hooks(HookPoint.CONTEXT_WINDOW)
+    )
+    if _has_ctx_hook:
+        result_list = system_msgs + non_system
+        try:
+            from exo.context.info import (  # pyright: ignore[reportMissingImports]
+                build_context_window_info,
+            )
+
+            _info = build_context_window_info(
+                result_list,
+                _cfg,
+                step=step,
+                max_steps=max_steps,
+                agent_name=agent_name,
+                model=model_name,
+                context_window_tokens=context_window_tokens,
+                last_usage=last_usage,
+                token_tracker=token_tracker,
+                force=force_summarize,
+            )
+            await hook_manager.run(
+                HookPoint.CONTEXT_WINDOW,
+                agent=agent,
+                messages=result_list,
+                info=_info,
+                provider=provider,
+                actions=actions,
+            )
+        except ImportError:
+            _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
+        return result_list, actions
+
     # ── overflow="none" — no context management ──────────────────────────
     if overflow_strategy == "none":
         return system_msgs + non_system, actions
@@ -574,39 +612,7 @@ async def _apply_context_windowing(
                 )
             )
 
-    # ── Post-windowing augmentation hook ──────────────────────────────
-    # Fires after built-in strategies for observation / additional mutations.
-    result_list = system_msgs + non_system
-    if hook_manager is not None and hook_manager.has_hooks(HookPoint.CONTEXT_WINDOW):
-        try:
-            from exo.context.info import (  # pyright: ignore[reportMissingImports]
-                build_context_window_info,
-            )
-
-            _info = build_context_window_info(
-                result_list,
-                _cfg,
-                step=step,
-                max_steps=max_steps,
-                agent_name=agent_name,
-                model=model_name,
-                context_window_tokens=context_window_tokens,
-                last_usage=last_usage,
-                token_tracker=token_tracker,
-                force=force_summarize,
-            )
-            await hook_manager.run(
-                HookPoint.CONTEXT_WINDOW,
-                agent=agent,
-                messages=result_list,
-                info=_info,
-                provider=provider,
-                actions=actions,
-            )
-        except ImportError:
-            pass
-
-    return result_list, actions
+    return system_msgs + non_system, actions
 
 
 class AgentError(ExoError):
@@ -884,6 +890,8 @@ class Agent:
             for rail in rails:
                 self.rail_manager.add(rail)
             for point in HookPoint:
+                if point == HookPoint.CONTEXT_WINDOW:
+                    continue  # context windowing is not a guardrail concern
                 self.hook_manager.add(point, self.rail_manager.hook_for(point))
         else:
             self.rail_manager = None
@@ -1845,8 +1853,29 @@ class Agent:
                 return output
 
             # Execute tool calls and collect results
-            actions = parse_tool_arguments(output.tool_calls)
-            tool_results = await self._execute_tools(actions)
+            try:
+                actions = parse_tool_arguments(output.tool_calls)
+            except OutputParseError as exc:
+                _log.warning("Failed to parse tool arguments on '%s': %s", self.name, exc)
+                tool_results = [
+                    ToolResult(
+                        tool_call_id=tc.id,
+                        tool_name=tc.name,
+                        error=f"Tool '{tc.name}' error: invalid arguments: {exc}",
+                    )
+                    for tc in output.tool_calls
+                ]
+            else:
+                tool_results = await self._execute_tools(actions)
+
+            # Drain PTC/ToolContext events — non-streaming path has no consumer.
+            # Without this, events accumulate (memory leak) and may leak into
+            # a subsequent run.stream() call on the same agent instance.
+            while not self._event_queue.empty():
+                try:
+                    self._event_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
 
             # Append assistant message (with tool calls) and results to history
             msg_list.append(AssistantMessage(content=output.text, tool_calls=output.tool_calls))
@@ -1866,7 +1895,7 @@ class Agent:
                     _trigger = getattr(_ctx_cfg, "token_budget_trigger", 0.8)
                     if _fill_ratio > _trigger:
                         _log.info(
-                            "token budget trigger: %.0f%% full (%d/%d tokens), forcing summarization on '%s'",
+                            "token budget trigger: %.0f%% full (%d/%d tokens), forcing context reduction on '%s'",
                             100.0 * _fill_ratio,
                             output.usage.input_tokens,
                             _context_window_tokens,
@@ -2068,76 +2097,96 @@ class Agent:
             ToolResult(tool_call_id="", tool_name="") for _ in range(len(actions))
         ]
 
+        def _tool_error(tool_name: str, tool_call_id: str, error: str) -> ToolResult:
+            """Build a consistently-formatted error ToolResult."""
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                error=f"Tool '{tool_name}' error: {error}",
+            )
+
         async def _run_one(idx: int) -> None:
             action = actions[idx]
-            tool = self.tools.get(action.tool_name)
+            result: ToolResult
+            try:
+                tool = self.tools.get(action.tool_name)
 
-            # PRE_TOOL_CALL hook
-            await self.hook_manager.run(
-                HookPoint.PRE_TOOL_CALL,
-                agent=self,
-                tool_name=action.tool_name,
-                arguments=action.arguments,
-            )
-
-            if tool is None:
-                result = ToolResult(
-                    tool_call_id=action.tool_call_id,
+                # PRE_TOOL_CALL hook
+                await self.hook_manager.run(
+                    HookPoint.PRE_TOOL_CALL,
+                    agent=self,
                     tool_name=action.tool_name,
-                    error=f"Unknown tool '{action.tool_name}'",
+                    arguments=action.arguments,
                 )
-            else:
-                try:
-                    kwargs = dict(action.arguments)
-                    # Strip injected_tool_args — schema-only fields the LLM
-                    # fills in but the tool must never receive.
-                    if self.injected_tool_args:
-                        for key in self.injected_tool_args:
-                            kwargs.pop(key, None)
-                    # Inject ToolContext if the tool declares one
-                    if isinstance(tool, FunctionTool) and tool._tool_context_param:
-                        kwargs[tool._tool_context_param] = ToolContext(
-                            agent_name=self.name,
-                            queue=self._event_queue,
-                        )
-                    output = await tool.execute(**kwargs)
-                    content: MessageContent
-                    if isinstance(output, list):
-                        content = output  # list[ContentBlock] from tool
-                    elif isinstance(output, str):
-                        content = output
-                    else:
-                        content = (
-                            json.dumps(output) if isinstance(output, dict) else str(output)
-                        )
-                    # Large-output offloading: store in workspace and inject pointer.
-                    # Fires when large_output=True OR result exceeds the byte threshold.
-                    # Only applies to string content (not multimodal content blocks).
-                    if isinstance(content, str) and (
-                        getattr(tool, "large_output", False)
-                        or len(content.encode("utf-8")) > _get_large_output_threshold()
-                    ):
-                        content = await self._offload_large_result(action.tool_name, content)
-                    result = ToolResult(
-                        tool_call_id=action.tool_call_id,
-                        tool_name=action.tool_name,
-                        content=content,
-                    )
-                except (ToolError, Exception) as exc:
-                    _log.warning("Tool '%s' failed on '%s': %s", action.tool_name, self.name, exc)
-                    result = ToolResult(
-                        tool_call_id=action.tool_call_id,
-                        tool_name=action.tool_name,
-                        error=str(exc),
-                    )
 
-            # POST_TOOL_CALL hook
-            await self.hook_manager.run(
-                HookPoint.POST_TOOL_CALL,
-                agent=self,
-                tool_name=action.tool_name,
-                result=result,
-            )
+                if tool is None:
+                    result = _tool_error(
+                        action.tool_name,
+                        action.tool_call_id,
+                        f"unknown tool '{action.tool_name}'",
+                    )
+                else:
+                    try:
+                        kwargs = dict(action.arguments)
+                        # Strip injected_tool_args — schema-only fields the LLM
+                        # fills in but the tool must never receive.
+                        if self.injected_tool_args:
+                            for key in self.injected_tool_args:
+                                kwargs.pop(key, None)
+                        # Inject ToolContext if the tool declares one
+                        if isinstance(tool, FunctionTool) and tool._tool_context_param:
+                            kwargs[tool._tool_context_param] = ToolContext(
+                                agent_name=self.name,
+                                queue=self._event_queue,
+                            )
+                        output = await tool.execute(**kwargs)
+                        content: MessageContent
+                        if isinstance(output, list):
+                            content = output  # list[ContentBlock] from tool
+                        elif isinstance(output, str):
+                            content = output
+                        else:
+                            content = (
+                                json.dumps(output) if isinstance(output, dict) else str(output)
+                            )
+                        # Large-output offloading: store in workspace and inject pointer.
+                        # Fires when large_output=True OR result exceeds the byte threshold.
+                        # Only applies to string content (not multimodal content blocks).
+                        if isinstance(content, str) and (
+                            getattr(tool, "large_output", False)
+                            or len(content.encode("utf-8")) > _get_large_output_threshold()
+                        ):
+                            content = await self._offload_large_result(
+                                action.tool_name, content
+                            )
+                        result = ToolResult(
+                            tool_call_id=action.tool_call_id,
+                            tool_name=action.tool_name,
+                            content=content,
+                        )
+                    except (ToolError, Exception) as exc:
+                        _log.warning(
+                            "Tool '%s' failed on '%s': %s",
+                            action.tool_name,
+                            self.name,
+                            exc,
+                        )
+                        result = _tool_error(
+                            action.tool_name, action.tool_call_id, str(exc)
+                        )
+
+                # POST_TOOL_CALL hook
+                await self.hook_manager.run(
+                    HookPoint.POST_TOOL_CALL,
+                    agent=self,
+                    tool_name=action.tool_name,
+                    result=result,
+                )
+            except RailAbortError:
+                raise  # Security blocks must propagate — never swallow
+            except BaseException as exc:
+                _log.warning("Tool '%s' failed on '%s': %s", action.tool_name, self.name, exc)
+                result = _tool_error(action.tool_name, action.tool_call_id, str(exc))
 
             results[idx] = result
 

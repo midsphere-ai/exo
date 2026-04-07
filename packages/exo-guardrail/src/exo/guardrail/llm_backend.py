@@ -118,8 +118,13 @@ class LLMGuardrailBackend(GuardrailBackend):
                 max_tokens=256,
             )
             return _parse_llm_response(response.content)
-        except Exception:
-            logger.exception("LLM guardrail analysis failed for model %s", self._model)
+        except Exception as exc:
+            logger.error(
+                "Guardrail LLM backend failed, defaulting to SAFE: %s (model=%s)",
+                exc,
+                self._model,
+                exc_info=True,
+            )
             return RiskAssessment(has_risk=False, risk_level=RiskLevel.SAFE)
 
 

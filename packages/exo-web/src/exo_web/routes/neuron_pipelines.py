@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from exo.token_counter import count_tokens
 from exo_web.database import get_db_dep
 from exo_web.routes.auth import get_current_user
 
@@ -249,7 +250,7 @@ async def preview_pipeline(
         else:
             text = template or f"({neuron_type})"
 
-        estimated_tokens = max(len(text) // 4, 1)
+        estimated_tokens = max(count_tokens(text), 1)
         if max_tok and estimated_tokens > max_tok:
             estimated_tokens = max_tok
 

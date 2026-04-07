@@ -74,7 +74,7 @@ class TestAgentRailsConstruction:
         assert isinstance(agent.rail_manager, RailManager)
 
     def test_rails_registered_as_hooks(self) -> None:
-        """Rails are registered as hooks on all hook points."""
+        """Rails are registered as hooks on all hook points except CONTEXT_WINDOW."""
 
         class NoopRail(Rail):
             async def handle(self, ctx: RailContext) -> RailAction | None:
@@ -82,7 +82,10 @@ class TestAgentRailsConstruction:
 
         agent = Agent(name="bot", rails=[NoopRail("noop")])
         for point in HookPoint:
-            assert agent.hook_manager.has_hooks(point)
+            if point == HookPoint.CONTEXT_WINDOW:
+                assert not agent.hook_manager.has_hooks(point)
+            else:
+                assert agent.hook_manager.has_hooks(point)
 
     def test_no_rails_no_hooks_added(self) -> None:
         """Agent without rails doesn't register any hooks."""

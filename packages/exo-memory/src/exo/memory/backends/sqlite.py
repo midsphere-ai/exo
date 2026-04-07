@@ -9,13 +9,14 @@ from typing import Any
 
 import aiosqlite  # pyright: ignore[reportMissingImports]
 
-logger = logging.getLogger(__name__)
-
 from exo.memory.base import (  # pyright: ignore[reportMissingImports]
+    MemoryError,
     MemoryItem,
     MemoryMetadata,
     MemoryStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 _CREATE_TABLE = """\
 CREATE TABLE IF NOT EXISTS memory_items (
@@ -110,43 +111,49 @@ class SQLiteMemoryStore:
         """Persist a memory item (upsert — bumps version on conflict)."""
         db = self._ensure_init()
         extra = _extra_fields(item)
-        await db.execute(
-            """\
-            INSERT INTO memory_items
-                (id, content, memory_type, status, metadata, extra_json,
-                 created_at, updated_at, deleted, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
-            ON CONFLICT(id) DO UPDATE SET
-                content    = excluded.content,
-                status     = excluded.status,
-                metadata   = excluded.metadata,
-                extra_json = excluded.extra_json,
-                updated_at = excluded.updated_at,
-                version    = version + 1,
-                deleted    = 0
-            """,
-            (
-                item.id,
-                item.content,
-                item.memory_type,
-                item.status.value,
-                item.metadata.model_dump_json(),
-                json.dumps(extra),
-                item.created_at,
-                item.updated_at,
-            ),
-        )
-        await db.commit()
+        try:
+            await db.execute(
+                """\
+                INSERT INTO memory_items
+                    (id, content, memory_type, status, metadata, extra_json,
+                     created_at, updated_at, deleted, version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
+                ON CONFLICT(id) DO UPDATE SET
+                    content    = excluded.content,
+                    status     = excluded.status,
+                    metadata   = excluded.metadata,
+                    extra_json = excluded.extra_json,
+                    updated_at = excluded.updated_at,
+                    version    = version + 1,
+                    deleted    = 0
+                """,
+                (
+                    item.id,
+                    item.content,
+                    item.memory_type,
+                    item.status.value,
+                    item.metadata.model_dump_json(),
+                    json.dumps(extra),
+                    item.created_at,
+                    item.updated_at,
+                ),
+            )
+            await db.commit()
+        except Exception as exc:
+            raise MemoryError(f"add failed for item {item.id}: {exc}") from exc
         logger.debug("upserted item type=%s id=%s", item.memory_type, item.id)
 
     async def get(self, item_id: str) -> MemoryItem | None:
         """Retrieve a non-deleted memory item by ID."""
         db = self._ensure_init()
-        cursor = await db.execute(
-            "SELECT * FROM memory_items WHERE id = ? AND deleted = 0",
-            (item_id,),
-        )
-        row = await cursor.fetchone()
+        try:
+            cursor = await db.execute(
+                "SELECT * FROM memory_items WHERE id = ? AND deleted = 0",
+                (item_id,),
+            )
+            row = await cursor.fetchone()
+        except Exception as exc:
+            raise MemoryError(f"get failed for item {item_id}: {exc}") from exc
         if row is None:
             return None
         return _row_to_item(row)
@@ -192,8 +199,11 @@ class SQLiteMemoryStore:
         sql = f"SELECT * FROM memory_items WHERE {where} ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
 
-        cursor = await db.execute(sql, params)
-        rows = await cursor.fetchall()
+        try:
+            cursor = await db.execute(sql, params)
+            rows = await cursor.fetchall()
+        except Exception as exc:
+            raise MemoryError(f"search failed: {exc}") from exc
         logger.debug("search returned %d rows", len(rows))
         return [_row_to_item(r) for r in rows]
 

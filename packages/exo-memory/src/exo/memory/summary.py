@@ -146,9 +146,14 @@ def check_trigger(
 
 
 def _estimate_tokens(items: Sequence[MemoryItem], ratio: float) -> int:
-    """Estimate token count from character length using a ratio."""
-    total_chars = sum(len(item.content) for item in items)
-    return int(total_chars / ratio)
+    """Estimate token count using tiktoken-based counting.
+
+    The *ratio* parameter is accepted for backward compatibility but
+    ignored — token counts now come from :func:`exo.token_counter.count_tokens`.
+    """
+    from exo.token_counter import count_tokens
+
+    return sum(count_tokens(item.content) for item in items)
 
 
 # ---------------------------------------------------------------------------

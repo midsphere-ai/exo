@@ -1,6 +1,49 @@
 # Token Tracking
 
-The `TokenTracker` records prompt and output token usage per agent, per step. It provides trajectory-level tracking, per-agent summaries, and total usage across an entire context. This data feeds into the Ralph Loop for cost analysis, budget enforcement, and optimization decisions.
+Exo has two complementary token accounting mechanisms:
+
+- **Pre-call counting** (`TokenCounter` / `count_tokens()`) — estimates how many tokens text or messages will consume *before* sending to the LLM. Uses tiktoken with provider-aware encoding selection. Lives in `exo.token_counter`.
+- **Post-call tracking** (`TokenTracker`) — records actual token usage *reported by the provider* after each LLM call. Lives in `exo.context.token_tracker`.
+
+## Pre-Call Token Counting
+
+Use `TokenCounter` or the `count_tokens()` convenience function to estimate tokens before sending to the LLM:
+
+```python
+from exo import TokenCounter, count_tokens
+
+# Quick one-liner (caches counter per model string)
+n = count_tokens("Hello, world!", model="openai:gpt-4o")
+
+# Reusable counter (caches tiktoken encoding)
+counter = TokenCounter("anthropic:claude-sonnet-4-6")
+n = counter.count("Hello, world!")
+
+# Count chat messages with per-message overhead
+total = counter.count_messages([
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Hi there!"},
+])
+
+# Convert between tokens and characters (encoding-aware ratios)
+chars = counter.tokens_to_chars(4096)   # encoding-specific, NOT chars*4
+tokens = counter.chars_to_tokens(10000) # inverse
+```
+
+**Encoding selection:** The counter parses `"provider:model"` strings and selects the best tiktoken encoding:
+
+| Provider | Encoding | Accuracy |
+|----------|----------|----------|
+| `openai:gpt-4o*`, `o1*`, `o3*`, `o4*` | `o200k_base` | Exact |
+| `openai:gpt-4*`, `gpt-3.5*` | `cl100k_base` | Exact |
+| `anthropic:*` | `cl100k_base` | ~95% |
+| `gemini:*`, `vertex:*` | `o200k_base` | ~85-90% |
+
+tiktoken is an optional dependency (falls back to encoding-specific char ratios if not installed).
+
+## Post-Call Token Tracking
+
+The `TokenTracker` records actual provider-reported token usage per agent, per step. It provides trajectory-level tracking, per-agent summaries, and total usage across an entire context. This data feeds into the Ralph Loop for cost analysis, budget enforcement, and optimization decisions.
 
 ## Basic Usage
 
@@ -191,6 +234,19 @@ ctx.restore(cp)
 ```
 
 ## API Summary
+
+### Pre-Call Counting
+
+| Symbol | Module | Description |
+|--------|--------|-------------|
+| `TokenCounter(model)` | `exo` / `exo.token_counter` | Provider-aware token counter using tiktoken |
+| `TokenCounter.count(text)` | | Count tokens in plain text |
+| `TokenCounter.count_messages(messages)` | | Count tokens for chat messages with overhead |
+| `TokenCounter.tokens_to_chars(n)` | | Convert token count to estimated characters |
+| `TokenCounter.chars_to_tokens(n)` | | Convert character count to estimated tokens |
+| `count_tokens(text, model)` | `exo` / `exo.token_counter` | Convenience function (caches counters per model) |
+
+### Post-Call Tracking
 
 | Symbol | Module | Description |
 |--------|--------|-------------|

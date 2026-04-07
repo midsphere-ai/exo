@@ -38,9 +38,7 @@ from exo.context.prompt_builder import (  # pyright: ignore[reportMissingImports
     PromptBuilder,
 )
 from exo.context.state import ContextState  # pyright: ignore[reportMissingImports]
-from exo.context.token_tracker import (  # pyright: ignore[reportMissingImports]
-    TokenTracker,
-)
+from exo.context.token_tracker import TokenTracker  # pyright: ignore[reportMissingImports]
 from exo.context.tools import (  # pyright: ignore[reportMissingImports]
     get_context_tools,
     get_file_tools,

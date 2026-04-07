@@ -157,11 +157,14 @@ def compute_context_budget(
         - ``max_chars_per_source``: character budget per source
         - ``enrich_cap``: how many sources should be enriched (0 for speed)
     """
+    from exo.token_counter import TokenCounter
+
     ctx_tokens = _resolve_context_window(model, context_window_override)
-    ctx_chars = ctx_tokens * 4  # ~4 chars per token
+    counter = TokenCounter(model)
+    ctx_chars = counter.tokens_to_chars(ctx_tokens)
 
     # Reserve space for response and prompt overhead
-    response_reserve = 4096 * 4  # 4096 tokens for response
+    response_reserve = counter.tokens_to_chars(4096)  # 4096 tokens for response
     prompt_overhead = 8_000  # system prompt, instructions, formatting
     history_chars = max(chat_history_chars, 0)
     narr_chars = max(narrative_chars, 0)

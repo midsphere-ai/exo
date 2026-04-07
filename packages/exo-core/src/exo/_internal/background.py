@@ -299,13 +299,21 @@ class BackgroundTaskHandler:
     async def _hot_merge(self, task: BackgroundTask) -> None:
         """Merge a background result directly into the active execution.
 
-        Fires registered merge callbacks.
+        Fires registered merge callbacks.  Individual callback failures
+        are logged but do not prevent subsequent callbacks from running.
 
         Args:
             task: The completed background task.
         """
         for cb in self._merge_callbacks:
-            await cb(task, MergeMode.HOT)
+            try:
+                await cb(task, MergeMode.HOT)
+            except Exception as exc:
+                _log.warning(
+                    "Merge callback failed for background task '%s': %s",
+                    task.task_id,
+                    exc,
+                )
 
     def _complete_node(self, task_id: str) -> None:
         """Mark the RunNode for a background task as successful."""

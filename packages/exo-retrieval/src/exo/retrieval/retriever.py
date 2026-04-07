@@ -11,7 +11,10 @@ import abc
 from typing import Any
 
 from exo.retrieval.embeddings import Embeddings  # pyright: ignore[reportMissingImports]
-from exo.retrieval.types import RetrievalResult  # pyright: ignore[reportMissingImports]
+from exo.retrieval.types import (  # pyright: ignore[reportMissingImports]
+    RetrievalError,
+    RetrievalResult,
+)
 from exo.retrieval.vector_store import VectorStore  # pyright: ignore[reportMissingImports]
 
 
@@ -84,8 +87,15 @@ class VectorRetriever(Retriever):
         Returns:
             A list of ``RetrievalResult`` objects ranked by similarity.
         """
-        query_embedding = await self.embeddings.embed(query)
-        results = await self.store.search(query_embedding, top_k=top_k, **kwargs)
+        try:
+            query_embedding = await self.embeddings.embed(query)
+        except Exception as exc:
+            raise RetrievalError(f"Embedding failed: {exc}") from exc
+
+        try:
+            results = await self.store.search(query_embedding, top_k=top_k, **kwargs)
+        except Exception as exc:
+            raise RetrievalError(f"Vector store search failed: {exc}") from exc
 
         if self.score_threshold is not None:
             results = [r for r in results if r.score >= self.score_threshold]

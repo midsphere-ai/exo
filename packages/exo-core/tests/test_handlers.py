@@ -557,7 +557,7 @@ class TestToolHandlerExecution:
 
         assert len(results) == 1
         assert results[0].error is not None
-        assert "Unknown tool" in results[0].error
+        assert "unknown tool" in results[0].error
 
     async def test_tool_error_caught(self) -> None:
         """ToolError from execution is caught and returned in result."""

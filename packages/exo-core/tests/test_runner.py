@@ -1912,3 +1912,111 @@ class TestRunStreamHookParity:
         error_events = [e for e in events if isinstance(e, ErrorEvent)]
         assert len(error_events) == 1
         assert "post hook boom" in error_events[0].error
+
+
+# ---------------------------------------------------------------------------
+# run.stream() PTC event tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunStreamPTCEvents:
+    """PTC inner tool events through run.stream()."""
+
+    @staticmethod
+    def _ptc_round(code: str) -> list[_FakeStreamChunk]:
+        """Build a stream round that calls __exo_ptc__ with *code*."""
+        import json as _json
+
+        from exo.ptc import PTC_TOOL_NAME as _PTC
+
+        return [
+            _FakeStreamChunk(
+                tool_call_deltas=[_FakeToolCallDelta(index=0, id="tc_ptc", name=_PTC)],
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, arguments=_json.dumps({"code": code})),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+    async def test_ptc_inner_tool_result_requires_detailed(self) -> None:
+        """PTC ToolResultEvent should NOT appear when detailed=False."""
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo."""
+            return msg
+
+        agent = Agent(name="bot", tools=[echo], ptc=True)
+        round1 = self._ptc_round('await default_api.echo(msg="hi")')
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "test", provider=provider, detailed=False)]
+
+        assert not any(isinstance(e, ToolResultEvent) for e in events)
+
+    async def test_ptc_inner_tool_call_always_emitted(self) -> None:
+        """PTC ToolCallEvent appears regardless of detailed flag."""
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo."""
+            return msg
+
+        agent = Agent(name="bot", tools=[echo], ptc=True)
+        round1 = self._ptc_round('await default_api.echo(msg="hi")')
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "test", provider=provider, detailed=False)]
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert len(call_events) == 1
+        assert call_events[0].tool_name == "echo"
+
+    async def test_ptc_outer_tool_suppressed(self) -> None:
+        """Neither ToolCallEvent nor ToolResultEvent for __exo_ptc__ appears."""
+        from exo.ptc import PTC_TOOL_NAME
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo."""
+            return msg
+
+        agent = Agent(name="bot", tools=[echo], ptc=True)
+        round1 = self._ptc_round('await default_api.echo(msg="hi")')
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [ev async for ev in run.stream(agent, "test", provider=provider, detailed=True)]
+
+        for ev in events:
+            if hasattr(ev, "tool_name"):
+                assert ev.tool_name != PTC_TOOL_NAME
+
+    async def test_ptc_event_types_filter_applies(self) -> None:
+        """event_types filter correctly applies to PTC inner events."""
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo."""
+            return msg
+
+        agent = Agent(name="bot", tools=[echo], ptc=True)
+        round1 = self._ptc_round('await default_api.echo(msg="hi")')
+        round2 = [_FakeStreamChunk(delta="ok")]
+        provider = _make_stream_provider([round1, round2])
+
+        events = [
+            ev
+            async for ev in run.stream(
+                agent, "test", provider=provider, detailed=True, event_types={"tool_call"}
+            )
+        ]
+
+        # Only ToolCallEvent should pass
+        assert all(isinstance(e, ToolCallEvent) for e in events)
+        assert len(events) == 1

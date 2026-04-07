@@ -31,11 +31,15 @@ import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import logging
+
 from exo.tool import FunctionTool, Tool
 from exo.types import ToolCallEvent, ToolResultEvent
 
 if TYPE_CHECKING:
     from exo.agent import Agent
+
+_ptc_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PTC tool name — intentionally obscure to avoid collision with user tools.
@@ -355,6 +359,13 @@ class PTCExecutor:
             tool_call_id = f"ptc_{uuid.uuid4().hex[:8]}"
 
             # Emit ToolCallEvent BEFORE execution (transparent to stream)
+            _ptc_log.debug(
+                "PTC enqueue ToolCallEvent: tool=%s id=%s agent=%s queue_size=%d",
+                tool_obj.name,
+                tool_call_id,
+                agent.name,
+                agent._event_queue.qsize(),
+            )
             agent._event_queue.put_nowait(
                 ToolCallEvent(
                     tool_name=tool_obj.name,

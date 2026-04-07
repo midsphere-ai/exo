@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock
@@ -9,12 +10,17 @@ from unittest.mock import AsyncMock
 from exo.agent import Agent
 from exo.harness.base import Harness, HarnessContext, HarnessError, HarnessNode
 from exo.harness.types import HarnessEvent, SessionState
+from exo.ptc import PTC_TOOL_NAME
 from exo.runner import run
+from exo.tool import tool
 from exo.types import (
     AgentOutput,
     RunResult,
     StreamEvent,
     TextEvent,
+    ToolCall,
+    ToolCallEvent,
+    ToolResultEvent,
     Usage,
 )
 
@@ -56,6 +62,20 @@ class _FakeStreamChunk:
         self.tool_call_deltas = tool_call_deltas or []
         self.finish_reason = finish_reason
         self.usage = usage or Usage()
+
+
+class _FakeToolCallDelta:
+    def __init__(
+        self,
+        index: int = 0,
+        id: str | None = None,
+        name: str | None = None,
+        arguments: str = "",
+    ) -> None:
+        self.index = index
+        self.id = id
+        self.name = name
+        self.arguments = arguments
 
 
 def _make_stream_provider(stream_rounds: list[list[_FakeStreamChunk]]) -> Any:
@@ -469,3 +489,105 @@ class TestHarnessContext:
         )
         result = await ctx.run_agent(agent, "test", messages=None)
         assert result.output == "ok"
+
+
+# ---------------------------------------------------------------------------
+# PTC + Harness tests
+# ---------------------------------------------------------------------------
+
+
+def _ptc_stream_rounds(tool_code: str) -> list[list[_FakeStreamChunk]]:
+    """Two-round stream: PTC tool call, then text response."""
+    return [
+        [
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(index=0, id="tc_ptc", name=PTC_TOOL_NAME),
+                ],
+            ),
+            _FakeStreamChunk(
+                tool_call_deltas=[
+                    _FakeToolCallDelta(
+                        index=0,
+                        arguments=json.dumps({"code": tool_code}),
+                    ),
+                ],
+                finish_reason="tool_calls",
+            ),
+        ],
+        [_FakeStreamChunk(delta="Done!")],
+    ]
+
+
+class TestHarnessPTCEvents:
+    """Verify PTC tool events through harness execution."""
+
+    async def test_stream_agent_emits_ptc_events(self) -> None:
+        """ctx.stream_agent() on a PTC agent yields inner tool events."""
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo back."""
+            return msg
+
+        agent = Agent(name="worker", tools=[echo], ptc=True)
+        provider = _make_stream_provider(
+            _ptc_stream_rounds('await default_api.echo(msg="hello")')
+        )
+
+        h = PassthroughHarness(name="h", agents=[agent])
+
+        events: list[StreamEvent] = []
+        async for ev in h.stream("test", provider=provider, detailed=True):
+            events.append(ev)
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+
+        assert len(call_events) == 1
+        assert call_events[0].tool_name == "echo"
+        assert len(result_events) == 1
+        assert result_events[0].tool_name == "echo"
+        assert result_events[0].success is True
+
+    async def test_run_agent_ptc_no_stale_events(self) -> None:
+        """ctx.run_agent() on a PTC agent does not leak events to later stream."""
+
+        @tool
+        def echo(msg: str) -> str:
+            """Echo back."""
+            return msg
+
+        agent = Agent(name="worker", tools=[echo], ptc=True)
+
+        # Provider for run_agent (non-streaming, uses complete())
+        run_provider = _make_provider(
+            [
+                AgentOutput(
+                    text="",
+                    tool_calls=[
+                        ToolCall(
+                            id="tc1",
+                            name=PTC_TOOL_NAME,
+                            arguments=json.dumps(
+                                {"code": 'await default_api.echo(msg="stale")'}
+                            ),
+                        )
+                    ],
+                ),
+                AgentOutput(text="done"),
+            ]
+        )
+
+        h = RunOnlyHarness(name="h", agents=[agent])
+
+        # Execute the harness with run_agent — RunOnlyHarness calls ctx.run_agent()
+        # which uses the non-streaming path. The harness output itself is just
+        # a HarnessEvent (no TextEvent), so result.output will be empty.
+        await h.run("test", provider=run_provider)
+
+        # The key assertion: the agent's _event_queue must be clean after
+        # the non-streaming run. PTC events should have been drained.
+        assert agent._event_queue.empty(), (
+            "PTC events should be drained after non-streaming run"
+        )

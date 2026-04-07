@@ -85,15 +85,23 @@ class SwarmNode:
 
         Returns:
             ``RunResult`` from the inner swarm's execution.
+
+        Raises:
+            NestedSwarmError: If the inner swarm execution fails.
         """
         # Context isolation: inner swarm gets fresh message history.
         # The outer swarm's messages are NOT forwarded — each swarm
         # maintains its own conversation context.
-        return await self._swarm.run(
-            input,
-            provider=provider,
-            max_retries=max_retries,
-        )
+        try:
+            return await self._swarm.run(
+                input,
+                provider=provider,
+                max_retries=max_retries,
+            )
+        except Exception as exc:
+            raise NestedSwarmError(
+                f"SwarmNode '{self.name}' failed: {exc}"
+            ) from exc
 
     async def stream(
         self,
@@ -119,14 +127,22 @@ class SwarmNode:
 
         Yields:
             ``StreamEvent`` instances from the inner swarm's execution.
+
+        Raises:
+            NestedSwarmError: If the inner swarm execution fails.
         """
-        async for event in self._swarm.stream(
-            input,
-            provider=provider,
-            detailed=detailed,
-            max_steps=max_steps,
-        ):
-            yield event
+        try:
+            async for event in self._swarm.stream(
+                input,
+                provider=provider,
+                detailed=detailed,
+                max_steps=max_steps,
+            ):
+                yield event
+        except Exception as exc:
+            raise NestedSwarmError(
+                f"SwarmNode '{self.name}' stream failed: {exc}"
+            ) from exc
 
     def describe(self) -> dict[str, Any]:
         """Return a summary including the inner swarm's description."""
@@ -175,9 +191,17 @@ class RalphNode:
 
         Returns:
             ``RunResult`` with the Ralph loop's final output.
+
+        Raises:
+            NestedSwarmError: If the Ralph loop fails.
         """
-        result = await self._runner.run(input)
-        return RunResult(output=result.output)
+        try:
+            result = await self._runner.run(input)
+            return RunResult(output=result.output)
+        except Exception as exc:
+            raise NestedSwarmError(
+                f"RalphNode '{self.name}' failed: {exc}"
+            ) from exc
 
     async def stream(
         self,
@@ -199,9 +223,17 @@ class RalphNode:
 
         Yields:
             ``StreamEvent`` instances from the Ralph loop execution.
+
+        Raises:
+            NestedSwarmError: If the Ralph loop fails.
         """
-        async for event in self._runner.stream(input, name=self.name):
-            yield event
+        try:
+            async for event in self._runner.stream(input, name=self.name):
+                yield event
+        except Exception as exc:
+            raise NestedSwarmError(
+                f"RalphNode '{self.name}' stream failed: {exc}"
+            ) from exc
 
     def __repr__(self) -> str:
         return f"RalphNode(name={self.name!r})"

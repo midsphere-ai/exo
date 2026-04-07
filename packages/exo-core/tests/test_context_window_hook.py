@@ -141,14 +141,14 @@ async def test_overflow_hook_receives_correct_info():
 
 
 # ---------------------------------------------------------------------------
-# 4. overflow="summarize" with CONTEXT_WINDOW hook fires after built-in
+# 4. overflow="summarize" with CONTEXT_WINDOW hook bypasses built-in
 # ---------------------------------------------------------------------------
 
 
-async def test_summarize_hook_fires_after_builtin():
+async def test_summarize_hook_bypasses_builtin():
     """When overflow=summarize and a CONTEXT_WINDOW hook is registered,
-    the hook fires AFTER the built-in windowing logic.
-    The info.total_messages should reflect the post-windowing count.
+    the hook fires INSTEAD of built-in windowing.
+    The info.total_messages should reflect the full, unmodified list.
     """
     captured: list[ContextWindowInfo] = []
 
@@ -168,17 +168,16 @@ async def test_summarize_hook_fires_after_builtin():
 
     assert len(captured) == 1
     info = captured[0]
-    # After built-in windowing, total_messages should be <= 20 + system
-    assert info.total_messages <= 21  # 20 non-system + 1 system
+    # Hook receives full unmodified list — built-in did NOT run
+    assert info.total_messages == 31  # 1 system + 15 user + 15 assistant
 
 
 # ---------------------------------------------------------------------------
-# 5. overflow="truncate" with CONTEXT_WINDOW hook fires augmentation after
-#    built-in truncation
+# 5. overflow="truncate" with CONTEXT_WINDOW hook bypasses built-in truncation
 # ---------------------------------------------------------------------------
 
 
-async def test_truncate_fires_augmentation_hook():
+async def test_truncate_hook_bypasses_builtin():
     captured: list[ContextWindowInfo] = []
 
     async def observe_hook(*, info: ContextWindowInfo, **_: Any):
@@ -193,31 +192,30 @@ async def test_truncate_fires_augmentation_hook():
 
     result, actions = await _apply_context_windowing(msg_list, ctx, provider=None, hook_manager=hm)
 
-    # Augmentation hook fires after truncation
+    # Hook fires instead of truncation — full list preserved
     assert len(captured) == 1
-    # After truncation: 10 non-system + 1 system = 11
-    assert captured[0].total_messages == 11
+    assert captured[0].total_messages == 17  # 1 system + 8 user + 8 assistant
 
-    assert len(result) == 11
+    assert len(result) == 17
 
-    # Verify there was a truncation action
+    # No built-in truncation action
     truncate_actions = [a for a in actions if a.action == "truncate"]
-    assert len(truncate_actions) == 1
+    assert len(truncate_actions) == 0
 
 
 # ---------------------------------------------------------------------------
-# 6. overflow="none" does NOT fire hook
+# 6. overflow="none" with hook still fires hook (hook is sole owner)
 # ---------------------------------------------------------------------------
 
 
-async def test_overflow_none_does_not_fire_hook():
+async def test_overflow_none_fires_hook_when_registered():
     called = []
 
-    async def should_not_fire(**_: Any):
+    async def ctx_hook(**_: Any):
         called.append(True)
 
     hm = HookManager()
-    hm.add(HookPoint.CONTEXT_WINDOW, should_not_fire)
+    hm.add(HookPoint.CONTEXT_WINDOW, ctx_hook)
 
     msg_list = _build_msg_list(n_user=5, n_assistant=5, system=True)
     ctx = _make_context(overflow="none")
@@ -226,7 +224,8 @@ async def test_overflow_none_does_not_fire_hook():
         msg_list, ctx, provider=None, hook_manager=hm
     )
 
-    assert called == []
+    # Hook fires even with overflow="none" — hook is sole owner
+    assert called == [True]
 
 
 # ---------------------------------------------------------------------------
@@ -379,13 +378,13 @@ async def test_hook_fires_every_step_in_tool_loop():
 
 
 # ---------------------------------------------------------------------------
-# 11. Hook fires every step with overflow="summarize" (augmentation mode)
+# 11. Hook fires every step with overflow="summarize" (replaces built-in)
 # ---------------------------------------------------------------------------
 
 
-async def test_hook_fires_every_step_summarize_augmentation():
-    """When overflow=summarize, the CONTEXT_WINDOW hook fires as augmentation
-    on every step — not only when summarization thresholds are met."""
+async def test_hook_fires_every_step_summarize_replaces_builtin():
+    """When overflow=summarize and a CONTEXT_WINDOW hook is registered,
+    the hook fires instead of built-in on every step."""
     captured_steps: list[int] = []
 
     async def record_step(*, info: ContextWindowInfo, **_: Any):
@@ -427,3 +426,56 @@ async def test_hook_fires_every_step_summarize_augmentation():
     assert result.output == "All echoed."
     # initial + 2 tool steps
     assert captured_steps == [-1, 0, 1]
+
+
+# ---------------------------------------------------------------------------
+# 12. CONTEXT_WINDOW hook bypasses built-in without overflow="hook"
+# ---------------------------------------------------------------------------
+
+
+async def test_hooks_bypass_builtin_without_overflow_hook():
+    """Registering a CONTEXT_WINDOW hook should bypass built-in strategies
+    even when overflow is not explicitly set to 'hook'."""
+    captured: list[ContextWindowInfo] = []
+
+    async def capture_hook(*, messages: list, info: ContextWindowInfo, **_: Any):
+        captured.append(info)
+
+    hm = HookManager()
+    hm.add(HookPoint.CONTEXT_WINDOW, capture_hook)
+
+    # 1 system + 12 user + 12 assistant = 25 messages, exceeds history_rounds=10
+    msg_list = _build_msg_list(n_user=12, n_assistant=12, system=True)
+    ctx = _make_context(overflow="summarize", history_rounds=10, summary_threshold=8)
+
+    result, actions = await _apply_context_windowing(msg_list, ctx, provider=None, hook_manager=hm)
+
+    assert len(captured) == 1
+    # Hook receives full unmodified list — no built-in ran
+    assert captured[0].total_messages == 25
+    assert len(result) == 25
+    # No built-in actions (no summarize, no window, no offload)
+    assert actions == []
+
+
+# ---------------------------------------------------------------------------
+# 13. Rails alone do NOT bypass built-in (only user hooks do)
+# ---------------------------------------------------------------------------
+
+
+async def test_rails_dont_bypass_builtin():
+    """When only rails are present (no user CONTEXT_WINDOW hooks),
+    built-in truncation should still run normally."""
+    msg_list = _build_msg_list(n_user=8, n_assistant=8, system=True)
+    ctx = _make_context(overflow="truncate", history_rounds=10)
+
+    # Empty hook_manager (simulates rails-only — rails no longer register
+    # for CONTEXT_WINDOW, so has_hooks(CONTEXT_WINDOW) is False)
+    hm = HookManager()
+
+    result, actions = await _apply_context_windowing(msg_list, ctx, provider=None, hook_manager=hm)
+
+    # Built-in truncation ran
+    assert len(result) == 11  # 10 non-system + 1 system
+    truncate_actions = [a for a in actions if a.action == "truncate"]
+    assert len(truncate_actions) == 1

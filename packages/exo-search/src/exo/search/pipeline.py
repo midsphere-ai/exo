@@ -67,17 +67,37 @@ async def run_search_pipeline(
 
     if mode == "speed":
         # Fast path: classifier and direct search in parallel
-        classification, search_results = await asyncio.gather(
+        classification_r, search_results_r = await asyncio.gather(
             classify(query, history, cfg),
             direct_search(query),
+            return_exceptions=True,
         )
+        if isinstance(classification_r, BaseException):
+            _log.warning("classifier failed in speed mode: %s", classification_r)
+            raise classification_r
+        classification = classification_r
+        if isinstance(search_results_r, BaseException):
+            _log.warning("direct_search failed in speed mode: %s", search_results_r)
+            search_results = []
+        else:
+            search_results = search_results_r
     else:
         # Speculative search: start a raw-query search concurrently with
         # classification so the first adaptive round sees existing results
-        classification, seed_results = await asyncio.gather(
+        classification_r, seed_results_r = await asyncio.gather(
             classify(query, history, cfg),
             direct_search(query),
+            return_exceptions=True,
         )
+        if isinstance(classification_r, BaseException):
+            _log.warning("classifier failed: %s", classification_r)
+            raise classification_r
+        classification = classification_r
+        if isinstance(seed_results_r, BaseException):
+            _log.warning("direct_search failed (seed): %s", seed_results_r)
+            seed_results = []
+        else:
+            seed_results = seed_results_r
         effective_query = classification.standalone_follow_up or query
 
         if not classification.classification.skip_search:
@@ -173,10 +193,20 @@ async def run_search_pipeline(
     # Step 3b: Verify citations and detect contradictions
     if mode in ("quality", "deep"):
         # Run citation verification and contradiction detection in parallel
-        (answer, verification), contradiction_report = await asyncio.gather(
+        verify_r, contradict_r = await asyncio.gather(
             verify_citations(answer, writer_results, mode, config=cfg),
             detect_contradictions(answer, writer_results, mode, cfg),
+            return_exceptions=True,
         )
+        if isinstance(verify_r, BaseException):
+            _log.warning("citation verification failed: %s", verify_r)
+            raise verify_r
+        answer, verification = verify_r
+        if isinstance(contradict_r, BaseException):
+            _log.warning("contradiction detection failed, skipping: %s", contradict_r)
+            contradiction_report = None
+        else:
+            contradiction_report = contradict_r
     else:
         answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
         contradiction_report = None
@@ -282,10 +312,20 @@ async def stream_search_pipeline(
 
     if mode == "speed":
         yield PipelineEvent(stage="classifier", status="started")
-        classification, search_results = await asyncio.gather(
+        classification_r, search_results_r = await asyncio.gather(
             classify(query, history, cfg),
             direct_search(query),
+            return_exceptions=True,
         )
+        if isinstance(classification_r, BaseException):
+            _log.warning("classifier failed in speed mode (stream): %s", classification_r)
+            raise classification_r
+        classification = classification_r
+        if isinstance(search_results_r, BaseException):
+            _log.warning("direct_search failed in speed mode (stream): %s", search_results_r)
+            search_results = []
+        else:
+            search_results = search_results_r
         yield PipelineEvent(stage="classifier", status="completed")
         yield PipelineEvent(
             stage="researcher",
@@ -294,10 +334,20 @@ async def stream_search_pipeline(
         )
     else:
         yield PipelineEvent(stage="classifier", status="started")
-        classification, seed_results = await asyncio.gather(
+        classification_r, seed_results_r = await asyncio.gather(
             classify(query, history, cfg),
             direct_search(query),
+            return_exceptions=True,
         )
+        if isinstance(classification_r, BaseException):
+            _log.warning("classifier failed (stream): %s", classification_r)
+            raise classification_r
+        classification = classification_r
+        if isinstance(seed_results_r, BaseException):
+            _log.warning("direct_search failed (stream seed): %s", seed_results_r)
+            seed_results = []
+        else:
+            seed_results = seed_results_r
         effective_query = classification.standalone_follow_up or query
         yield PipelineEvent(
             stage="classifier",
@@ -419,10 +469,20 @@ async def stream_search_pipeline(
     # Step 3b: Verify citations and detect contradictions
     if mode in ("quality", "deep"):
         # Run citation verification and contradiction detection in parallel
-        (answer, verification), contradiction_report = await asyncio.gather(
+        verify_r, contradict_r = await asyncio.gather(
             verify_citations(answer, writer_results, mode, config=cfg),
             detect_contradictions(answer, writer_results, mode, cfg),
+            return_exceptions=True,
         )
+        if isinstance(verify_r, BaseException):
+            _log.warning("citation verification failed (stream): %s", verify_r)
+            raise verify_r
+        answer, verification = verify_r
+        if isinstance(contradict_r, BaseException):
+            _log.warning("contradiction detection failed (stream), skipping: %s", contradict_r)
+            contradiction_report = None
+        else:
+            contradiction_report = contradict_r
     else:
         answer, verification = await verify_citations(answer, writer_results, mode, config=cfg)
         contradiction_report = None

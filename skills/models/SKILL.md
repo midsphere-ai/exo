@@ -1,6 +1,6 @@
 ---
 name: exo:models
-description: "Use when configuring Exo agent models and providers — model strings, provider selection, API keys, base URLs, ModelConfig, custom providers, get_provider(), model_registry, context windows, media generation tools, multimodal content, provider-specific options. Triggers on: model, provider, openai, anthropic, gemini, vertex, api_key, base_url, ModelConfig, get_provider, model_registry, MODEL_CONTEXT_WINDOWS, ModelResponse, StreamChunk, ModelError, custom provider, media tools, dalle, imagen, veo, context window, temperature, max_tokens."
+description: "Use when configuring Exo agent models and providers — model strings, provider selection, API keys, base URLs, ModelConfig, custom providers, get_provider(), model_registry, context windows, token counting, media generation tools, multimodal content, provider-specific options. Triggers on: model, provider, openai, anthropic, gemini, vertex, api_key, base_url, ModelConfig, get_provider, model_registry, MODEL_CONTEXT_WINDOWS, ModelResponse, StreamChunk, ModelError, custom provider, media tools, dalle, imagen, veo, context window, temperature, max_tokens, TokenCounter, count_tokens."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -30,6 +30,7 @@ Use this skill when the developer needs to:
 6. **Building a custom provider?** → Subclass `ModelProvider`, implement `complete()` + `stream()`, register with `model_registry`
 7. **Need image/video generation?** → Use `dalle_generate_image`, `imagen_generate_image`, or `veo_generate_video` tools
 8. **Need context window size?** → Check `MODEL_CONTEXT_WINDOWS` dict
+9. **Need to count tokens before sending?** → `count_tokens(text, model="openai:gpt-4o")` or `TokenCounter(model)` for bulk counting
 
 ## Reference
 
@@ -257,6 +258,34 @@ from exo.models import MODEL_CONTEXT_WINDOWS
 ```
 
 Used automatically by `get_provider()` to populate `ModelConfig.context_window_tokens`.
+
+### Token Counting
+
+For pre-call token estimation, use `TokenCounter` or the `count_tokens()` convenience function. These use tiktoken with provider-aware encoding selection.
+
+```python
+from exo import TokenCounter, count_tokens
+
+# Quick count (caches counter per model string)
+n = count_tokens("Hello, world!", model="anthropic:claude-sonnet-4-6")
+
+# Reusable counter
+counter = TokenCounter("openai:gpt-4o")
+n = counter.count("Some text to count")
+
+# Count chat messages (includes per-message overhead)
+total = counter.count_messages([
+    {"role": "user", "content": "Hello"},
+])
+
+# Token ↔ character conversion (encoding-aware ratios)
+chars = counter.tokens_to_chars(4096)
+tokens = counter.chars_to_tokens(10000)
+```
+
+**Accuracy:** Exact for OpenAI models (tiktoken is their tokenizer). ~95% for Anthropic, ~85-90% for Gemini/Vertex (best available local approximation).
+
+**Post-call usage:** For actual tokens consumed after an LLM call, use `ModelResponse.usage` or `RunResult.usage` — these are provider-reported and always exact.
 
 ### model_registry — Provider Registration
 

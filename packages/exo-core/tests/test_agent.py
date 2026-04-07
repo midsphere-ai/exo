@@ -899,7 +899,7 @@ class TestAgentToolLoop:
         second_call_msgs = provider.complete.call_args_list[1][0][0]
         tool_result_msgs = [m for m in second_call_msgs if m.role == "tool"]
         assert tool_result_msgs[0].error is not None
-        assert "Unknown tool" in tool_result_msgs[0].error
+        assert "unknown tool" in tool_result_msgs[0].error
 
     async def test_max_steps_enforcement(self) -> None:
         """Tool loop stops at max_steps even if LLM keeps returning tool calls."""
