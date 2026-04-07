@@ -963,11 +963,24 @@ class Agent:
         """Auto-load, bind, and register context tools when exo-context is installed.
 
         Called by ``__init__`` after context resolution. Skipped when
-        ``self.context`` is ``None`` or exo-context is not installed.
+        ``self.context`` is ``None``, exo-context is not installed, or the
+        overflow strategy is ``hook`` (context management fully delegated to hooks).
         Context tools are fresh instances per agent to avoid shared mutable state.
         """
         if self.context is None:
             return
+        # When overflow is "hook", context management is fully delegated to
+        # user-provided hooks — don't inject built-in context tools.
+        try:
+            from exo.context.config import OverflowStrategy  # pyright: ignore[reportMissingImports]
+
+            if self.context.config.overflow == OverflowStrategy.HOOK:
+                _log.debug(
+                    "skipping context tools for agent %r (overflow=hook)", self.name
+                )
+                return
+        except (ImportError, AttributeError):
+            pass
         try:
             from exo.context.tools import get_context_tools  # pyright: ignore[reportMissingImports]
 
