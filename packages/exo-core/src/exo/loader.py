@@ -106,6 +106,7 @@ def _build_agent(name: str, spec: dict[str, Any]) -> Any:
         "planning_instructions",
         "budget_awareness",
         "hitl_tools",
+        "bare_tools",
         "emit_mcp_progress",
         "injected_tool_args",
         "allow_parallel_subagents",

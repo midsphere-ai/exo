@@ -664,6 +664,9 @@ class Agent:
         budget_awareness: Optional context-budget mode. Valid values are
             ``"per-message"`` and ``"limit:<0-100>"``.
         hitl_tools: Tool names that require human approval before execution.
+        bare_tools: When ``True``, suppress auto-registered helper tools
+            (``retrieve_artifact``, context tools). ``activate_skill``,
+            ``spawn_self``, and PTC tools are **not** affected.
         emit_mcp_progress: Whether MCP progress events should be emitted.
         injected_tool_args: Schema-only tool arguments exposed to the LLM.
         allow_parallel_subagents: Enables the future parallel-subagent tool
@@ -698,6 +701,7 @@ class Agent:
         planning_instructions: str = "",
         budget_awareness: str | None = None,
         hitl_tools: list[str] | None = None,
+        bare_tools: bool = False,
         emit_mcp_progress: bool = True,
         injected_tool_args: dict[str, str] | None = None,
         allow_parallel_subagents: bool = False,
@@ -735,6 +739,7 @@ class Agent:
         self.allow_parallel_subagents = allow_parallel_subagents
         self.max_parallel_subagents = validate_max_parallel_subagents(max_parallel_subagents)
         normalized_hitl_tools = _normalize_hitl_tools(hitl_tools)
+        self.bare_tools: bool = bare_tools
         # Self-spawn: opt-in parallel sub-task spawning
         self.allow_self_spawn: bool = allow_self_spawn
         self.max_spawn_depth: int = max_spawn_depth
@@ -819,13 +824,14 @@ class Agent:
         if self._skill_registry is not None:
             self._register_tool(self._make_activate_skill_tool())
 
-        # Always register retrieve_artifact so any tool result that exceeds the
-        # EXO_LARGE_OUTPUT_THRESHOLD byte limit can be retrieved by the LLM.
-        if "retrieve_artifact" not in self.tools:
-            self._register_retrieve_artifact()
+        if not self.bare_tools:
+            # Register retrieve_artifact so any tool result that exceeds the
+            # EXO_LARGE_OUTPUT_THRESHOLD byte limit can be retrieved by the LLM.
+            if "retrieve_artifact" not in self.tools:
+                self._register_retrieve_artifact()
 
-        # Auto-load context tools (planning, knowledge, file) when context is available
-        self._auto_load_context_tools()
+            # Auto-load context tools (planning, knowledge, file) when context is available
+            self._auto_load_context_tools()
 
         # Handoff targets indexed by name
         self.handoffs: dict[str, Agent] = {}
@@ -902,7 +908,11 @@ class Agent:
         self.tools[t.name] = t
         self._cached_tool_schemas = None
         # Auto-register retrieve_artifact when the first large_output=True tool is added
-        if getattr(t, "large_output", False) and "retrieve_artifact" not in self.tools:
+        if (
+            not self.bare_tools
+            and getattr(t, "large_output", False)
+            and "retrieve_artifact" not in self.tools
+        ):
             self._register_retrieve_artifact()
 
     def _register_handoff(self, agent: Agent) -> None:
@@ -2094,6 +2104,7 @@ class Agent:
             "max_spawn_children": self.max_spawn_children,
             "ptc": self.ptc,
             "ptc_timeout": self.ptc_timeout,
+            "bare_tools": self.bare_tools,
         }
 
         # Serialize tools as importable dotted paths.
@@ -2171,6 +2182,7 @@ class Agent:
             max_spawn_children=data.get("max_spawn_children", 4),
             ptc=data.get("ptc", False),
             ptc_timeout=data.get("ptc_timeout", 60),
+            bare_tools=data.get("bare_tools", False),
         )
 
     def __repr__(self) -> str:

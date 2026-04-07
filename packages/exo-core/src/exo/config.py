@@ -183,6 +183,7 @@ class AgentConfig(BaseModel):
         planning_instructions: Optional planner-only instructions.
         budget_awareness: Context-budget handling mode.
         hitl_tools: Tool names that require human approval before execution.
+        bare_tools: Suppress auto-registered helper tools (retrieve_artifact, context tools).
         emit_mcp_progress: Whether MCP progress events are emitted.
         injected_tool_args: Schema-only tool arguments exposed to the model.
         allow_parallel_subagents: Whether the parallel-subagent tool is enabled.
@@ -202,6 +203,7 @@ class AgentConfig(BaseModel):
     planning_instructions: str = ""
     budget_awareness: str | None = None
     hitl_tools: list[str] = Field(default_factory=list)
+    bare_tools: bool = False
     emit_mcp_progress: bool = True
     injected_tool_args: dict[str, str] = Field(default_factory=dict)
     allow_parallel_subagents: bool = False
