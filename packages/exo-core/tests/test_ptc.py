@@ -267,15 +267,15 @@ class TestPTCExecutor:
     async def test_tool_call(self) -> None:
         agent = self._make_agent()
         executor = PTCExecutor(agent)
-        result = await executor.run('r = await greet(name="Alice")\nprint(r)')
+        result = await executor.run('r = await default_api.greet(name="Alice")\nprint(r)')
         assert "Hello, Alice!" in result
 
     async def test_multiple_tools_sequential(self) -> None:
         agent = self._make_agent()
         executor = PTCExecutor(agent)
         code = """\
-r1 = await greet(name="Alice")
-r2 = await add(a=3, b=4)
+r1 = await default_api.greet(name="Alice")
+r2 = await default_api.add(a=3, b=4)
 print(f"{r1} sum={r2}")
 """
         result = await executor.run(code)
@@ -287,9 +287,9 @@ print(f"{r1} sum={r2}")
         executor = PTCExecutor(agent)
         code = """\
 results = await asyncio.gather(
-    greet(name="A"),
-    greet(name="B"),
-    greet(name="C"),
+    default_api.greet(name="A"),
+    default_api.greet(name="B"),
+    default_api.greet(name="C"),
 )
 for r in results:
     print(r)
@@ -304,7 +304,7 @@ for r in results:
         agent = self._make_agent()
         executor = PTCExecutor(agent)
         code = """\
-data = json.loads(await search(query="test", max_results=5))
+data = json.loads(await default_api.search(query="test", max_results=5))
 high_rank = [d for d in data if d["rank"] >= 3]
 print(json.dumps(high_rank))
 """
@@ -329,7 +329,7 @@ print(json.dumps(high_rank))
         agent = Agent(name="test", tools=[failing_tool], ptc=True)
         executor = PTCExecutor(agent)
         # Error should appear in the output (caught by outer handler)
-        result = await executor.run('await failing_tool(msg="boom")')
+        result = await executor.run('await default_api.failing_tool(msg="boom")')
         assert "Intentional error: boom" in result
 
     async def test_tool_error_catchable_in_code(self) -> None:
@@ -338,10 +338,10 @@ print(json.dumps(high_rank))
         executor = PTCExecutor(agent)
         code = """\
 try:
-    await failing_tool(msg="oops")
+    await default_api.failing_tool(msg="oops")
 except Exception as e:
     print(f"caught: {e}")
-r = await greet(name="OK")
+r = await default_api.greet(name="OK")
 print(r)
 """
         result = await executor.run(code)
@@ -392,7 +392,7 @@ class TestPTCHooks:
         agent.hook_manager.add(HookPoint.POST_TOOL_CALL, capture_hook)
 
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="Test")')
+        await executor.run('await default_api.greet(name="Test")')
 
         # PRE + POST for the inner greet call
         tool_names = [name for name, _ in hook_calls]
@@ -409,7 +409,7 @@ class TestPTCHooks:
         agent.hook_manager.add(HookPoint.PRE_TOOL_CALL, capture_pre)
 
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="Alice")')
+        await executor.run('await default_api.greet(name="Alice")')
 
         assert len(captured_args) == 1
         assert captured_args[0] == {"name": "Alice"}
@@ -424,7 +424,7 @@ class TestPTCHooks:
         agent.hook_manager.add(HookPoint.PRE_TOOL_CALL, capture_pre)
 
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="A")\nawait add(a=1, b=2)')
+        await executor.run('await default_api.greet(name="A")\nawait default_api.add(a=1, b=2)')
 
         assert "greet" in pre_calls
         assert "add" in pre_calls
@@ -461,7 +461,9 @@ class TestPTCIntegration:
         tc = ToolCall(
             id="tc-1",
             name=PTC_TOOL_NAME,
-            arguments=json.dumps({"code": 'r = await greet(name="World")\nprint(r)'}),
+            arguments=json.dumps(
+                {"code": 'r = await default_api.greet(name="World")\nprint(r)'}
+            ),
         )
         resp_tool = ModelResponse(
             content="",
@@ -486,7 +488,9 @@ class TestPTCIntegration:
         tc = ToolCall(
             id="tc-1",
             name=PTC_TOOL_NAME,
-            arguments=json.dumps({"code": 'r = await greet(name="Test")\nprint(r)'}),
+            arguments=json.dumps(
+                {"code": 'r = await default_api.greet(name="Test")\nprint(r)'}
+            ),
         )
         # Track messages sent to provider
         call_count = 0
@@ -590,7 +594,7 @@ class TestPTCTransparency:
     async def test_single_tool_emits_events(self) -> None:
         agent = Agent(name="test", tools=[greet], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="Alice")')
+        await executor.run('await default_api.greet(name="Alice")')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -612,7 +616,7 @@ class TestPTCTransparency:
     async def test_multiple_tools_emit_ordered_events(self) -> None:
         agent = Agent(name="test", tools=[greet, add], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="A")\nawait add(a=1, b=2)')
+        await executor.run('await default_api.greet(name="A")\nawait default_api.add(a=1, b=2)')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -634,7 +638,7 @@ class TestPTCTransparency:
     async def test_error_tool_emits_failure_event(self) -> None:
         agent = Agent(name="test", tools=[failing_tool], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await failing_tool(msg="boom")')
+        await executor.run('await default_api.failing_tool(msg="boom")')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -648,7 +652,7 @@ class TestPTCTransparency:
     async def test_events_have_unique_call_ids(self) -> None:
         agent = Agent(name="test", tools=[greet], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="A")\nawait greet(name="B")')
+        await executor.run('await default_api.greet(name="A")\nawait default_api.greet(name="B")')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -661,7 +665,7 @@ class TestPTCTransparency:
     async def test_call_and_result_share_call_id(self) -> None:
         agent = Agent(name="test", tools=[greet], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="X")')
+        await executor.run('await default_api.greet(name="X")')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -674,7 +678,7 @@ class TestPTCTransparency:
     async def test_result_has_duration(self) -> None:
         agent = Agent(name="test", tools=[greet], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="A")')
+        await executor.run('await default_api.greet(name="A")')
 
         events: list[Any] = []
         while not agent._event_queue.empty():
@@ -687,7 +691,7 @@ class TestPTCTransparency:
         """No event should reference the internal PTC tool name."""
         agent = Agent(name="test", tools=[greet, add], ptc=True)
         executor = PTCExecutor(agent)
-        await executor.run('await greet(name="A")\nawait add(a=1, b=2)')
+        await executor.run('await default_api.greet(name="A")\nawait default_api.add(a=1, b=2)')
 
         events: list[Any] = []
         while not agent._event_queue.empty():

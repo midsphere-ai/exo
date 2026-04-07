@@ -60,7 +60,7 @@ With PTC (ptc=True):
   LLM → tool_use: __exo_ptc__(code="""
       results = {}
       for region in ["A", "B", "C", ...]:
-          data = json.loads(await search(query=region))
+          data = json.loads(await default_api.search(query=region))
           results[region] = sum(d['revenue'] for d in data)
       top = sorted(results.items(), key=lambda x: x[1])[-3:]
       print(f"Top 3: {top}")
@@ -93,15 +93,15 @@ When `ptc=True`, tools are split into two groups:
 
 | Category | In schema list? | Available in PTC code? |
 |----------|----------------|----------------------|
-| User tools (`@tool`, `FunctionTool`, `Tool` subclass) | NO | YES — as `await tool_name(...)` |
-| MCP tools (`add_mcp_server`) | NO | YES — as `await mcp__server__tool(...)` |
+| User tools (`@tool`, `FunctionTool`, `Tool` subclass) | NO | YES — as `await default_api.tool_name(...)` |
+| MCP tools (`add_mcp_server`) | NO | YES — as `await default_api.mcp__server__tool(...)` |
 | `__exo_ptc__` (internal) | YES | NO (itself) |
 | Framework tools (`retrieve_artifact`, `spawn_self`, `activate_skill`) | YES | NO |
 | Context tools (`_is_context_tool`) | YES | NO |
 | HITL tools (`hitl_tools`) | YES | NO — approval flow preserved |
 | Handoff targets | YES | NO |
 
-The LLM sees the PTC tool plus any direct tools. Inside the code, user/MCP tools are callable as async functions.
+The LLM sees the PTC tool plus any direct tools. Inside the code, tools are accessed via the `default_api` namespace to avoid collisions with Python builtins and keywords.
 
 ### PTC Tool Internals
 
@@ -110,10 +110,10 @@ Auto-registered when `ptc=True` as `__exo_ptc__`. The LLM calls it with Python c
 ```python
 # What the LLM sends:
 __exo_ptc__(code="""
-members = json.loads(await get_team_members(department="engineering"))
+members = json.loads(await default_api.get_team_members(department="engineering"))
 over_budget = []
 for m in members:
-    expenses = json.loads(await get_expenses(employee_id=m['id'], quarter='Q3'))
+    expenses = json.loads(await default_api.get_expenses(employee_id=m['id'], quarter='Q3'))
     travel = sum(e['amount'] for e in expenses if e['category'] == 'travel')
     if travel > m['budget']:
         over_budget.append(f"{m['name']}: ${travel:,.0f}")
@@ -122,11 +122,12 @@ print("Over budget:\\n" + "\\n".join(over_budget))
 ```
 
 **Code execution environment:**
-- Tools available as `async def` functions — use `await` to call them
+- Tools accessed via `default_api` namespace — use `await default_api.tool_name(...)` to call them
 - `print()` captures to stdout — this is the primary output mechanism
 - Return values are also captured (combined with stdout)
 - Standard library modules pre-loaded: `json`, `math`, `re`, `asyncio`, `collections`, `itertools`, `datetime`
-- `asyncio.gather()` works for parallel tool calls within the code
+- `asyncio.gather()` works for parallel tool calls: `await asyncio.gather(default_api.a(), default_api.b())`
+- The `default_api` namespace prevents tool names from colliding with Python builtins (`map`, `list`, `type`, `id`, etc.), keywords (`return`, `class`), or stdlib modules (`json`, `math`, `re`)
 
 ### PTCExecutor
 
@@ -158,7 +159,7 @@ agent = Agent(
     ptc=True,
     hooks=[(HookPoint.PRE_TOOL_CALL, log_tool_call)],
 )
-# When PTC runs and calls search() + query_db() inside the code,
+# When PTC runs and calls default_api.search() + default_api.query_db() inside the code,
 # log_tool_call fires twice — once per inner tool call
 ```
 
@@ -180,7 +181,7 @@ def emit_progress(status: str, ctx: ToolContext) -> str:
     return f"Reported: {status}"
 
 agent = Agent(name="bot", tools=[emit_progress, search], ptc=True)
-# Inside PTC code, await emit_progress(status="step 1") works — ToolContext injected
+# Inside PTC code, await default_api.emit_progress(status="step 1") works — ToolContext injected
 ```
 
 ### Swarm Propagation
@@ -260,7 +261,7 @@ agent = Agent(
 The LLM writes:
 ```python
 queries = ["topic A latest", "topic A research", "topic A comparison"]
-results = await asyncio.gather(*[web_search(query=q) for q in queries])
+results = await asyncio.gather(*[default_api.web_search(query=q) for q in queries])
 all_items = []
 for r in results:
     all_items.extend(json.loads(r))
@@ -282,7 +283,7 @@ agent = Agent(
     hitl_tools=["execute_trade"],  # Requires human approval
     ptc=True,
 )
-# get_portfolio and get_market_data → inside PTC code (batch-friendly)
+# get_portfolio and get_market_data → inside PTC code as default_api.get_portfolio() etc. (batch-friendly)
 # execute_trade → stays as direct tool (approval flow preserved)
 # LLM can batch-read portfolio data in code, then call execute_trade directly
 ```
@@ -301,8 +302,8 @@ await agent.add_mcp_server(MCPServerConfig(
     command="github-mcp-server",
     transport="stdio",
 ))
-# MCP tools (mcp__github__search_repos, etc.) are now available
-# inside PTC code alongside local_analyzer
+# MCP tools are now available via default_api.mcp__github__search_repos() etc.
+# alongside default_api.local_analyzer()
 ```
 
 ### Dynamic Tool Addition with PTC
@@ -325,6 +326,7 @@ agent.remove_tool("search")
 - **Code runs in-process** — there is no sandbox. The code executes in the same Python runtime as the agent. This is fast but means the LLM-generated code has access to the process environment. For untrusted models, consider additional guardrails.
 - **`asyncio.wait_for` timeout doesn't interrupt sync loops** — `ptc_timeout` catches `await asyncio.sleep(forever)` but not `while True: pass`. This is acceptable because the LLM writes the code and `max_steps` provides an outer guard.
 - **Tool results inside PTC are strings** — tools return strings (or JSON-serialized dicts/lists). The code must `json.loads()` to work with structured data.
+- **Tools live in `default_api` namespace** — this prevents collisions with Python builtins (`map`, `list`, `filter`, `type`, `id`), keywords (`return`, `class`, `for`), and stdlib modules (`json`, `math`, `re`). Always use `await default_api.tool_name(...)`.
 - **HITL tools are excluded from PTC** — they stay as direct schemas so the human approval flow is never bypassed. The LLM sees both the PTC tool and the HITL tools as separate callable tools.
 - **Handoff tools are excluded from PTC** — handoffs must be direct tool calls to trigger agent transitions correctly.
 - **`__exo_ptc__` name is reserved** — if a user tool is already named `__exo_ptc__`, setting `ptc=True` raises `AgentError`. This name uses dunder convention to avoid collisions.

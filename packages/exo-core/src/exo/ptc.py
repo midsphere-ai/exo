@@ -130,16 +130,22 @@ def schema_to_python_sig(tool: Tool) -> str:
 
 
 def build_tool_signatures(tools: dict[str, Tool]) -> str:
-    """Build a description block listing all PTC-eligible tools as function signatures."""
+    """Build a description block listing all PTC-eligible tools as function signatures.
+
+    Signatures are shown as ``default_api.<name>(...)`` so the LLM writes
+    code using the namespace object, avoiding collisions with Python builtins.
+    """
     if not tools:
         return "(no tools available)"
 
     lines: list[str] = []
     for tool in tools.values():
         sig = schema_to_python_sig(tool)
+        # Rewrite "async def name(" → "await default_api.name(" for display
         lines.append(f"  {sig}")
         if tool.description:
             lines.append(f'    """{tool.description}"""')
+        lines.append(f"    # usage: await default_api.{tool.name}(...)")
         lines.append("")
     return "\n".join(lines)
 
@@ -151,12 +157,15 @@ def build_tool_signatures(tools: dict[str, Tool]) -> str:
 _PTC_PREAMBLE = """\
 Execute Python code that calls the agent's tools as async functions.
 
-Use `await` to call tool functions. Use `print()` to output results.
+Tools are accessed via the `default_api` namespace:
+  result = await default_api.tool_name(arg=value)
+
+Use `print()` to output results.
 The printed output (and/or the return value) will be returned.
 Standard library modules are available: json, math, re, asyncio,
 collections, itertools, datetime.
 
-Available tool functions:
+Available tool functions (call via default_api):
 
 """
 
@@ -187,7 +196,7 @@ class PTCTool(Tool):
                     "type": "string",
                     "description": (
                         "Python code to execute. "
-                        "Call tools with `await tool_name(arg=value)`. "
+                        "Call tools with `await default_api.tool_name(arg=value)`. "
                         "Use `print()` to output results."
                     ),
                 },
@@ -222,6 +231,24 @@ class PTCTool(Tool):
         code: str = kwargs.get("code", "")
         executor = PTCExecutor(self._agent, timeout=self._timeout)
         return await executor.run(code)
+
+
+# ---------------------------------------------------------------------------
+# Tool namespace — isolates tool functions from Python builtins/keywords
+# ---------------------------------------------------------------------------
+
+
+class _ToolNamespace:
+    """Simple attribute-based namespace for PTC tool functions.
+
+    Tools are set as attributes so the LLM writes
+    ``await default_api.search(...)`` instead of bare ``await search(...)``.
+    This prevents collisions with Python builtins (``map``, ``list``,
+    ``filter``, ``type``, ``id``, etc.), keywords (``return``, ``class``),
+    and stdlib modules (``json``, ``math``, ``re``, etc.).
+    """
+
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -296,13 +323,22 @@ class PTCExecutor:
     # -- namespace construction --
 
     def _build_namespace(self) -> dict[str, Any]:
-        """Create the execution namespace with tool wrappers and stdlib."""
+        """Create the execution namespace with tool wrappers and stdlib.
+
+        Tools are exposed via a ``default_api`` namespace object so that
+        tool names never collide with Python builtins, keywords, or the
+        stdlib modules available in the PTC environment.  The LLM writes
+        ``await default_api.search(query="test")`` instead of bare
+        ``await search(query="test")``.
+        """
         ns: dict[str, Any] = {"__builtins__": __builtins__}
         ns.update(_PTC_STDLIB)
 
         eligible = get_ptc_eligible_tools(self._agent)
+        api = _ToolNamespace()
         for tool in eligible.values():
-            ns[tool.name] = self._make_tool_fn(tool)
+            setattr(api, tool.name, self._make_tool_fn(tool))
+        ns["default_api"] = api
 
         return ns
 
