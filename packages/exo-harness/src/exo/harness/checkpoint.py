@@ -54,6 +54,7 @@ class CheckpointAdapter:
                 "session_state": checkpoint.session_state,
                 "completed_agents": checkpoint.completed_agents,
                 "pending_agent": checkpoint.pending_agent,
+                "pending_agents": checkpoint.pending_agents,
                 "messages": checkpoint.messages,
                 "timestamp": checkpoint.timestamp,
                 "metadata": checkpoint.metadata,
@@ -82,11 +83,16 @@ class CheckpointAdapter:
         if not items:
             return None
         data: dict[str, Any] = json.loads(items[0].content)
+        # Backward compat: migrate old single pending_agent to list
+        pending_agents = data.get("pending_agents", [])
+        if not pending_agents and data.get("pending_agent"):
+            pending_agents = [data["pending_agent"]]
         return HarnessCheckpoint(
             harness_name=data["harness_name"],
             session_state=data["session_state"],
             completed_agents=data["completed_agents"],
             pending_agent=data.get("pending_agent"),
+            pending_agents=pending_agents,
             messages=data.get("messages", []),
             timestamp=data.get("timestamp", 0.0),
             metadata=data.get("metadata", {}),

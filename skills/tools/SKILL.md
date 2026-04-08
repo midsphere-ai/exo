@@ -226,6 +226,46 @@ async for event in run.stream(parent, "AI trends", provider=provider):
 
 **Only works with `FunctionTool` / `@tool`:** Custom `Tool` ABC subclasses don't support auto-injection.
 
+### ToolContext.require_approval() (On-Demand HITL)
+
+Tools can self-gate with human approval using `ctx.require_approval()`. The tool decides when approval is needed based on its own logic — no agent-level configuration required.
+
+**Setup:** Set `human_input_handler` on the Agent to provide the approval mechanism:
+
+```python
+from exo import Agent, tool, ToolContext, ConsoleHandler
+
+@tool
+async def run_command(command: str, ctx: ToolContext) -> str:
+    """Execute a shell command.
+
+    Args:
+        command: The shell command to run.
+    """
+    # Gate sensitive operations
+    if any(p in command for p in ["rm ", "sudo ", "DROP ", "chmod "]):
+        await ctx.require_approval(f"Sensitive command: {command}\nApprove?")
+    return subprocess.check_output(command, shell=True, text=True)
+
+agent = Agent(
+    name="ops",
+    tools=[run_command],
+    human_input_handler=ConsoleHandler(),  # provides the approval mechanism
+)
+```
+
+**How it works:**
+1. Tool calls `await ctx.require_approval(message)` at any point during execution
+2. The handler (from `Agent.human_input_handler`) prompts the human with `message` and choices `["yes", "no"]`
+3. If approved ("yes"/"y"), execution continues normally
+4. If denied, raises `ToolError("Tool execution denied by human")` — the LLM sees the denial and can adjust
+
+**Key behaviors:**
+- `require_approval()` raises `ToolError` if no `human_input_handler` is set on the agent — fail-fast, never silently skip approval
+- The tool controls when and why approval is needed — dynamic gating based on arguments, state, or any condition
+- Works with any `HumanInputHandler` implementation (console, web UI, Slack, etc.)
+- The `message` parameter is fully customizable — include relevant context for the human reviewer
+
 ### injected_tool_args (Schema-Only Arguments)
 
 Arguments that appear in the LLM's tool schema and the LLM fills in, but are **stripped before the tool executes**. The tool function never receives them.
@@ -521,6 +561,8 @@ Use the bash tool to execute these commands instead of calling tools directly.""
 - **`ToolContext` only works with `@tool` / `FunctionTool`** — `Tool` ABC subclasses and MCP tools don't get auto-injection
 - **`ToolContext.emit()` is non-blocking** — events are buffered and drained after tool execution, not yielded in real-time
 - **Sync tools can't use `ToolContext`** — `emit()` calls `asyncio.Queue.put_nowait()` which is unsafe from a thread. Use async tools for inner agent streaming.
+- **`require_approval()` needs `human_input_handler`** — raises `ToolError` if the agent has no handler set. This is intentional: if a tool requires approval, silently skipping it is a security risk.
+- **`require_approval()` needs async tools** — it's an `await` call, so the tool must be `async def`
 - **Tool offloading: `--from` must be importable** — the module's dependencies must be installed in the current Python environment. If using a file path, it's loaded in isolation.
 - **Tool offloading: ToolContext not available** — CLI-invoked tools don't have an agent context, so `ToolContext`-dependent tools will fail. Use tools without `ToolContext` for offloading.
 - **Tool offloading: async tools work fine** — `asyncio.run()` drives async tool execution from the CLI.

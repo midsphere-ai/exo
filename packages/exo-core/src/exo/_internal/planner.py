@@ -120,6 +120,7 @@ def _build_planner_agent(agent: Any, planner_model: str, planner_instructions: s
         max_tokens=getattr(agent, "max_tokens", None),
         budget_awareness=getattr(agent, "budget_awareness", None),
         hitl_tools=list(getattr(agent, "hitl_tools", [])),
+        human_input_handler=getattr(agent, "_human_input_handler", None),
         emit_mcp_progress=getattr(agent, "emit_mcp_progress", True),
         injected_tool_args=dict(getattr(agent, "injected_tool_args", {})),
         allow_parallel_subagents=getattr(agent, "allow_parallel_subagents", False),

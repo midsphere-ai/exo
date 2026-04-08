@@ -204,6 +204,67 @@ agent = Agent(
 )
 ```
 
+## Tool-Level Approval with `require_approval()`
+
+Instead of relying on the LLM to call a separate `HumanInputTool`, tools can gate themselves on human approval using `ToolContext.require_approval()`. The tool decides when approval is needed based on its own logic.
+
+### Setup
+
+Set `human_input_handler` on the Agent:
+
+```python
+from exo import Agent, tool, ToolContext, ConsoleHandler
+
+@tool
+async def delete_file(path: str, ctx: ToolContext) -> str:
+    """Delete a file from the filesystem.
+
+    Args:
+        path: Path to the file to delete.
+    """
+    await ctx.require_approval(f"About to delete {path}. Approve?")
+    import os
+    os.remove(path)
+    return f"Deleted {path}"
+
+agent = Agent(
+    name="file_manager",
+    tools=[delete_file],
+    human_input_handler=ConsoleHandler(),
+)
+```
+
+### Conditional Approval
+
+The power of `require_approval()` is that the tool controls when it triggers:
+
+```python
+@tool
+async def run_sql(query: str, ctx: ToolContext) -> str:
+    """Execute a SQL query.
+
+    Args:
+        query: The SQL query to execute.
+    """
+    # Only gate writes, not reads
+    if not query.strip().upper().startswith("SELECT"):
+        await ctx.require_approval(f"Non-SELECT query:\n{query}\nApprove?")
+    return execute_query(query)
+```
+
+### Behavior
+
+- **Approved:** Execution continues normally
+- **Denied:** Raises `ToolError("Tool execution denied by human")` — the LLM sees this and can adjust
+- **No handler:** Raises `ToolError` immediately — never silently skips approval
+
+### When to Use Which
+
+| Approach | Best For |
+|----------|----------|
+| `HumanInputTool` | LLM-directed: agent decides when to ask the human |
+| `ctx.require_approval()` | Tool-directed: tool gates itself based on arguments |
+
 ## Patterns
 
 ### Confirmation Before Dangerous Actions
@@ -254,6 +315,8 @@ agent = Agent(
 
 | Symbol | Module | Description |
 |--------|--------|-------------|
-| `HumanInputTool` | `exo.human` | Tool that pauses for human input |
+| `HumanInputTool` | `exo.human` | Tool that pauses for human input (LLM-directed) |
 | `HumanInputHandler` | `exo.human` | ABC for custom input mechanisms |
 | `ConsoleHandler` | `exo.human` | Built-in stdin/stderr handler |
+| `ToolContext.require_approval()` | `exo.tool_context` | On-demand approval gate inside tools (tool-directed) |
+| `Agent(human_input_handler=...)` | `exo.agent` | Sets the handler used by `require_approval()` |

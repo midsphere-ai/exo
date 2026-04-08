@@ -539,6 +539,31 @@ class RalphStopEvent(BaseModel):
     agent_name: str = ""
 
 
+class HITLApprovalEvent(BaseModel):
+    """Emitted when a HITL tool's approval prompt is resolved.
+
+    Records whether the human approved or denied execution of a tool
+    that was listed in the agent's ``hitl_tools``.
+
+    Args:
+        type: Discriminator literal, always ``"hitl_approval"``.
+        tool_name: Name of the tool that required approval.
+        tool_call_id: Identifier linking back to the originating tool call.
+        arguments: JSON-encoded string of the tool arguments.
+        approved: Whether the human approved execution.
+        agent_name: Name of the agent that requested approval.
+    """
+
+    model_config = {"frozen": True}
+
+    type: Literal["hitl_approval"] = "hitl_approval"
+    tool_name: str
+    tool_call_id: str
+    arguments: str = ""
+    approved: bool
+    agent_name: str = ""
+
+
 StreamEvent = (
     TextEvent
     | ToolCallEvent
@@ -554,4 +579,5 @@ StreamEvent = (
     | MessageInjectedEvent
     | RalphIterationEvent
     | RalphStopEvent
+    | HITLApprovalEvent
 )

@@ -390,6 +390,7 @@ class PTCExecutor:
                 kwargs[tool_obj._tool_context_param] = ToolContext(
                     agent_name=agent.name,
                     queue=agent._event_queue,
+                    human_input_handler=getattr(agent, "_human_input_handler", None),
                 )
 
             start = time.time()

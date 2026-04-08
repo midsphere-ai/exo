@@ -288,6 +288,27 @@ agent = Agent(
 # LLM can batch-read portfolio data in code, then call execute_trade directly
 ```
 
+### PTC with Tool-Level require_approval()
+
+Tools that use `ToolContext.require_approval()` for on-demand HITL can also participate in PTC — but only if they are NOT in `hitl_tools`. The `require_approval()` call blocks inside the PTC code execution when triggered:
+
+```python
+@tool
+async def execute_trade(ticker: str, amount: float, ctx: ToolContext) -> str:
+    """Execute a stock trade."""
+    if amount > 10000:
+        await ctx.require_approval(f"Large trade: {ticker} ${amount}. Approve?")
+    return f"Executed: {ticker} ${amount}"
+
+agent = Agent(
+    name="trader",
+    tools=[get_portfolio, get_market_data, execute_trade],
+    human_input_handler=ConsoleHandler(),
+    ptc=True,
+    # execute_trade is PTC-eligible (not in hitl_tools) but self-gates for large amounts
+)
+```
+
 ### PTC with MCP Servers
 
 ```python

@@ -1,4 +1,4 @@
-"""Tests for the human-in-the-loop tool."""
+"""Tests for the human-in-the-loop tool and HITL enforcement."""
 
 from __future__ import annotations
 
@@ -6,8 +6,11 @@ import asyncio
 
 import pytest
 
+from exo.agent import Agent
 from exo.human import ConsoleHandler, HumanInputHandler, HumanInputTool
-from exo.tool import Tool, ToolError
+from exo.tool import Tool, ToolError, tool
+from exo.tool_context import ToolContext
+from exo.types import ActionModel
 
 # ---------------------------------------------------------------------------
 # Mock handler for testing
@@ -186,3 +189,133 @@ class TestConsoleHandler:
         monkeypatch.setattr(ConsoleHandler, "_read_line", staticmethod(lambda _: "  trimmed  \n"))
         result = await handler.get_input("Say something")
         assert result == "trimmed"
+
+
+# ---------------------------------------------------------------------------
+# Helper tools for HITL enforcement tests
+# ---------------------------------------------------------------------------
+
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone."""
+    return f"Hello, {name}!"
+
+
+@tool
+async def sensitive_greet(name: str, ctx: ToolContext) -> str:
+    """Greet someone, but require approval first."""
+    await ctx.require_approval(f"About to greet {name}. Approve?")
+    return f"Hello, {name}!"
+
+
+@tool
+def add(a: int, b: int) -> str:
+    """Add two numbers."""
+    return str(a + b)
+
+
+# ---------------------------------------------------------------------------
+# HITL enforcement tests — tool-level require_approval via ToolContext
+# ---------------------------------------------------------------------------
+
+
+class TestRequireApproval:
+    """Tests for ToolContext.require_approval() — tool-level HITL gating."""
+
+    def _make_agent(
+        self,
+        handler: HumanInputHandler | None = None,
+    ) -> Agent:
+        return Agent(
+            name="test_agent",
+            tools=[greet, sensitive_greet, add],
+            human_input_handler=handler,
+        )
+
+    async def test_approved_executes(self) -> None:
+        handler = MockHandler(response="yes")
+        agent = self._make_agent(handler=handler)
+        actions = [
+            ActionModel(
+                tool_call_id="tc1",
+                tool_name="sensitive_greet",
+                arguments={"name": "Alice"},
+            )
+        ]
+        results = await agent._execute_tools(actions)
+        assert results[0].error is None or results[0].error == ""
+        assert "Hello, Alice!" in results[0].content
+        assert handler.call_count == 1
+
+    async def test_denied_returns_error(self) -> None:
+        handler = MockHandler(response="no")
+        agent = self._make_agent(handler=handler)
+        actions = [
+            ActionModel(
+                tool_call_id="tc1",
+                tool_name="sensitive_greet",
+                arguments={"name": "Alice"},
+            )
+        ]
+        results = await agent._execute_tools(actions)
+        assert "denied by human" in results[0].error
+        assert handler.call_count == 1
+
+    async def test_non_hitl_tool_unaffected(self) -> None:
+        handler = MockHandler(response="no")
+        agent = self._make_agent(handler=handler)
+        actions = [
+            ActionModel(tool_call_id="tc1", tool_name="add", arguments={"a": 1, "b": 2})
+        ]
+        results = await agent._execute_tools(actions)
+        assert results[0].error is None or results[0].error == ""
+        assert "3" in results[0].content
+        assert handler.call_count == 0
+
+    async def test_no_handler_raises_tool_error(self) -> None:
+        agent = self._make_agent(handler=None)
+        actions = [
+            ActionModel(
+                tool_call_id="tc1",
+                tool_name="sensitive_greet",
+                arguments={"name": "Bob"},
+            )
+        ]
+        results = await agent._execute_tools(actions)
+        assert "no human_input_handler" in results[0].error
+
+    async def test_handler_receives_custom_message(self) -> None:
+        handler = MockHandler(response="yes")
+        agent = self._make_agent(handler=handler)
+        actions = [
+            ActionModel(
+                tool_call_id="tc1",
+                tool_name="sensitive_greet",
+                arguments={"name": "Eve"},
+            )
+        ]
+        await agent._execute_tools(actions)
+        assert "About to greet Eve" in handler.last_prompt
+
+    async def test_mixed_tools_parallel(self) -> None:
+        handler = MockHandler(response="yes")
+        agent = self._make_agent(handler=handler)
+        actions = [
+            ActionModel(
+                tool_call_id="tc1",
+                tool_name="sensitive_greet",
+                arguments={"name": "Alice"},
+            ),
+            ActionModel(tool_call_id="tc2", tool_name="add", arguments={"a": 2, "b": 3}),
+        ]
+        results = await agent._execute_tools(actions)
+        assert "Hello, Alice!" in results[0].content
+        assert "5" in results[1].content
+        assert handler.call_count == 1
+
+    async def test_to_dict_raises_with_handler(self) -> None:
+        handler = MockHandler(response="yes")
+        agent = self._make_agent(handler=handler)
+        with pytest.raises(ValueError, match="human_input_handler"):
+            agent.to_dict()

@@ -27,7 +27,13 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-from exo.harness.types import HarnessCheckpoint, HarnessEvent, SessionState
+from exo.harness.types import (
+    HarnessCheckpoint,
+    HarnessEvent,
+    SessionState,
+    SubAgentResult,
+    SubAgentTask,
+)
 from exo.types import (
     ErrorEvent,
     ExoError,
@@ -88,6 +94,7 @@ class HarnessContext:
         self.provider = provider
         self.detailed = detailed
         self.max_steps = max_steps
+        self._cancel_agents: dict[str, asyncio.Event] = {}
 
     async def run_agent(
         self,
@@ -166,6 +173,97 @@ class HarnessContext:
         ):
             yield event
 
+    async def run_agents_parallel(
+        self,
+        tasks: list[SubAgentTask],
+        *,
+        continue_on_error: bool = False,
+        max_concurrency: int | None = None,
+    ) -> list[SubAgentResult]:
+        """Run multiple agents concurrently and collect results.
+
+        Args:
+            tasks: Agent tasks to execute in parallel.
+            continue_on_error: When ``False`` (default), raises
+                ``SubAgentError`` on first failure.  When ``True``,
+                captures errors per-agent and returns all results.
+            max_concurrency: Limit concurrent agents via semaphore.
+                ``None`` means unlimited.
+
+        Returns:
+            Results in the same order as *tasks*.
+
+        Raises:
+            SubAgentError: When ``continue_on_error=False`` and any
+                agent fails.
+        """
+        from exo.harness.parallel import run_parallel
+
+        return await run_parallel(
+            self,
+            tasks,
+            continue_on_error=continue_on_error,
+            max_concurrency=max_concurrency,
+        )
+
+    async def stream_agents_parallel(
+        self,
+        tasks: list[SubAgentTask],
+        *,
+        continue_on_error: bool = False,
+        max_concurrency: int | None = None,
+        queue_size: int = 256,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream events from multiple agents running concurrently.
+
+        Events are multiplexed in arrival order.  Each event's
+        ``agent_name`` field identifies which agent produced it.
+
+        **Output contract:**
+
+        - Each sub-agent writes events to a log file at
+          ``/tmp/exo_subagent_{name}_{id}.log`` for real-time
+          progress monitoring by the parent.
+        - When a sub-agent completes, an ``AssistantMessage`` is
+          appended to ``ctx.messages`` with the agent's output.
+        - The ``SubAgentResult.log_path`` field holds the path
+          to the agent's log file.
+
+        Args:
+            tasks: Agent tasks to execute in parallel.
+            continue_on_error: When ``False``, cancels all agents on
+                first error.  When ``True``, other agents continue.
+            max_concurrency: Limit concurrent agents via semaphore.
+            queue_size: Bounded queue size for backpressure.
+
+        Yields:
+            ``StreamEvent`` instances from all agents, interleaved by
+            arrival order.
+        """
+        from exo.harness.parallel import stream_parallel
+
+        async for event in stream_parallel(
+            self,
+            tasks,
+            continue_on_error=continue_on_error,
+            max_concurrency=max_concurrency,
+            queue_size=queue_size,
+        ):
+            yield event
+
+    def cancel_agent(self, agent_name: str) -> None:
+        """Cancel a specific parallel sub-agent by name.
+
+        Only effective for agents currently running via
+        :meth:`stream_agents_parallel`.
+
+        Args:
+            agent_name: Name of the agent to cancel.
+        """
+        cancel_ev = self._cancel_agents.get(agent_name)
+        if cancel_ev is not None:
+            cancel_ev.set()
+
     @property
     def cancelled(self) -> bool:
         """Whether the harness has been cancelled."""
@@ -192,13 +290,22 @@ class HarnessContext:
             data=data,
         )
 
-    async def checkpoint(self, *, pending_agent: str | None = None) -> None:
+    async def checkpoint(
+        self,
+        *,
+        pending_agent: str | None = None,
+        pending_agents: list[str] | None = None,
+    ) -> None:
         """Save a checkpoint of the current harness state.
 
         Args:
-            pending_agent: Name of the agent about to execute (if any).
+            pending_agent: Name of a single agent about to execute.
+            pending_agents: Names of multiple agents about to execute
+                in parallel.  Takes precedence over *pending_agent*.
         """
-        await self._harness.save_checkpoint(pending_agent=pending_agent)
+        await self._harness.save_checkpoint(
+            pending_agent=pending_agent, pending_agents=pending_agents
+        )
 
 
 class Harness(ABC):
@@ -392,13 +499,20 @@ class Harness(ABC):
 
     # === Checkpoint support ===
 
-    async def save_checkpoint(self, *, pending_agent: str | None = None) -> None:
+    async def save_checkpoint(
+        self,
+        *,
+        pending_agent: str | None = None,
+        pending_agents: list[str] | None = None,
+    ) -> None:
         """Persist current state to the checkpoint store.
 
         No-op if no checkpoint store is configured.
 
         Args:
-            pending_agent: Name of the agent about to execute.
+            pending_agent: Name of a single agent about to execute.
+            pending_agents: Names of multiple agents about to execute
+                in parallel.
         """
         if self._checkpoint_store is None:
             return
@@ -410,6 +524,7 @@ class Harness(ABC):
             session_state=dict(self.session.data),
             completed_agents=list(self.session.get("_completed_agents", [])),
             pending_agent=pending_agent,
+            pending_agents=pending_agents or [],
         )
         await adapter.save(checkpoint)
         self.session.mark_clean()

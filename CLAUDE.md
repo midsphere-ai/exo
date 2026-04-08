@@ -81,7 +81,7 @@ Alongside each `exo-*` package, a corresponding `orbiter-*` re-export package ex
 - **exo-guardrail** (`packages/exo-guardrail/`): Security guardrails — pattern-based and LLM-based prompt injection/jailbreak detection with pluggable backends.
 - **exo-retrieval** (`packages/exo-retrieval/`): RAG pipeline — embeddings (OpenAI, Vertex, HTTP), vector stores (pgvector, ChromaDB), hybrid search, reranking, knowledge graph, agentic retrieval.
 - **exo-search** (`packages/exo-search/`): AI search engine with query classification, parallel research agents, result reranking, citation generation, and 3 quality modes (speed/balanced/quality).
-- **exo-harness** (`packages/exo-harness/`): Composable orchestration harness — `Harness` ABC, `HarnessContext`, middleware (timeout, cost tracking), `SessionState` for multi-step agent workflows.
+- **exo-harness** (`packages/exo-harness/`): Composable orchestration harness — `Harness` ABC, `HarnessContext`, middleware (timeout, cost tracking), `SessionState` for multi-step agent workflows. Supports parallel sub-agents via `run_agents_parallel()`/`stream_agents_parallel()` with event multiplexing, per-agent log files (`/tmp/`), and `AssistantMessage` output injection.
 - **exo-skills** (`packages/exo-skills/`): Dynamic capability packages — `SkillRegistry`, skill markdown files with front-matter, hot-reload, GitHub skill sources.
 - **exo-mcp-cli** (`packages/exo-mcp-cli/`): Standalone CLI for MCP server interaction — `mcp.json` config, encrypted vault, credential management, server add/remove/test, tool list/call.
 - **exo-web** (`packages/exo-web/`): Full platform UI. Hybrid package — Astro 5.x frontend (`src/pages/`, `src/islands/`) + FastAPI backend (`src/exo_web/`). Has its own `package.json` AND `pyproject.toml`.

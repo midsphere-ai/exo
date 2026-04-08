@@ -1,6 +1,6 @@
 ---
 name: exo:harness
-description: "Use when building orchestration harnesses in Exo — Harness ABC, execute() async generator, HarnessContext (run_agent, stream_agent, emit, checkpoint, check_cancelled), HarnessEvent, SessionState, Middleware (TimeoutMiddleware, CostTrackingMiddleware), CheckpointAdapter, HarnessNode for Swarm composition, event interception, agent routing, cross-cutting middleware, session state persistence. Triggers on: harness, Harness, orchestration, HarnessContext, run_agent, stream_agent, HarnessEvent, SessionState, middleware, TimeoutMiddleware, CostTrackingMiddleware, CheckpointAdapter, HarnessNode, event interception, agent routing, harness checkpoint, harness cancel, harness middleware, execute method, harness stream."
+description: "Use when building orchestration harnesses in Exo — Harness ABC, execute() async generator, HarnessContext (run_agent, stream_agent, run_agents_parallel, stream_agents_parallel, cancel_agent, emit, checkpoint, check_cancelled), HarnessEvent, SessionState, Middleware (TimeoutMiddleware, CostTrackingMiddleware), CheckpointAdapter, HarnessNode for Swarm composition, event interception, agent routing, cross-cutting middleware, session state persistence, parallel sub-agents (SubAgentTask, SubAgentResult, SubAgentStatus, SubAgentError). Triggers on: harness, Harness, orchestration, HarnessContext, run_agent, stream_agent, run_agents_parallel, stream_agents_parallel, cancel_agent, SubAgentTask, SubAgentResult, parallel sub-agent, fan-out, HarnessEvent, SessionState, middleware, TimeoutMiddleware, CostTrackingMiddleware, CheckpointAdapter, HarnessNode, event interception, agent routing, harness checkpoint, harness cancel, harness middleware, execute method, harness stream."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -18,6 +18,8 @@ Use this skill when the developer needs to:
 - Checkpoint and resume harness execution after process restart
 - Compose harnesses with other harnesses or Swarms
 - Emit custom events alongside standard agent StreamEvent instances
+- Run multiple agents in parallel (fan-out/fan-in, voting, parallel research)
+- Monitor parallel sub-agent progress via log files
 - Cancel a running harness from outside
 
 ## Decision Guide
@@ -36,6 +38,12 @@ Use this skill when the developer needs to:
 12. **Need to use a harness as a node in a Swarm?** → Wrap it with `HarnessNode(harness=my_harness)`
 13. **Need to nest harnesses?** → Pass an inner harness to `ctx.run_agent()` or `ctx.stream_agent()` — it works automatically because the runner detects `is_harness`
 14. **Want the harness to work with `run()` and `run.stream()`?** → It already does. `run(harness, input)` and `run.stream(harness, input)` dispatch automatically
+15. **Need to run multiple agents in parallel?** → Use `ctx.run_agents_parallel(tasks)` (non-streaming) or `ctx.stream_agents_parallel(tasks)` (streaming with multiplexed events)
+16. **Need to monitor a sub-agent's progress while it runs?** → Each parallel sub-agent writes to `/tmp/exo_subagent_{name}_{id}.log` — read the log file to see how far it got
+17. **Need sub-agent output in the conversation?** → It's automatic: when a sub-agent starts, the parent gets a "running in background" message with the log path; when it completes, the answer is appended as an `AssistantMessage`
+18. **Need to cancel one sub-agent but not others?** → `ctx.cancel_agent("agent_name")` cancels just that one
+19. **Need to limit how many agents run at once?** → Pass `max_concurrency=N` to `run_agents_parallel()` or `stream_agents_parallel()`
+20. **Need partial results when some agents fail?** → Pass `continue_on_error=True` — failed agents are reported, successful ones return normally
 
 ## Reference
 
@@ -45,7 +53,8 @@ Use this skill when the developer needs to:
 packages/exo-harness/src/exo/harness/
     __init__.py      # Public API exports
     base.py          # Harness ABC, HarnessContext, HarnessNode, HarnessError
-    types.py         # HarnessEvent, SessionState, HarnessCheckpoint
+    types.py         # HarnessEvent, SessionState, HarnessCheckpoint, SubAgentTask/Result/Status
+    parallel.py      # Parallel sub-agent engine (run_parallel, stream_parallel)
     middleware.py    # Middleware ABC, TimeoutMiddleware, CostTrackingMiddleware
     checkpoint.py    # CheckpointAdapter — serializes to MemoryStore
 ```
@@ -65,6 +74,10 @@ from exo.harness import (
     TimeoutMiddleware,   # Built-in: wall-clock timeout
     CostTrackingMiddleware,  # Built-in: token usage accumulation
     CheckpointAdapter,  # Serializes checkpoints to MemoryStore
+    SubAgentTask,       # Specification for a parallel sub-agent invocation
+    SubAgentResult,     # Result from a parallel sub-agent (output, status, log_path)
+    SubAgentStatus,     # Terminal status enum (SUCCESS, FAILED, CANCELLED, TIMED_OUT)
+    SubAgentError,      # Raised on fail-fast with partial results
 )
 ```
 
@@ -104,7 +117,7 @@ class Harness(ABC):
     def reset(self) -> None         # Clear cancellation signal
 
     # Checkpointing
-    async def save_checkpoint(self, *, pending_agent=None) -> None
+    async def save_checkpoint(self, *, pending_agent=None, pending_agents=None) -> None
     async def restore_checkpoint(self) -> HarnessCheckpoint | None
 ```
 
@@ -164,14 +177,101 @@ class HarnessContext:
     # Custom event emission
     def emit(self, kind: str, **data: Any) -> HarnessEvent
 
+    # Parallel sub-agent execution
+    async def run_agents_parallel(
+        self,
+        tasks: list[SubAgentTask],
+        *,
+        continue_on_error: bool = False,   # True = collect all results; False = fail fast
+        max_concurrency: int | None = None, # Limit concurrent agents via semaphore
+    ) -> list[SubAgentResult]
+
+    async def stream_agents_parallel(
+        self,
+        tasks: list[SubAgentTask],
+        *,
+        continue_on_error: bool = False,
+        max_concurrency: int | None = None,
+        queue_size: int = 256,             # Bounded queue for backpressure
+    ) -> AsyncIterator[StreamEvent]
+
+    def cancel_agent(self, agent_name: str) -> None  # Cancel one parallel sub-agent
+
     # Checkpointing
-    async def checkpoint(self, *, pending_agent: str | None = None) -> None
+    async def checkpoint(
+        self,
+        *,
+        pending_agent: str | None = None,
+        pending_agents: list[str] | None = None,  # For parallel execution
+    ) -> None
 ```
 
 **History visibility control** — the `messages` parameter on `run_agent()` and `stream_agent()`:
 - `messages=None` — agent starts with a fresh conversation (no history)
 - `messages=ctx.messages` — agent shares the harness's message list (shared reference, mutations visible to both)
 - `messages=list(ctx.messages)` — agent gets a forked copy (isolated from harness)
+
+### SubAgentTask
+
+Specification for one parallel sub-agent invocation.
+
+```python
+from exo.harness import SubAgentTask
+
+@dataclass(frozen=True)
+class SubAgentTask:
+    agent: Any                              # Agent, Swarm, or Harness
+    input: MessageContent                   # User query
+    name: str | None = None                 # Label override; defaults to agent.name
+    messages: Sequence[Message] | None = None  # History visibility (same rules as run_agent)
+    provider: Any = None                    # LLM provider override
+    timeout: float | None = None            # Per-agent timeout in seconds
+```
+
+### SubAgentResult
+
+Result from one parallel sub-agent. Always populated, even on failure.
+
+```python
+from exo.harness import SubAgentResult, SubAgentStatus
+
+@dataclass(frozen=True)
+class SubAgentResult:
+    agent_name: str                         # Name of the agent
+    status: SubAgentStatus                  # SUCCESS, FAILED, CANCELLED, TIMED_OUT
+    output: str = ""                        # Accumulated text output
+    result: RunResult | None = None         # Full RunResult on success
+    error: BaseException | None = None      # Original exception on failure
+    elapsed_seconds: float = 0.0            # Wall-clock time
+    log_path: str | None = None             # Path to /tmp/ event log file
+```
+
+### Parallel Sub-Agent Output Contract
+
+When a sub-agent starts (via `run_agents_parallel` or `stream_agents_parallel`), the parent agent is kept informed through three mechanisms:
+
+**Step 0 — "started" message:** An `AssistantMessage` is immediately appended to `ctx.messages` telling the parent the sub-agent is running and where to monitor it:
+```
+[Sub-agent 'researcher' is now executing in the background]
+You can monitor its progress at: /tmp/exo_subagent_researcher_a1b2c3d4.log
+You will receive its output as a message when it completes.
+```
+
+**Step 1 — Log file for real-time monitoring:** Events are written to the log file in real time. The parent (or a tool) can read this file mid-execution to see how far the sub-agent has progressed:
+```
+[14:23:01] [starting] Sub-agent 'researcher' starting
+[14:23:01] [text] The key finding is...
+[14:23:02] [tool_call] ToolCallEvent(...)
+[14:23:03] [completed] output='The key finding is...'
+```
+
+**Step 2 — "completed" message with output:** When the sub-agent finishes, its answer is appended to `ctx.messages` as an `AssistantMessage`:
+```
+[Sub-agent 'researcher' completed]:
+The key finding is...
+```
+
+The parent reads sub-agent output from the conversation history like any other message. No special API needed.
 
 ### execute() — The Abstract Method
 
@@ -258,7 +358,8 @@ class HarnessCheckpoint:
     harness_name: str                    # Which harness created this
     session_state: dict[str, Any]        # Serialized SessionState.data
     completed_agents: list[str]          # Agents that have finished
-    pending_agent: str | None = None     # Agent about to execute
+    pending_agent: str | None = None     # Single agent about to execute
+    pending_agents: list[str] = []       # Multiple agents executing in parallel
     messages: list[dict[str, Any]] = ... # Serialized message history
     timestamp: float = ...               # Unix timestamp
     metadata: dict[str, Any] = ...       # Arbitrary metadata
@@ -611,6 +712,94 @@ outer = OuterHarness(name="outer", agents={"inner": inner})
 result = await run(outer, "Hello!")
 ```
 
+### Parallel Fan-Out
+
+Run multiple agents in parallel, read their output from the conversation.
+
+```python
+from exo.harness import Harness, HarnessContext, SubAgentTask
+from exo.types import AssistantMessage
+
+class FanOutHarness(Harness):
+    async def execute(self, ctx):
+        # Fan out — all agents run concurrently
+        tasks = [
+            SubAgentTask(agent=self.agents["researcher"], input=ctx.input),
+            SubAgentTask(agent=self.agents["fact_checker"], input=ctx.input),
+            SubAgentTask(agent=self.agents["summarizer"], input=ctx.input),
+        ]
+        results = await ctx.run_agents_parallel(tasks, continue_on_error=True)
+
+        # Each agent's output is already in ctx.messages as AssistantMessage.
+        # Results also available programmatically:
+        for r in results:
+            ctx.state[r.agent_name] = r.output
+            yield ctx.emit("agent_done", agent=r.agent_name, status=str(r.status))
+```
+
+### Parallel Streaming
+
+Stream events from multiple agents concurrently with real-time log files.
+
+```python
+class ParallelStreamHarness(Harness):
+    async def execute(self, ctx):
+        tasks = [
+            SubAgentTask(agent=agent, input=ctx.input)
+            for agent in self.agents.values()
+        ]
+        # Events from all agents are multiplexed in arrival order
+        async for event in ctx.stream_agents_parallel(tasks, continue_on_error=True):
+            yield event
+
+        # Sub-agent answers are now in ctx.messages as AssistantMessage
+        # Log files at /tmp/exo_subagent_{name}_{id}.log for debugging
+```
+
+### Resilient Parallel with Error Handling
+
+```python
+from exo.harness import SubAgentError
+
+class ResilientHarness(Harness):
+    async def execute(self, ctx):
+        tasks = [
+            SubAgentTask(agent=self.agents["fast"], input=ctx.input),
+            SubAgentTask(agent=self.agents["slow"], input=ctx.input, timeout=10.0),
+        ]
+
+        # continue_on_error=True: all results returned even if some fail
+        results = await ctx.run_agents_parallel(tasks, continue_on_error=True)
+
+        for r in results:
+            if r.status == SubAgentStatus.SUCCESS:
+                yield ctx.emit("success", agent=r.agent_name, output=r.output)
+            else:
+                yield ctx.emit("failure", agent=r.agent_name, status=str(r.status))
+                # Check the log file for debugging:
+                # cat /tmp/exo_subagent_{name}_{id}.log
+```
+
+### Monitor Sub-Agent Progress
+
+The parent can check a sub-agent's log file mid-execution.
+
+```python
+import asyncio
+
+class MonitoringHarness(Harness):
+    async def execute(self, ctx):
+        tasks = [
+            SubAgentTask(agent=self.agents["worker"], input=ctx.input),
+        ]
+        # Start streaming in background
+        async for event in ctx.stream_agents_parallel(tasks, continue_on_error=True):
+            yield event
+
+        # After completion, log_path is on the result
+        # Parent can also check the log file during execution from another context
+```
+
 ## Gotchas
 
 - **`execute()` must be an async generator** — it must contain at least one `yield` statement, even if just `yield ctx.emit(...)`. A regular `async def` that never yields will not work.
@@ -629,3 +818,11 @@ result = await run(outer, "Hello!")
 - **`HarnessNode` provides context isolation** — outer Swarm messages are NOT forwarded to the inner harness. Each execution starts fresh.
 - **Exceptions from `execute()` yield `ErrorEvent` then re-raise** — `_execute_with_middleware()` catches exceptions, yields an `ErrorEvent`, then re-raises. `HarnessError` is re-raised directly without yielding `ErrorEvent`.
 - **`reset()` clears the cancellation signal** — call it before reusing a harness instance after cancellation.
+- **Parallel sub-agent names must be unique** — duplicate names in a `SubAgentTask` list raise `ValueError`. Use the `name` field to override if two tasks use the same agent.
+- **State isolation in parallel** — each parallel sub-agent gets a forked state (write-local, read-through to parent). Writes merge back on completion under a lock. Last writer wins if two agents write the same key.
+- **Failed agent state is NOT merged** — only successful agents merge their state back. The parent's state is never corrupted by a failed sub-agent.
+- **`continue_on_error=False` (default) raises `SubAgentError`** — this exception carries `.results` (partial results list) and `.failed_agents` (list of names). Catch it to inspect what completed before the failure.
+- **Log files are NOT cleaned up automatically** — `/tmp/exo_subagent_*.log` files persist after execution. Clean them up in your harness or via a cron job.
+- **`cancel_agent()` only works with `stream_agents_parallel()`** — it sets a cooperative flag checked between event pushes. It has no effect on agents started via `run_agents_parallel()`.
+- **Sub-agent output lands in `ctx.messages` as `AssistantMessage`** — the content is prefixed with `[Sub-agent 'name' completed]:`. Use this to distinguish sub-agent output from other messages.
+- **`queue_size` controls backpressure** — the default bounded queue (256 items) means slow consumers cause producers to block. Increase it for high-throughput scenarios or decrease it to save memory.

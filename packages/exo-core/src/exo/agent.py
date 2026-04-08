@@ -23,6 +23,7 @@ from exo.config import (
     validate_planning_model,
 )
 from exo.hooks import Hook, HookManager, HookPoint
+from exo.human import HumanInputHandler
 from exo.observability.logging import get_logger  # pyright: ignore[reportMissingImports]
 from exo.rail import Rail, RailAbortError, RailManager
 from exo.skills import DictToolResolver, SkillError, SkillRegistry, ToolResolver
@@ -675,6 +676,9 @@ class Agent:
         bare_tools: When ``True``, suppress auto-registered helper tools
             (``retrieve_artifact``, context tools). ``activate_skill``,
             ``spawn_self``, and PTC tools are **not** affected.
+        human_input_handler: Handler for HITL approval prompts. When set
+            alongside ``hitl_tools``, tools in that list will block for
+            human approval before executing. Defaults to ``None`` (no gate).
         emit_mcp_progress: Whether MCP progress events should be emitted.
         injected_tool_args: Schema-only tool arguments exposed to the LLM.
         allow_parallel_subagents: Enables the future parallel-subagent tool
@@ -710,6 +714,7 @@ class Agent:
         budget_awareness: str | None = None,
         hitl_tools: list[str] | None = None,
         bare_tools: bool = False,
+        human_input_handler: HumanInputHandler | None = None,
         emit_mcp_progress: bool = True,
         injected_tool_args: dict[str, str] | None = None,
         allow_parallel_subagents: bool = False,
@@ -864,6 +869,7 @@ class Agent:
             self._register_tool(self._make_spawn_self_tool())
 
         self.hitl_tools = normalized_hitl_tools
+        self._human_input_handler: HumanInputHandler | None = human_input_handler
         self._validate_hitl_tools()
 
         # PTC: register synthetic PTC tool when programmatic tool calling is on
@@ -2138,6 +2144,7 @@ class Agent:
                             kwargs[tool._tool_context_param] = ToolContext(
                                 agent_name=self.name,
                                 queue=self._event_queue,
+                                human_input_handler=self._human_input_handler,
                             )
                         output = await tool.execute(**kwargs)
                         content: MessageContent
@@ -2226,6 +2233,10 @@ class Agent:
         if self._skill_registry is not None:
             raise ValueError(
                 f"Agent '{self.name}' has a skill registry which cannot be serialized."
+            )
+        if self._human_input_handler is not None:
+            raise ValueError(
+                f"Agent '{self.name}' has a human_input_handler which cannot be serialized."
             )
 
         data: dict[str, Any] = {

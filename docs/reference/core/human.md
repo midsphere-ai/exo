@@ -195,3 +195,56 @@ agent = Agent(
 # The agent will ask for human confirmation before deletions
 # result = run.sync(agent, "Delete /tmp/old_data.csv")
 ```
+
+---
+
+## ToolContext.require_approval()
+
+On-demand HITL approval inside tools. Unlike `HumanInputTool` (where the LLM decides when to ask), `require_approval()` lets the tool itself gate execution based on its own logic.
+
+### Method
+
+```python
+async def require_approval(self, message: str = "Approve this operation?") -> None
+```
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `message` | `str` | `"Approve this operation?"` | Prompt shown to the human. |
+
+**Returns:** `None` (execution continues on approval).
+
+**Raises:** `ToolError` if no handler is set or if the human denies.
+
+### Setup
+
+```python
+from exo import Agent, tool, ToolContext, ConsoleHandler
+
+@tool
+async def run_command(command: str, ctx: ToolContext) -> str:
+    """Execute a shell command.
+
+    Args:
+        command: The shell command to run.
+    """
+    if any(p in command for p in ["rm ", "sudo "]):
+        await ctx.require_approval(f"Sensitive: {command}\nApprove?")
+    return subprocess.check_output(command, shell=True, text=True)
+
+agent = Agent(
+    name="ops",
+    tools=[run_command],
+    human_input_handler=ConsoleHandler(),
+)
+```
+
+### Agent Parameter
+
+```python
+Agent(
+    human_input_handler=ConsoleHandler(),  # or any HumanInputHandler
+)
+```
+
+The handler is passed through to `ToolContext` when tools are executed. Without it, `require_approval()` raises `ToolError`.

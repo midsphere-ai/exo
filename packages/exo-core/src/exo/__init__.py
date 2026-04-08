@@ -9,6 +9,7 @@ from exo._internal.agent_group import ParallelGroup, SerialGroup
 from exo._internal.nested import RalphNode, SwarmNode
 from exo._internal.workflow_checkpoint import WorkflowCheckpoint, WorkflowCheckpointStore
 from exo.agent import Agent
+from exo.human import ConsoleHandler, HumanInputHandler
 from exo.observability.logging import (  # pyright: ignore[reportMissingImports]
     configure_logging as configure,
 )
@@ -25,6 +26,7 @@ from exo.types import (
     AudioBlock,
     ContentBlock,
     DocumentBlock,
+    HITLApprovalEvent,
     ImageDataBlock,
     ImageURLBlock,
     MessageContent,
@@ -35,9 +37,12 @@ from exo.types import (
 __all__ = [
     "Agent",
     "AudioBlock",
+    "ConsoleHandler",
     "ContentBlock",
     "DocumentBlock",
     "FunctionTool",
+    "HITLApprovalEvent",
+    "HumanInputHandler",
     "ImageDataBlock",
     "ImageURLBlock",
     "MessageContent",
