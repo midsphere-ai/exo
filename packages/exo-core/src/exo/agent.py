@@ -692,6 +692,10 @@ class Agent:
         max_spawn_depth: Maximum recursive spawn depth (default 3). When a spawned
             agent's depth equals or exceeds this value, ``spawn_self`` returns an
             error string instead of spawning.
+        tool_gate: Conditional tool injection that preserves the LLM KV cache.
+            Maps a trigger tool name to a list of tools that become available
+            after the trigger tool executes. Gated tools are **appended** to the
+            tool list (never reordered) so the cached prefix stays valid.
     """
 
     def __init__(
@@ -732,6 +736,7 @@ class Agent:
         ptc_timeout: int = 60,
         skills: SkillRegistry | None = None,
         tool_resolver: ToolResolver | dict[str, Tool | list[Tool]] | None = None,
+        tool_gate: dict[str, list[Tool]] | None = None,
     ) -> None:
         if max_steps < 1:
             raise AgentError(f"max_steps must be >= 1, got {max_steps}")
@@ -901,6 +906,18 @@ class Agent:
                 self.hook_manager.add(point, self.rail_manager.hook_for(point))
         else:
             self.rail_manager = None
+
+        # Tool gate: conditional tool injection (append-only for KV-cache safety)
+        self._tool_gate: dict[str, list[Tool]] = dict(tool_gate) if tool_gate else {}
+        self._unlocked_gates: set[str] = set()
+        if self._tool_gate:
+            # Validate that trigger names actually refer to registered tools
+            for trigger_name in self._tool_gate:
+                if trigger_name not in self.tools:
+                    raise AgentError(
+                        f"tool_gate trigger '{trigger_name}' is not a registered tool"
+                    )
+            self.hook_manager.add(HookPoint.POST_TOOL_CALL, self._tool_gate_hook)
 
         # Auto-attach memory persistence hooks when a MemoryStore is provided
         if memory is not None:
@@ -1451,6 +1468,20 @@ class Agent:
         del self.tools[tool_name]
         self._cached_tool_schemas = None
 
+    async def _tool_gate_hook(self, **kwargs: Any) -> None:
+        """POST_TOOL_CALL hook that unlocks gated tools when a trigger fires.
+
+        Gated tools are appended (never reordered) so the LLM provider's
+        KV-cache prefix remains valid.
+        """
+        tool_name: str = kwargs.get("tool_name", "")
+        if tool_name not in self._tool_gate or tool_name in self._unlocked_gates:
+            return
+        self._unlocked_gates.add(tool_name)
+        for t in self._tool_gate[tool_name]:
+            if t.name not in self.tools:
+                await self.add_tool(t)
+
     async def add_handoff(self, target: Agent) -> None:
         """Register a target agent as a handoff destination at runtime.
 
@@ -1829,21 +1860,19 @@ class Agent:
                     break
 
             # ---- Drain ephemeral messages (visible for this call only) ----
-            _ephemeral_count = 0
+            # Ephemerals are collected into a separate batch and concatenated
+            # for the LLM call.  msg_list itself is never mutated, keeping the
+            # message history append-only (preserves KV-cache prefix).
+            _ephemeral_batch: list[Message] = []
             while not self._ephemeral_messages.empty():
                 try:
-                    _eph_msg = self._ephemeral_messages.get_nowait()
-                    msg_list.append(_eph_msg)
-                    _ephemeral_count += 1
+                    _ephemeral_batch.append(self._ephemeral_messages.get_nowait())
                     _log.debug("ephemeral message into step %d", _step)
                 except asyncio.QueueEmpty:
                     break
 
-            try:
-                output = await self._call_llm(msg_list, tool_schemas, provider, max_retries)
-            finally:
-                if _ephemeral_count:
-                    del msg_list[-_ephemeral_count:]
+            _call_messages = msg_list + _ephemeral_batch if _ephemeral_batch else msg_list
+            output = await self._call_llm(_call_messages, tool_schemas, provider, max_retries)
 
             # Record token usage in tracker
             if _token_tracker is not None and output.usage.total_tokens > 0:

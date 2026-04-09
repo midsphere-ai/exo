@@ -1,6 +1,6 @@
 ---
 name: exo:tools
-description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, ToolContext for nested agent streaming, injected_tool_args, large_output, structured output (output_type), MCP server integration, or tool offloading via CLI. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, ToolContext, injected_tool_args, large_output, output_type, add_mcp_server, structured output, nested agent, inner agent events, tool offloading, exo tool call, exo tool list, exo tool schema, bash tool."
+description: "Use when creating tools for Exo agents — @tool decorator, FunctionTool, Tool ABC subclass, ToolContext for nested agent streaming, injected_tool_args, large_output, structured output (output_type), MCP server integration, tool_gate conditional injection, or tool offloading via CLI. Triggers on: exo tool, @tool, FunctionTool, Tool ABC, ToolContext, injected_tool_args, large_output, output_type, add_mcp_server, structured output, nested agent, inner agent events, tool offloading, exo tool call, exo tool list, exo tool schema, bash tool, tool_gate, conditional tool, gated tool, deferred tool."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -16,6 +16,7 @@ Use this skill when the developer needs to:
 - Handle large tool output with workspace offloading (`large_output`)
 - Define structured output schemas (`output_type`)
 - Connect MCP servers to agents (`add_mcp_server`)
+- Conditionally inject tools after a trigger fires (`tool_gate`) — KV-cache safe
 - Understand how tool schemas are generated from function signatures
 - Offload tool execution to CLI (`exo tool list/call/schema`) for token-efficient agent operation
 
@@ -31,6 +32,7 @@ Ask these questions to pick the right pattern:
 6. **Need the LLM to fill a parameter the tool never receives?** Use `injected_tool_args` on Agent
 7. **Need validated structured output from the agent?** Set `output_type=MyPydanticModel` on Agent
 8. **Need tools from an MCP server?** Use `agent.add_mcp_server(config)`
+9. **Need tools to appear only after a trigger tool fires?** Use `tool_gate` on Agent — KV-cache safe, append-only
 
 ## Reference
 
@@ -435,6 +437,65 @@ await agent.add_tool(new_tool)
 agent.remove_tool("old_tool_name")
 ```
 
+### tool_gate (Conditional Tool Injection — KV-Cache Safe)
+
+Declare tools that become available only after a specific trigger tool executes. Gated tools are **appended** to the tool list (never reordered), preserving the LLM's KV-cache prefix.
+
+```python
+from exo import Agent, tool
+
+@tool
+def search(query: str) -> str:
+    """Search the database."""
+    return f"results for {query}"
+
+@tool
+def write_record(data: str) -> str:
+    """Write a record to the database."""
+    return f"wrote {data}"
+
+@tool
+def delete_record(record_id: str) -> str:
+    """Delete a record from the database."""
+    return f"deleted {record_id}"
+
+agent = Agent(
+    name="db_agent",
+    tools=[search],
+    tool_gate={
+        "search": [write_record, delete_record],
+    },
+)
+```
+
+**How it works:**
+1. Gated tools (`write_record`, `delete_record`) are **not registered** at init — the LLM cannot see or call them
+2. When the trigger tool (`search`) executes, a `POST_TOOL_CALL` hook fires and **appends** the gated tools
+3. On the next LLM turn, the new tools appear in `get_tool_schemas()` and are callable
+4. The gate is idempotent — calling the trigger again does not duplicate tools
+
+**Why it's KV-cache safe:**
+- LLM providers (Anthropic, OpenAI) cache based on prefix matching: `[system + tools + messages]`
+- Gated tools are appended at the end — the existing prefix stays identical
+- Before: `[sys, tools[A,B,C], msgs]` → After: `[sys, tools[A,B,C, D,E], msgs]` — prefix `[A,B,C]` is a cache hit
+
+**Multiple independent gates:**
+
+```python
+agent = Agent(
+    name="bot",
+    tools=[read_tool, auth_tool],
+    tool_gate={
+        "read_tool": [analyze_tool],       # read unlocks analyze
+        "auth_tool": [write_tool, admin],   # auth unlocks write + admin
+    },
+)
+```
+
+**Validation:**
+- Trigger names must refer to already-registered tools — raises `AgentError` otherwise
+- Gated tools must have unique names (standard duplicate-name rules apply)
+
 ## Tool Offloading via CLI
 
 Tool offloading lets agents execute Exo tools via bash commands instead of LLM tool calling, keeping schemas out of the context window and reducing token usage.
@@ -566,3 +627,6 @@ Use the bash tool to execute these commands instead of calling tools directly.""
 - **Tool offloading: `--from` must be importable** — the module's dependencies must be installed in the current Python environment. If using a file path, it's loaded in isolation.
 - **Tool offloading: ToolContext not available** — CLI-invoked tools don't have an agent context, so `ToolContext`-dependent tools will fail. Use tools without `ToolContext` for offloading.
 - **Tool offloading: async tools work fine** — `asyncio.run()` drives async tool execution from the CLI.
+- **`tool_gate` triggers must be registered tools** — passing a trigger name that isn't in `tools=` raises `AgentError` at init
+- **`tool_gate` is one-shot** — once a gate opens, the tools stay registered for the rest of the run. There is no "re-lock" mechanism.
+- **`tool_gate` and PTC** — gated tools added at runtime are not automatically PTC-eligible. If `ptc=True`, gated tools appear as LLM-callable schemas (not PTC functions).

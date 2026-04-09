@@ -1,6 +1,6 @@
 ---
 name: exo:context
-description: "Use when configuring Exo context management — context_limit, overflow strategy (summarize/truncate/none), cache, ContextConfig, neurons, fork/merge, budget awareness, token tracking, token counting. Triggers on: context_limit, overflow, cache, context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget, TokenCounter, count_tokens, token counting, tiktoken."
+description: "Use when configuring Exo context management — context_limit, overflow strategy (summarize/truncate/none), cache, ContextConfig, neurons, fork/merge, budget awareness, token tracking, token counting, KV-cache compliance. Triggers on: context_limit, overflow, cache, context mode, ContextConfig, history_rounds, summarization, offload, neuron, context fork, budget_awareness, token budget, TokenCounter, count_tokens, token counting, tiktoken, KV cache, kv-cache, cache prefix, append-only."
 ---
 
 > **Branch:** These skills are written for the `rename/orbiter-to-exo` branch. The Exo APIs referenced here may differ on other branches.
@@ -406,6 +406,38 @@ These tools have `_is_context_tool=True` and are:
 - Excluded from `spawn_self` child agents (children get their own fresh bindings)
 - Skipped if a user-registered tool has the same name
 
+### KV-Cache Compliance
+
+The Exo runtime is designed to preserve the LLM provider's KV-cache prefix across consecutive tool-loop calls. Two mechanisms are explicitly KV-cache safe:
+
+**1. `tool_gate` — append-only tool injection:**
+When a trigger tool fires, gated tools are **appended** to the tool list (never reordered). The cached prefix `[system + tools[A,B,C] + messages]` remains a valid match; only the new tools need processing.
+
+```python
+agent = Agent(
+    name="bot",
+    tools=[search],
+    tool_gate={"search": [write_tool, delete_tool]},
+)
+# After search executes: tools become [search, write_tool, delete_tool]
+# Prefix [system, search] is still a cache hit
+```
+
+**2. `inject_ephemeral()` — separate-batch concatenation:**
+Ephemeral messages are collected in a separate batch and concatenated as `_call_messages = msg_list + ephemeral_batch` for the LLM call. `msg_list` itself is **never mutated** — it remains strictly append-only.
+
+```
+Step N:  LLM sees [sys, tools, msg1, ..., msgK, ephemeral]
+Step N+1: LLM sees [sys, tools, msg1, ..., msgK, assistant_N, tool_result_N]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    This prefix is cached from step N
+```
+
+**What breaks the cache:**
+- Modifying the system message content (e.g., `budget_awareness="per-message"` updates the `[Context: N/M tokens]` tag each step — this is a known trade-off for observability)
+- Context windowing that removes or reorders messages (summarization replaces old messages with a summary)
+- Adding/removing tools via `add_tool()`/`remove_tool()` mid-list (use `tool_gate` instead for cache-safe injection)
+
 ## Patterns
 
 ### Long-Running Conversation Agent
@@ -467,5 +499,6 @@ agent = Agent(
 - **CONTEXT_WINDOW hook fires at two sites** -- initial windowing (before first LLM call, `info.step=-1`) and token budget trigger (mid-run, `info.force=True`)
 - **Cache requires memory persistence** -- `cache=True` has no effect if `memory` is not configured
 - **Cache-aware hooks must be idempotent** -- PRE_LLM_CALL hooks that inject messages should check before injecting (use `has_message_content(messages, "MARKER")` from `exo.memory.snapshot`). Alternatively, use `agent.inject_ephemeral()` which is automatically removed after each LLM call and never reaches the cache.
-- **`inject_ephemeral()` bypasses snapshots entirely** -- ephemeral messages are removed from msg_list before context windowing runs and before snapshots are saved. Use this when you need per-call context that should not pollute history or cached state.
+- **`inject_ephemeral()` bypasses snapshots entirely** -- ephemeral messages are never added to `msg_list` (they live in a separate concatenated batch for the LLM call only). They never reach context windowing or snapshots. Use this when you need per-call context that should not pollute history or cached state.
+- **`tool_gate` is KV-cache safe** -- gated tools are appended (not inserted/reordered) when the trigger fires. The prefix `[system + original_tools]` remains a cache hit. Prefer `tool_gate` over manual `add_tool()` in hooks when cache preservation matters.
 - **Cache excludes instruction SystemMessages** -- they are regenerated fresh each run. `[Conversation Summary]` SystemMessages are preserved.

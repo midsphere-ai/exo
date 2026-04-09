@@ -147,9 +147,9 @@ agent.inject_message("New priority: focus on security aspects first.")
 
 **Snapshot interaction:** Injected messages become part of the context snapshot at end-of-run (when `enable_snapshots=True`). They will persist across runs without needing re-injection.
 
-### inject_ephemeral() — One-Shot Injection
+### inject_ephemeral() — One-Shot Injection (KV-Cache Safe)
 
-Push a message visible to the **next LLM call only**, then automatically removed:
+Push a message visible to the **next LLM call only**. The message is never inserted into `msg_list` — it's collected in a separate batch and concatenated for the LLM call only, keeping the message history append-only.
 
 ```python
 # String content (becomes a UserMessage)
@@ -162,14 +162,16 @@ agent.inject_ephemeral(SystemMessage(content="Respond in JSON format for this ca
 
 **Behavior:**
 - Message added to `agent._ephemeral_messages` queue (asyncio.Queue)
-- Drained before each LLM call, appended to msg_list
-- **Automatically removed** from msg_list after the LLM call returns (via try/finally)
+- Drained before each LLM call into a separate `_ephemeral_batch` list
+- A combined `_call_messages = msg_list + _ephemeral_batch` is built for the LLM call — **`msg_list` itself is never mutated**
 - Persists across retries of the same call (present for all retry attempts)
 - Does **NOT** emit `MessageInjectedEvent`
 - Does **NOT** persist in snapshots, memory, or history
 - Does **NOT** appear in subsequent tool-loop LLM calls
 - Accepts `str` (wrapped as `UserMessage`) or any `Message` object
 - Raises `ValueError` if content is an empty string
+
+**KV-cache safety:** Because `msg_list` is never modified (ephemeral messages are concatenated in a separate list), the message history is strictly append-only. The LLM provider's cached prefix `[system + tools + history]` is always a valid match for the next call.
 
 **Use case:** Providing temporary context or instructions that should influence exactly one LLM call — e.g., one-shot formatting hints from a hook, transient tool results that shouldn't pollute history, or per-step guidance from an orchestrator.
 
@@ -182,6 +184,7 @@ agent.inject_ephemeral(SystemMessage(content="Respond in JSON format for this ca
 | Memory persistence | Yes (via MemoryPersistence hooks) | No |
 | Stream event | `MessageInjectedEvent` | None |
 | Accepts | `str` only | `str` or `Message` |
+| msg_list mutation | Yes (appended) | No (separate batch) |
 
 ## Patterns
 
@@ -261,6 +264,22 @@ async def maybe_load_tools(agent_name: str, input: str, **_):
 
 agent = Agent(name="bot", hooks=[(HookPoint.START, maybe_load_tools)])
 ```
+
+### Conditional Tool Injection via tool_gate (KV-Cache Safe)
+
+Instead of manually wiring POST_TOOL_CALL hooks for dynamic tool loading, use the `tool_gate` parameter for a declarative, KV-cache-safe approach:
+
+```python
+agent = Agent(
+    name="bot",
+    tools=[search],
+    tool_gate={
+        "search": [write_record, delete_record],
+    },
+)
+```
+
+Under the hood, `tool_gate` auto-registers a `POST_TOOL_CALL` hook that appends gated tools when the trigger fires. See `exo:tools` skill for full documentation.
 
 ### Snapshot-Aware Context Injection (Idempotent)
 
@@ -374,7 +393,8 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **Rails also register as hooks** — `Agent(rails=[...])` creates hooks at ALL hook points. Rails hooks run after user hooks.
 - **Tool schemas are re-enumerated each step** — so dynamically added/removed tools take effect on the next LLM call, not retroactively.
 - **inject_message is async-safe** — uses `asyncio.Queue.put_nowait()`, can be called from any coroutine.
-- **inject_ephemeral is async-safe** — same Queue pattern, but messages are auto-removed after the LLM call.
+- **inject_ephemeral is async-safe** — same Queue pattern. Ephemeral messages are collected in a separate batch and concatenated for the LLM call; `msg_list` is never mutated.
+- **inject_ephemeral is KV-cache safe** — because ephemeral messages are concatenated (not inserted) into a separate `_call_messages` list, the `msg_list` prefix is strictly append-only, preserving the LLM provider's KV-cache prefix.
 - **inject_ephemeral vs PRE_LLM_CALL mutation** — if you add messages in a PRE_LLM_CALL hook, they persist permanently. Use `inject_ephemeral()` instead when you want one-shot context that doesn't pollute history.
 - **Hook data kwargs may evolve** — always use `**_` or `**data` to absorb unknown kwargs for forward compatibility.
 - **`CONTEXT_WINDOW` hook has two modes**: With `overflow="hook"`, the hook replaces built-in windowing entirely. With `overflow="summarize"` or `"truncate"`, the hook fires after built-in windowing as an augmentation pass.
@@ -383,4 +403,4 @@ agent = Agent(name="bot", hooks=[(HookPoint.FINISHED, safe_metric)])
 - **`CONTEXT_WINDOW` hook can report actions**: Append `_ContextAction` instances to the `actions` list to emit `ContextEvent`s in streaming mode.
 - **PRE_LLM_CALL mutations persist in snapshots** — when `enable_snapshots=True`, messages injected by PRE_LLM_CALL hooks become part of the snapshot. On the next run, the hook fires again on the snapshot-loaded messages. Hooks that inject messages must be idempotent (check before injecting) to avoid duplicates. Use `has_message_content()` from `exo.memory.snapshot`.
 - **inject_message persists in snapshots** — injected messages are part of the final `msg_list` and get saved in the snapshot. They survive across runs without re-injection.
-- **inject_ephemeral does NOT persist in snapshots** — ephemeral messages are removed before tool results are appended, before context windowing runs, and before snapshots are saved. They leave no trace in history.
+- **inject_ephemeral does NOT persist in snapshots** — ephemeral messages are never added to `msg_list` at all (they live in a separate batch), so they leave no trace in history, windowing, or snapshots.

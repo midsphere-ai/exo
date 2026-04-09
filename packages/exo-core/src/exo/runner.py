@@ -482,14 +482,17 @@ async def _stream(
                 break
 
         # ---- Drain ephemeral messages (visible for this call only) ----
-        _ephemeral_count = 0
+        # Ephemerals are collected into a separate batch and concatenated
+        # for the LLM call.  msg_list itself is never mutated, keeping the
+        # message history append-only (preserves KV-cache prefix).
+        _ephemeral_batch: list[Message] = []
         while not agent._ephemeral_messages.empty():
             try:
-                _eph_msg = agent._ephemeral_messages.get_nowait()
-                msg_list.append(_eph_msg)
-                _ephemeral_count += 1
+                _ephemeral_batch.append(agent._ephemeral_messages.get_nowait())
             except asyncio.QueueEmpty:
                 break
+
+        _call_messages = msg_list + _ephemeral_batch if _ephemeral_batch else msg_list
 
         if detailed:
             _ev = StepEvent(
@@ -508,10 +511,10 @@ async def _stream(
             tc_acc: dict[int, dict[str, Any]] = {}
             step_usage = Usage()
 
-            await agent.hook_manager.run(HookPoint.PRE_LLM_CALL, agent=agent, messages=msg_list)
+            await agent.hook_manager.run(HookPoint.PRE_LLM_CALL, agent=agent, messages=_call_messages)
 
             async for chunk in resolved.stream(
-                msg_list,
+                _call_messages,
                 tools=tool_schemas,
                 temperature=agent.temperature,
                 max_tokens=agent.max_tokens,
@@ -599,11 +602,6 @@ async def _stream(
                 finish_reason="tool_calls" if tool_calls else "stop",
             )
             await agent.hook_manager.run(HookPoint.POST_LLM_CALL, agent=agent, response=_synth)
-
-            # ---- Remove ephemeral messages ----
-            if _ephemeral_count:
-                del msg_list[-_ephemeral_count:]
-                _ephemeral_count = 0
 
             # Record token usage in tracker
             if _stream_token_tracker is not None and step_usage.total_tokens > 0:
@@ -848,10 +846,6 @@ async def _stream(
                         yield _sa_ev
 
         except Exception as exc:
-            # Clean up ephemeral messages on error
-            if _ephemeral_count:
-                del msg_list[-_ephemeral_count:]
-                _ephemeral_count = 0
             _ev = ErrorEvent(
                 error=str(exc),
                 error_type=type(exc).__name__,

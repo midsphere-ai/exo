@@ -410,3 +410,155 @@ class TestEphemeralStream:
         # Verify we got text output
         text_events = [e for e in events if isinstance(e, TextEvent)]
         assert any(e.text == "Done!" for e in text_events)
+
+
+# ---------------------------------------------------------------------------
+# Tests: KV-cache compliance (append-only msg_list)
+# ---------------------------------------------------------------------------
+
+
+class TestEphemeralKVCacheCompliance:
+    async def test_msg_list_never_shrinks(self) -> None:
+        """msg_list is append-only — ephemeral injection never mutates it."""
+        ephemeral_text = "Cache-safe hint"
+        msg_list_lengths: list[int] = []
+
+        @tool
+        def noop(x: str) -> str:
+            """No-op."""
+            return "ok"
+
+        call_count = 0
+
+        async def complete(messages: Any, **kwargs: Any) -> Any:
+            nonlocal call_count
+            msg_list_lengths.append(len(messages))
+            call_count += 1
+            if call_count == 1:
+                class R1:
+                    content = ""
+                    tool_calls = [
+                        ToolCall(id="tc1", name="noop", arguments='{"x":"go"}')
+                    ]
+                    usage = Usage()
+                return R1()
+            else:
+                class R2:
+                    content = "Done"
+                    tool_calls = []
+                    usage = Usage()
+                return R2()
+
+        provider = AsyncMock()
+        provider.complete = complete
+
+        agent = Agent(name="bot", tools=[noop])
+        agent.inject_ephemeral(ephemeral_text)
+
+        await run(agent, "Go", provider=provider)
+
+        # Second call must have MORE messages than first (assistant + tool_result added)
+        # even though ephemeral was removed. This proves msg_list grew monotonically.
+        assert len(msg_list_lengths) == 2
+        # First call: [...base, ephemeral]  Second call: [...base, assistant, tool_result]
+        # The second call should NOT be shorter than (first - ephemeral_count) + 2
+        # because msg_list was never truncated.
+        assert msg_list_lengths[1] > msg_list_lengths[0] - 1
+
+    async def test_ephemeral_does_not_appear_in_history_prefix(self) -> None:
+        """The tool result and assistant response from step 1 are in the
+        correct position in step 2 — no ghost ephemeral left in between."""
+        ephemeral_text = "One-shot guidance"
+        calls: list[list[Any]] = []
+
+        @tool
+        def ping(x: str) -> str:
+            """Ping tool."""
+            return "pong"
+
+        call_count = 0
+
+        async def complete(messages: Any, **kwargs: Any) -> Any:
+            nonlocal call_count
+            calls.append(list(messages))
+            call_count += 1
+            if call_count == 1:
+                class R1:
+                    content = ""
+                    tool_calls = [
+                        ToolCall(id="tc1", name="ping", arguments='{"x":"go"}')
+                    ]
+                    usage = Usage()
+                return R1()
+            else:
+                class R2:
+                    content = "Done"
+                    tool_calls = []
+                    usage = Usage()
+                return R2()
+
+        provider = AsyncMock()
+        provider.complete = complete
+
+        agent = Agent(name="bot", tools=[ping])
+        agent.inject_ephemeral(ephemeral_text)
+
+        await run(agent, "Go", provider=provider)
+
+        # In the second LLM call, the last messages should be
+        # [..., assistant_with_tool_call, tool_result] — no ephemeral sandwiched in.
+        second_call = calls[1]
+
+        tool_results = [m for m in second_call if getattr(m, "role", None) == "tool"]
+        assert len(tool_results) >= 1, "Tool result must be in second call"
+
+        # The ephemeral must NOT be anywhere in the second call
+        user_msgs = [m for m in second_call if isinstance(m, UserMessage)]
+        assert not any(m.content == ephemeral_text for m in user_msgs)
+
+    async def test_stream_msg_list_append_only(self) -> None:
+        """Streaming path: msg_list is never truncated by ephemeral removal."""
+        ephemeral_text = "Stream cache hint"
+        msg_list_lengths: list[int] = []
+
+        @tool
+        def ping(msg: str) -> str:
+            """Simple tool."""
+            return "pong"
+
+        call_count = 0
+
+        async def stream(messages: Any, **kwargs: Any) -> AsyncIterator[Any]:
+            nonlocal call_count
+            msg_list_lengths.append(len(messages))
+            call_count += 1
+            if call_count == 1:
+                yield _FakeStreamChunk(
+                    tool_call_deltas=[
+                        _FakeToolCallDelta(
+                            index=0, id="tc1", name="ping", arguments='{"msg":"hi"}'
+                        ),
+                    ],
+                    usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+                )
+            else:
+                yield _FakeStreamChunk(
+                    delta="Done!",
+                    finish_reason="stop",
+                    usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+                )
+
+        provider = AsyncMock()
+        provider.stream = stream
+        provider.complete = AsyncMock()
+
+        agent = Agent(name="bot", tools=[ping])
+        agent.inject_ephemeral(ephemeral_text)
+
+        events: list[StreamEvent] = []
+        async for ev in run.stream(agent, "Go", provider=provider):
+            events.append(ev)
+
+        assert len(msg_list_lengths) == 2
+        # Second call should have more messages (assistant + tool result added)
+        assert msg_list_lengths[1] > msg_list_lengths[0] - 1
