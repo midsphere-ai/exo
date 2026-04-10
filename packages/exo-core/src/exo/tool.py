@@ -8,7 +8,16 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, Union, get_type_hints, overload
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
 from exo.types import ContentBlock, ExoError
 
@@ -23,22 +32,35 @@ class ToolError(ExoError):
 
 
 def _extract_description(fn: Callable[..., Any]) -> str:
-    """Return the first non-empty line of the function's docstring.
+    """Return the docstring content before Google-style section headers.
+
+    Preserves the full description body (including multi-line instructions,
+    XML blocks, etc.) so the LLM sees the complete tool documentation.
 
     Args:
         fn: The function to extract a description from.
 
     Returns:
-        The first line, or empty string if no docstring.
+        The full description text, or empty string if no docstring.
     """
     doc = inspect.getdoc(fn)
     if not doc:
         return ""
-    for line in doc.splitlines():
+    lines = doc.splitlines()
+    result_lines: list[str] = []
+    for line in lines:
         stripped = line.strip()
-        if stripped:
-            return stripped
-    return ""
+        # Stop at Google-style section headers (Args:, Returns:, etc.)
+        if re.match(
+            r"^(Args|Returns|Raises|Yields|Examples|Notes|Attributes|References)\s*:\s*$",
+            stripped,
+        ):
+            break
+        result_lines.append(line)
+    # Strip trailing blank lines
+    while result_lines and not result_lines[-1].strip():
+        result_lines.pop()
+    return "\n".join(result_lines).strip()
 
 
 def _parse_docstring_args(fn: Callable[..., Any]) -> dict[str, str]:
@@ -96,6 +118,9 @@ def _parse_docstring_args(fn: Callable[..., Any]) -> dict[str, str]:
 def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
     """Convert a Python type annotation to a JSON Schema type dict.
 
+    Handles ``Annotated``, ``Literal``, ``Union``/``Optional``, ``list[X]``,
+    ``dict[K, V]``, bare ``list``/``dict``, and scalar types.
+
     Args:
         annotation: A Python type annotation.
 
@@ -105,7 +130,21 @@ def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
     if annotation is inspect.Parameter.empty or annotation is Any:
         return {"type": "string"}
 
-    # Handle Union types (X | None) — unwrap Optional
+    # Annotated[X, "description", ...] — unwrap base type, extract metadata
+    # NOTE: must use get_origin() here, not __origin__; for Annotated types
+    # __origin__ returns the inner type's origin, not Annotated itself.
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        base = args[0]
+        schema = _python_type_to_json_schema(base)
+        # First string in metadata becomes the description
+        for meta in args[1:]:
+            if isinstance(meta, str) and "description" not in schema:
+                schema["description"] = meta
+                break
+        return schema
+
+    # Union types (X | None) — unwrap Optional
     # Python 3.10+ pipe syntax produces types.UnionType (no __origin__)
     if isinstance(annotation, types.UnionType):
         args = [a for a in annotation.__args__ if a is not type(None)]
@@ -122,6 +161,20 @@ def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
             return _python_type_to_json_schema(args[0])
         return {"type": "string"}
 
+    # Literal["a", "b"] → enum constraint
+    if origin is Literal:
+        args = get_args(annotation)
+        if args:
+            if all(isinstance(a, str) for a in args):
+                return {"type": "string", "enum": list(args)}
+            if all(isinstance(a, int) and not isinstance(a, bool) for a in args):
+                return {"type": "integer", "enum": list(args)}
+            if all(isinstance(a, bool) for a in args):
+                return {"type": "boolean", "enum": list(args)}
+            # Mixed types — stringify
+            return {"type": "string", "enum": [str(a) for a in args]}
+        return {"type": "string"}
+
     # list[X]
     if origin is list:
         item_args = getattr(annotation, "__args__", None)
@@ -130,6 +183,12 @@ def _python_type_to_json_schema(annotation: Any) -> dict[str, Any]:
 
     # dict[K, V]
     if origin is dict:
+        return {"type": "object"}
+
+    # Bare list / dict (no generics)
+    if annotation is list:
+        return {"type": "array"}
+    if annotation is dict:
         return {"type": "object"}
 
     # Simple scalar types
@@ -161,7 +220,7 @@ def _generate_schema(fn: Callable[..., Any]) -> dict[str, Any]:
     """
     sig = inspect.signature(fn)
     try:
-        hints = get_type_hints(fn)
+        hints = get_type_hints(fn, include_extras=True)
     except Exception:
         hints = {}
 
@@ -179,12 +238,17 @@ def _generate_schema(fn: Callable[..., Any]) -> dict[str, Any]:
         annotation = hints.get(name, inspect.Parameter.empty)
 
         # Skip ToolContext-typed parameters (injected at runtime, not part of LLM schema)
-        if getattr(annotation, "__name__", "") == "ToolContext":
+        # Unwrap Annotated if present before checking
+        raw_ann = annotation
+        if get_origin(raw_ann) is Annotated:
+            raw_ann = get_args(raw_ann)[0]
+        if getattr(raw_ann, "__name__", "") == "ToolContext":
             continue
 
         prop = _python_type_to_json_schema(annotation)
 
-        if name in doc_args:
+        # Docstring description as fallback (Annotated description takes precedence)
+        if name in doc_args and "description" not in prop:
             prop["description"] = doc_args[name]
 
         properties[name] = prop
@@ -280,11 +344,12 @@ class FunctionTool(Tool):
         # Detect ToolContext parameter for injection by Agent._execute_tools()
         self._tool_context_param: str | None = None
         try:
-            _hints = get_type_hints(fn)
+            _hints = get_type_hints(fn, include_extras=True)
         except Exception:
             _hints = {}
         for _pname, _pann in _hints.items():
-            if getattr(_pann, "__name__", "") == "ToolContext":
+            _base = get_args(_pann)[0] if get_origin(_pann) is Annotated else _pann
+            if getattr(_base, "__name__", "") == "ToolContext":
                 self._tool_context_param = _pname
                 break
 
