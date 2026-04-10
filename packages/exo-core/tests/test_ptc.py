@@ -5,6 +5,7 @@ All tests use mock providers — no real API calls.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -25,7 +26,12 @@ from exo.ptc import (
 )
 from exo.runner import run
 from exo.tool import Tool, tool
-from exo.types import AgentOutput, StreamEvent, TextEvent, ToolCall, ToolCallEvent, ToolResultEvent, Usage
+from exo.types import (
+    ToolCall,
+    ToolCallEvent,
+    ToolResultEvent,
+    Usage,
+)
 
 # ---------------------------------------------------------------------------
 # Test tools
@@ -463,9 +469,7 @@ class TestPTCIntegration:
         tc = ToolCall(
             id="tc-1",
             name=PTC_TOOL_NAME,
-            arguments=json.dumps(
-                {"code": 'r = await default_api.greet(name="World")\nprint(r)'}
-            ),
+            arguments=json.dumps({"code": 'r = await default_api.greet(name="World")\nprint(r)'}),
         )
         resp_tool = ModelResponse(
             content="",
@@ -490,9 +494,7 @@ class TestPTCIntegration:
         tc = ToolCall(
             id="tc-1",
             name=PTC_TOOL_NAME,
-            arguments=json.dumps(
-                {"code": 'r = await default_api.greet(name="Test")\nprint(r)'}
-            ),
+            arguments=json.dumps({"code": 'r = await default_api.greet(name="Test")\nprint(r)'}),
         )
         # Track messages sent to provider
         call_count = 0
@@ -673,8 +675,8 @@ class TestPTCTransparency:
         while not agent._event_queue.empty():
             events.append(agent._event_queue.get_nowait())
 
-        call_ev = [e for e in events if isinstance(e, ToolCallEvent)][0]
-        result_ev = [e for e in events if isinstance(e, ToolResultEvent)][0]
+        call_ev = next(e for e in events if isinstance(e, ToolCallEvent))
+        result_ev = next(e for e in events if isinstance(e, ToolResultEvent))
         assert call_ev.tool_call_id == result_ev.tool_call_id
 
     async def test_result_has_duration(self) -> None:
@@ -927,15 +929,745 @@ class TestPTCNonStreamingDrain:
         await run(agent, "first", provider=provider1)
 
         # Second: streaming run (text-only, no tool calls)
-        provider2 = _make_stream_provider(
-            [[_FakeStreamChunk(delta="Hello stream!")]]
-        )
+        provider2 = _make_stream_provider([[_FakeStreamChunk(delta="Hello stream!")]])
         events = [ev async for ev in run.stream(agent, "second", provider=provider2, detailed=True)]
 
         # No stale ToolCallEvent/ToolResultEvent from the first run should appear
-        tool_events = [
-            e for e in events if isinstance(e, (ToolCallEvent, ToolResultEvent))
-        ]
+        tool_events = [e for e in events if isinstance(e, (ToolCallEvent, ToolResultEvent))]
         assert len(tool_events) == 0, (
             f"Expected no tool events in text-only stream, got {len(tool_events)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Robustness tests (H1-H5, M6, M9, M11, M12, L13-L18)
+# ---------------------------------------------------------------------------
+
+
+class TestPTCBaseExceptionHandling:
+    """PTC must catch SystemExit / KeyboardInterrupt / MaxToolCallsExceeded."""
+
+    async def test_system_exit_is_caught(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("raise SystemExit(2)")
+        assert "SystemExit" in result
+        assert "blocked inside PTC" in result
+
+    async def test_system_exit_with_captured_output(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run('print("done work")\nraise SystemExit(1)')
+        assert "done work" in result
+        assert "SystemExit" in result
+
+    async def test_raise_system_exit_with_code_is_caught(self) -> None:
+        """``raise SystemExit(3)`` in user code is caught by the inner trap.
+
+        ``import sys`` is now sandbox-blocked, so this tests the bare
+        ``raise SystemExit(...)`` form which remains a valid escape attempt.
+        """
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("raise SystemExit(3)")
+        assert "SystemExit" in result
+        assert "code=3" in result
+
+    async def test_cancelled_error_propagates(self) -> None:
+        """asyncio.CancelledError MUST propagate, not be swallowed."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        # Raise CancelledError directly from user code
+        with pytest.raises(asyncio.CancelledError):
+            await executor.run("raise asyncio.CancelledError()")
+
+
+class TestPTCStderrCapture:
+    """Verify stderr from library code inside tools is captured.
+
+    Since the sandbox blocks ``import sys``, user code cannot write to
+    stderr directly.  But libraries invoked *inside* tool execution (e.g.
+    ``warnings.warn``, legacy C extensions) may still write to stderr —
+    those writes must be captured and returned to the model, not leaked
+    to the real terminal.
+    """
+
+    async def test_tool_stderr_is_captured(self) -> None:
+        import sys as _sys
+
+        @tool
+        def noisy() -> str:
+            """Write a warning to stderr then return a value."""
+            _sys.stderr.write("library warning: about to compute\n")
+            return "done"
+
+        agent = Agent(name="t", tools=[noisy], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("r = await default_api.noisy()\nprint(r)")
+        assert "library warning" in result
+        assert "done" in result
+
+
+class TestPTCHyphenatedNames:
+    """Tools whose name is not a valid Python identifier are excluded from PTC."""
+
+    def test_hyphen_name_excluded_from_ptc(self) -> None:
+        @tool(name="get-data")
+        def get_data(query: str) -> str:
+            """Fetch data."""
+            return f"data:{query}"
+
+        agent = Agent(name="t", tools=[get_data, greet], ptc=True)
+        eligible = get_ptc_eligible_tools(agent)
+        assert "get-data" not in eligible
+        assert "greet" in eligible
+
+    def test_hyphen_name_stays_as_direct_schema(self) -> None:
+        @tool(name="get-data")
+        def get_data(query: str) -> str:
+            """Fetch data."""
+            return f"data:{query}"
+
+        agent = Agent(name="t", tools=[get_data, greet], ptc=True)
+        schemas = agent.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        # Hyphenated tool stays as direct schema (so the LLM can still call it)
+        assert "get-data" in names
+        # greet is absorbed into PTC
+        assert "greet" not in names
+        assert PTC_TOOL_NAME in names
+
+
+class TestPTCExcludeAttribute:
+    """Tools with _ptc_exclude=True are never wrapped by PTC."""
+
+    def test_ptc_exclude_attribute(self) -> None:
+        @tool
+        def special(x: int) -> str:
+            """Do something special."""
+            return str(x)
+
+        special._ptc_exclude = True  # type: ignore[attr-defined]
+        agent = Agent(name="t", tools=[special, greet], ptc=True)
+        eligible = get_ptc_eligible_tools(agent)
+        assert "special" not in eligible
+        assert "greet" in eligible
+
+        schemas = agent.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "special" in names  # stays as direct schema
+
+
+class TestPTCJsonDumpsDefault:
+    """Tools returning non-JSON-serializable objects are stringified via default=str."""
+
+    async def test_datetime_in_dict_return_serialized(self) -> None:
+        import datetime as _dt
+
+        @tool
+        def get_info() -> dict:
+            """Return a dict with datetime."""
+            return {"when": _dt.datetime(2026, 4, 10, 12, 0, 0)}
+
+        agent = Agent(name="t", tools=[get_info], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("r = await default_api.get_info()\nprint(r)")
+        # datetime is stringified via default=str; no TypeError
+        assert "2026-04-10" in result
+
+    async def test_non_serialisable_falls_back_to_str(self) -> None:
+        class Weird:
+            def __str__(self) -> str:
+                return "weird-object"
+
+        @tool
+        def get_weird() -> dict:
+            """Return a dict with weird object."""
+            return {"thing": Weird()}
+
+        agent = Agent(name="t", tools=[get_weird], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("r = await default_api.get_weird()\nprint(r)")
+        # Either json.dumps(default=str) or str(raw) handles this
+        assert "weird-object" in result
+
+
+class TestPTCOutputTruncation:
+    async def test_output_is_capped(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent, max_output_bytes=500)
+        code = "print('x' * 5000)"
+        result = await executor.run(code)
+        assert "[truncated" in result
+        assert len(result) <= 600  # cap + trailing marker
+
+    async def test_output_under_cap_is_untouched(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent, max_output_bytes=500)
+        result = await executor.run("print('hello')")
+        assert result == "hello"
+        assert "[truncated" not in result
+
+
+class TestPTCTracebackLineNumbers:
+    async def test_traceback_line_numbers_match_user_code(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        # Line 1 of user code raises
+        result = await executor.run("x = 1/0")
+        # The rewritten traceback should say line 1, not line 2
+        assert "line 1" in result or "ZeroDivisionError" in result
+        # And definitely NOT "line 2" from the wrapper
+        assert 'File "<ptc>", line 2' not in result
+
+    async def test_traceback_multi_line_user_code(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        # Line 3 of user code raises
+        code = "a = 1\nb = 2\nc = a / 0\n"
+        result = await executor.run(code)
+        assert "ZeroDivisionError" in result
+        # Wrapper adds 1 line, so without rewrite the traceback would say line 4
+        assert 'File "<ptc>", line 4' not in result
+
+    async def test_syntax_error_line_number_adjusted(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        # Line 1 has the syntax error
+        result = await executor.run("def foo(")
+        assert "SyntaxError" in result
+
+
+class TestPTCMaxToolCalls:
+    async def test_max_tool_calls_enforced(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent, max_tool_calls=3)
+        code = """\
+for _ in range(10):
+    await default_api.greet(name="X")
+"""
+        result = await executor.run(code)
+        assert "max_tool_calls" in result
+
+    async def test_under_cap_runs_normally(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent, max_tool_calls=5)
+        code = """\
+for _ in range(3):
+    r = await default_api.greet(name="X")
+print(r)
+"""
+        result = await executor.run(code)
+        assert "Hello, X!" in result
+
+    async def test_max_tool_calls_propagated_from_agent(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True, ptc_max_tool_calls=2)
+        assert agent.ptc_max_tool_calls == 2
+        assert agent.tools[PTC_TOOL_NAME]._max_tool_calls == 2  # type: ignore[attr-defined]
+
+
+class TestPTCFullUuid:
+    async def test_tool_call_id_is_full_uuid(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        await executor.run('await default_api.greet(name="A")')
+
+        events: list[Any] = []
+        while not agent._event_queue.empty():
+            events.append(agent._event_queue.get_nowait())
+
+        call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert len(call_events) == 1
+        # Full uuid.uuid4().hex is 32 hex chars, prefix 'ptc_'
+        assert len(call_events[0].tool_call_id) == 4 + 32
+        assert call_events[0].tool_call_id.startswith("ptc_")
+
+
+class TestPTCOrphanTaskCleanup:
+    async def test_orphan_tasks_are_cancelled(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        code = """\
+async def spinner():
+    while True:
+        await asyncio.sleep(0.01)
+
+asyncio.create_task(spinner())
+print("spawned")
+"""
+        before = asyncio.all_tasks()
+        result = await executor.run(code)
+        assert "spawned" in result
+        # After run, the orphan spinner should be cancelled
+        await asyncio.sleep(0.05)
+        after = asyncio.all_tasks()
+        new_tasks = after - before
+        # Any surviving new task should be done (cancelled) or filtered
+        for task in new_tasks:
+            assert task.done()
+
+
+class TestPTCArrayItemTypes:
+    def test_array_items_shown_in_signature(self) -> None:
+        @tool
+        def batch(ids: list[str]) -> str:
+            """Process a list of ids."""
+            return str(ids)
+
+        sig = schema_to_python_sig(batch)
+        # Should show list[str], not just list
+        assert "list[str]" in sig
+
+    def test_array_without_items_defaults_to_list(self) -> None:
+        class ToolNoItems(Tool):
+            name = "simple"
+            description = "simple"
+            parameters = {  # noqa: RUF012
+                "type": "object",
+                "properties": {
+                    "vals": {"type": "array"},
+                },
+                "required": ["vals"],
+            }
+
+            async def execute(self, **kwargs: Any) -> str:
+                return ""
+
+        sig = schema_to_python_sig(ToolNoItems())
+        assert "vals: list" in sig
+
+
+class TestPTCDescriptionCache:
+    def test_description_cached_when_tools_unchanged(self) -> None:
+        agent = Agent(name="t", tools=[greet, add], ptc=True)
+        ptc_tool: PTCTool = agent.tools[PTC_TOOL_NAME]  # type: ignore[assignment]
+        d1 = ptc_tool.description
+        d2 = ptc_tool.description
+        # Same content and same object (cache hit)
+        assert d1 is d2
+
+    async def test_description_invalidated_on_add_tool(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        ptc_tool: PTCTool = agent.tools[PTC_TOOL_NAME]  # type: ignore[assignment]
+        d1 = ptc_tool.description
+        assert "async def greet" in d1
+        assert "async def add" not in d1
+
+        await agent.add_tool(add)
+        d2 = ptc_tool.description
+        assert "async def add" in d2
+        assert d1 is not d2
+
+    def test_description_contains_instructions_block(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "<instructions>" in desc
+        assert "</instructions>" in desc
+        assert "<recommended_usage>" in desc
+        assert "</recommended_usage>" in desc
+
+    def test_description_emphasises_minimal_code(self) -> None:
+        """Key directive: write MINIMAL, PTC-only code."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        # Guidance about minimal code presence
+        assert "MINIMAL" in desc
+        assert "ONLY write PTC-related" in desc
+
+    def test_code_param_description_points_to_examples(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
+        code_desc = ptc_tool.parameters["properties"]["code"]["description"]
+        # The parameter description should contain examples and a reference
+        # to the tool description (not duplicate the full ruleset).
+        assert "EXAMPLE" in code_desc
+        assert "default_api" in code_desc
+        assert "MINIMAL" in code_desc
+        assert "See the tool description" in code_desc
+
+    def test_code_param_description_does_not_duplicate_rules(self) -> None:
+        """The parameter description should NOT re-list the full instructions block."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
+        code_desc = ptc_tool.parameters["properties"]["code"]["description"]
+        # The full rule block lives in the tool description — param desc stays concise.
+        assert "<instructions>" not in code_desc
+        assert "<recommended_usage>" not in code_desc
+        # Compact: under ~1500 chars (vs the 2000+ of the rule block)
+        assert len(code_desc) < 1500
+
+
+class TestPTCAgentParameters:
+    def test_max_output_bytes_parameter(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True, ptc_max_output_bytes=1024)
+        assert agent.ptc_max_output_bytes == 1024
+        assert agent.tools[PTC_TOOL_NAME]._max_output_bytes == 1024  # type: ignore[attr-defined]
+
+    def test_default_max_output_bytes(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        assert agent.ptc_max_output_bytes == 200_000
+
+    def test_default_max_tool_calls(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        assert agent.ptc_max_tool_calls == 200
+
+    def test_serialisation_round_trip(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_timeout=90,
+            ptc_max_output_bytes=1024,
+            ptc_max_tool_calls=50,
+        )
+        data = agent.to_dict()
+        assert data["ptc_max_output_bytes"] == 1024
+        assert data["ptc_max_tool_calls"] == 50
+
+        restored = Agent.from_dict(data)
+        assert restored.ptc_max_output_bytes == 1024
+        assert restored.ptc_max_tool_calls == 50
+
+
+# ---------------------------------------------------------------------------
+# Sandbox tests — restricted builtins, blocked imports, AST pre-scan
+# ---------------------------------------------------------------------------
+
+
+class TestPTCSandboxImports:
+    """Blocked stdlib imports must raise a clear ImportError."""
+
+    async def test_import_os_blocked_by_ast_scan(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import os\nprint(os.getcwd())")
+        assert "blocked" in result
+        assert "os" in result
+        assert "default_api" in result
+
+    async def test_import_subprocess_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import subprocess")
+        assert "blocked" in result
+        assert "subprocess" in result
+
+    async def test_import_sys_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import sys")
+        assert "blocked" in result
+        assert "sys" in result
+
+    async def test_import_pathlib_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import pathlib")
+        assert "blocked" in result
+
+    async def test_import_shutil_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import shutil")
+        assert "blocked" in result
+
+    async def test_import_socket_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import socket")
+        assert "blocked" in result
+
+    async def test_import_urllib_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import urllib")
+        assert "blocked" in result
+
+    async def test_import_threading_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import threading")
+        assert "blocked" in result
+
+    async def test_import_multiprocessing_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import multiprocessing")
+        assert "blocked" in result
+
+    async def test_import_ctypes_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import ctypes")
+        assert "blocked" in result
+
+    async def test_import_inspect_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import inspect")
+        assert "blocked" in result
+
+    async def test_from_os_import_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("from os import path")
+        assert "blocked" in result
+
+    async def test_from_subprocess_import_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("from subprocess import run")
+        assert "blocked" in result
+
+    async def test_import_dotted_blocked(self) -> None:
+        """Blocking is by top package name — `os.path` → `os`."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import os.path")
+        assert "blocked" in result
+
+    async def test_re_import_of_preloaded_allowed(self) -> None:
+        """`import json as j` should work (no-op re-import)."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import json as j\nprint(j.dumps({'a': 1}))")
+        assert '{"a": 1}' in result
+
+    async def test_unknown_import_rejected(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import some_random_module")
+        assert "not allowed" in result or "blocked" in result
+
+
+class TestPTCSandboxBuiltins:
+    """Dangerous builtins must raise PTCSandboxError with a clear message."""
+
+    async def test_open_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("open('/etc/passwd')")
+        assert "blocked" in result
+        assert "default_api" in result
+
+    async def test_eval_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("eval('1+1')")
+        assert "blocked" in result
+
+    async def test_exec_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("exec('x = 1')")
+        assert "blocked" in result
+
+    async def test_compile_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("compile('1+1', '<s>', 'eval')")
+        assert "blocked" in result
+
+    async def test_globals_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("globals()")
+        assert "blocked" in result
+
+    async def test_locals_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("locals()")
+        assert "blocked" in result
+
+    async def test_vars_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("vars()")
+        assert "blocked" in result
+
+    async def test_dir_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("dir()")
+        assert "blocked" in result
+
+    async def test_input_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("input('> ')")
+        assert "blocked" in result
+
+    async def test_blocked_error_is_catchable(self) -> None:
+        """User code can catch the sandbox error and continue."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        code = """\
+try:
+    open('/etc/passwd')
+except Exception as e:
+    print(f'caught: {e}')
+print('continued')
+"""
+        result = await executor.run(code)
+        assert "caught:" in result
+        assert "continued" in result
+
+
+class TestPTCSandboxAstScan:
+    """Static AST pre-scan blocks dunder escape patterns."""
+
+    async def test_dunder_class_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(().__class__)")
+        assert "__class__" in result
+        assert "blocked" in result
+
+    async def test_dunder_bases_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(object.__bases__)")
+        assert "__bases__" in result
+
+    async def test_dunder_subclasses_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("object.__subclasses__()")
+        assert "__subclasses__" in result
+
+    async def test_dunder_mro_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(int.__mro__)")
+        assert "__mro__" in result
+
+    async def test_dunder_globals_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("f = lambda: 1\nprint(f.__globals__)")
+        assert "__globals__" in result
+
+    async def test_dunder_dict_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print({}.__dict__)")
+        assert "__dict__" in result
+
+    async def test_dunder_code_blocked(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("f = lambda: 1\nprint(f.__code__)")
+        assert "__code__" in result
+
+    async def test_chained_dunder_blocked(self) -> None:
+        """The classic escape chain must be caught at the first hop."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(().__class__.__bases__[0].__subclasses__())")
+        assert "blocked" in result
+
+    async def test_dynamic_getattr_dunder_blocked_at_runtime(self) -> None:
+        """Dynamic dunder access via getattr(x, '__class__') is runtime-blocked."""
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        # Build the dunder name at runtime so the AST scan cannot see it.
+        code = "name = '__' + 'class' + '__'\nprint(getattr(object(), name))"
+        result = await executor.run(code)
+        # safer_getattr rejects underscore-prefixed names at runtime
+        assert "blocked" in result or "invalid attribute" in result or "starts with" in result
+
+
+class TestPTCSandboxSafeBuiltins:
+    """The safe builtin subset must remain functional."""
+
+    async def test_len_range_sum_sorted(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(sum(range(10)))\nprint(len(sorted([3,1,2])))")
+        assert "45" in result
+        assert "3" in result
+
+    async def test_comprehensions_and_filters(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print([x * 2 for x in range(5) if x % 2 == 0])")
+        assert "[0, 4, 8]" in result
+
+    async def test_type_constructors(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run(
+            "print(dict(a=1, b=2))\nprint(list((1,2,3)))\nprint(set([1,1,2]))"
+        )
+        assert "{'a': 1, 'b': 2}" in result
+        assert "[1, 2, 3]" in result
+
+    async def test_isinstance_still_works(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(isinstance(1, int))")
+        assert "True" in result
+
+    async def test_any_all_min_max(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("print(any([0, 1]))\nprint(all([1, 1]))\nprint(max([3, 1, 2]))")
+        assert "True" in result
+        assert "3" in result
+
+    async def test_getattr_on_safe_name_works(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run('d = {"a": 1}\nprint(getattr(d, "keys")())')
+        assert "dict_keys" in result
+
+    async def test_asyncio_gather_still_works(self) -> None:
+        agent = Agent(name="t", tools=[greet, add], ptc=True)
+        executor = PTCExecutor(agent)
+        code = """\
+results = await asyncio.gather(
+    default_api.greet(name="A"),
+    default_api.add(a=1, b=2),
+)
+for r in results:
+    print(r)
+"""
+        result = await executor.run(code)
+        assert "Hello, A!" in result
+        assert "3" in result
+
+    async def test_json_loads_still_works(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run('d = json.loads(\'{"a": 1, "b": 2}\')\nprint(d["a"] + d["b"])')
+        assert "3" in result
+
+    async def test_math_re_still_work(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run('print(math.sqrt(16))\nprint(re.sub(r"\\d", "X", "a1b2"))')
+        assert "4.0" in result
+        assert "aXbX" in result
+
+
+class TestPTCSandboxMessages:
+    """Sandbox errors must clearly direct the agent to default_api."""
+
+    async def test_import_error_mentions_default_api(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("import os")
+        assert "default_api" in result
+
+    async def test_builtin_error_mentions_default_api(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("open('x')")
+        assert "default_api" in result
+
+    async def test_ast_scan_error_mentions_default_api(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        executor = PTCExecutor(agent)
+        result = await executor.run("x = object.__bases__")
+        assert "default_api" in result

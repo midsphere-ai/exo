@@ -734,6 +734,8 @@ class Agent:
         max_spawn_children: int = 4,
         ptc: bool = False,
         ptc_timeout: int = 60,
+        ptc_max_output_bytes: int = 200_000,
+        ptc_max_tool_calls: int = 200,
         skills: SkillRegistry | None = None,
         tool_resolver: ToolResolver | dict[str, Tool | list[Tool]] | None = None,
         tool_gate: dict[str, list[Tool]] | None = None,
@@ -764,6 +766,8 @@ class Agent:
         self.max_spawn_children: int = validate_max_spawn_children(max_spawn_children)
         self.ptc: bool = ptc
         self.ptc_timeout: int = ptc_timeout
+        self.ptc_max_output_bytes: int = ptc_max_output_bytes
+        self.ptc_max_tool_calls: int = ptc_max_tool_calls
         # Internal: spawn depth (0 for top-level agents; incremented for each spawn level)
         self._spawn_depth: int = 0
         # Internal: provider reference stored during run() for use by spawn_self tool
@@ -885,7 +889,12 @@ class Agent:
                 raise AgentError(
                     f"Cannot enable ptc: a tool named '{PTC_TOOL_NAME}' is already registered"
                 )
-            self.tools[PTC_TOOL_NAME] = PTCTool(agent=self, timeout=self.ptc_timeout)
+            self.tools[PTC_TOOL_NAME] = PTCTool(
+                agent=self,
+                timeout=self.ptc_timeout,
+                max_output_bytes=self.ptc_max_output_bytes,
+                max_tool_calls=self.ptc_max_tool_calls,
+            )
             self._cached_tool_schemas = None
 
         # Lifecycle hooks
@@ -2289,6 +2298,8 @@ class Agent:
             "max_spawn_children": self.max_spawn_children,
             "ptc": self.ptc,
             "ptc_timeout": self.ptc_timeout,
+            "ptc_max_output_bytes": self.ptc_max_output_bytes,
+            "ptc_max_tool_calls": self.ptc_max_tool_calls,
             "bare_tools": self.bare_tools,
         }
 
@@ -2367,6 +2378,8 @@ class Agent:
             max_spawn_children=data.get("max_spawn_children", 4),
             ptc=data.get("ptc", False),
             ptc_timeout=data.get("ptc_timeout", 60),
+            ptc_max_output_bytes=data.get("ptc_max_output_bytes", 200_000),
+            ptc_max_tool_calls=data.get("ptc_max_tool_calls", 200),
             bare_tools=data.get("bare_tools", False),
         )
 

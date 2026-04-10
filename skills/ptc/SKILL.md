@@ -40,14 +40,18 @@ agent = Agent(
     model="openai:gpt-4o",
     instructions="Analyze data efficiently. Use code to batch operations.",
     tools=[search, query_db, get_expenses],
-    ptc=True,           # Registers PTC tool automatically
-    ptc_timeout=60,     # Timeout for code execution (seconds, default 60)
+    ptc=True,                        # Registers PTC tool automatically
+    ptc_timeout=60,                  # Timeout for code execution (seconds, default 60)
+    ptc_max_output_bytes=200_000,    # Truncate captured stdout+stderr above this
+    ptc_max_tool_calls=200,          # Cap inner tool calls per PTC invocation
 )
 ```
 
 **Agent parameters:**
-- `ptc: bool = False` — When `True`, registers the internal PTC tool (`__exo_ptc__`) and hides PTC-eligible tools from the schema list (they become functions inside the PTC tool instead)
+- `ptc: bool = False` — When `True`, registers the internal PTC tool (`__exo_ptc__`) and hides PTC-eligible tools from the schema list (they become functions inside the PTC tool instead).
 - `ptc_timeout: int = 60` — Maximum seconds for a single PTC invocation. Long-running code is terminated with a `TimeoutError` message.
+- `ptc_max_output_bytes: int = 200_000` — Maximum bytes of captured stdout+stderr returned to the model. Larger outputs are truncated with a `[truncated N chars]` suffix.
+- `ptc_max_tool_calls: int = 200` — Maximum number of inner tool calls the user code can make per PTC invocation. Exceeding raises `MaxToolCallsExceeded`.
 
 ### How It Works
 
@@ -86,6 +90,33 @@ PTC is **fully transparent** to the event stream. The internal `__exo_ptc__` too
 ```
 
 This means UI consumers never need to know PTC exists. The event stream looks identical to non-PTC mode (except with fewer LLM steps).
+
+### Sandbox
+
+PTC code runs inside a restricted Python namespace — the goal is to push the agent toward registered tools and away from the lazy "just use Python" escape hatches. Four layers of defense, in order:
+
+1. **Restricted `__builtins__` whitelist.** Only a curated subset of builtins is available: type constructors (`str`, `int`, `list`, `dict`, `set`, `tuple`, `bool`, …), sequence/iteration (`len`, `range`, `enumerate`, `zip`, `sorted`, `reversed`, `map`, `filter`, `iter`, `next`, `slice`), numerics (`abs`, `round`, `min`, `max`, `sum`, `pow`, `divmod`), logic (`any`, `all`), string/format (`chr`, `ord`, `hex`, `oct`, `bin`, `ascii`, `repr`, `format`), type checks (`isinstance`, `issubclass`, `callable`, `type`, `object`), and the full set of safe exceptions. `print` is available and captured via stdout redirect.
+
+2. **Blocked builtins.** `open`, `eval`, `exec`, `compile`, `__import__`, `globals`, `locals`, `vars`, `dir`, `breakpoint`, `input`, `exit`, `quit`, `help`, `memoryview`, `__build_class__` are replaced with stubs that raise `PTCSandboxError` pointing at `default_api`. The errors are catchable so user code can `try/except` and fall back.
+
+3. **Blocked imports.** A custom `__import__` hook rejects the expanded dangerous stdlib blocklist with `ImportError`:
+   - **Filesystem/process:** `os`, `sys`, `subprocess`, `shutil`, `pathlib`, `tempfile`, `glob`, `fnmatch`, `fcntl`, `resource`
+   - **I/O bypass:** `io`, `builtins`, `ctypes`, `mmap`
+   - **Network:** `socket`, `urllib`, `http`, `httplib`, `ssl`, `ftplib`, `smtplib`, `poplib`, `imaplib`, `telnetlib`, `nntplib`
+   - **Code/import/exec:** `importlib`, `pkgutil`, `runpy`, `code`, `codeop`
+   - **Introspection/gc:** `inspect`, `gc`, `traceback`
+   - **Concurrency:** `threading`, `multiprocessing`, `concurrent` (asyncio is pre-imported and allowed)
+   - **System-level:** `signal`, `pty`, `tty`, `select`, `termios`, `pwd`, `grp`
+
+   Only re-imports of already-pre-loaded modules are allowed: `json`, `math`, `re`, `asyncio`, `collections`, `itertools`, `datetime`. `import json as j` works as a no-op.
+
+4. **AST pre-scan for dunder escape hatches.** Before compile, the code is statically walked and attribute access on `__class__`, `__bases__`, `__base__`, `__subclasses__`, `__mro__`, `__globals__`, `__builtins__`, `__import__`, `__getattribute__`, `__setattr__`, `__delattr__`, `__dict__`, `__code__`, `__closure__`, `__func__`, `__self__`, `__loader__`, `__spec__`, `__init_subclass__`, `__new__`, `__reduce__`, `__reduce_ex__` is rejected with a clear error. This blocks the classic escape chain `().__class__.__bases__[0].__subclasses__()`.
+
+5. **Runtime `safer_getattr` guard.** Dynamic attribute access via `getattr(obj, name)` goes through `RestrictedPython.Guards.safer_getattr`, which rejects any attribute name starting with `_`. This catches the dynamic form of the same escapes (`getattr(x, "__class__")`).
+
+**Philosophy:** the sandbox closes the *lazy* escape paths. Agents that try to read a file via `open("/etc/passwd")`, shell out via `subprocess`, or walk the class hierarchy via `__class__.__bases__` get a catchable error telling them to use `default_api` instead. A determined attacker with deep Python introspection can still find edge-case bypasses — for those, route PTC through a subprocess sandbox (future `exo-sandbox` backend work).
+
+**Escape hatch for specific tools**: set `tool._ptc_exclude = True` on a tool to keep it as a direct schema (outside PTC's namespace). Useful for tools that need unrestricted access to the host environment.
 
 ### Tool Classification
 
@@ -344,8 +375,15 @@ agent.remove_tool("search")
 ## Gotchas
 
 - **PTC is provider-agnostic** — it works by injecting a standard tool, not by using any provider-specific API (like Anthropic's `code_execution_20260120`). Any LLM that supports tool calling can use PTC.
-- **Code runs in-process** — there is no sandbox. The code executes in the same Python runtime as the agent. This is fast but means the LLM-generated code has access to the process environment. For untrusted models, consider additional guardrails.
-- **`asyncio.wait_for` timeout doesn't interrupt sync loops** — `ptc_timeout` catches `await asyncio.sleep(forever)` but not `while True: pass`. This is acceptable because the LLM writes the code and `max_steps` provides an outer guard.
+- **Code runs in a restricted in-process namespace** — `open`, `eval`, `exec`, `compile`, `os`, `sys`, `subprocess`, `pathlib`, `socket`, `threading`, `ctypes`, `inspect`, and most of the dangerous stdlib are blocked with `ImportError` / `PTCSandboxError`. The errors are catchable and the messages direct the agent at `default_api`. See the **Sandbox** section above for the full rules. The sandbox closes lazy escape paths; true isolation against determined attackers requires a subprocess backend (not yet implemented).
+- **`asyncio.wait_for` timeout doesn't interrupt sync loops** — `ptc_timeout` catches `await asyncio.sleep(forever)` but not `while True: pass`. This is a fundamental limitation of in-process execution; a subprocess backend is the long-term fix.
+- **No in-process memory cap** — a pathological `[0] * 10**10` can OOM the agent process. Same subprocess-backend answer.
+- **Output is capped** — captured stdout+stderr is truncated to `ptc_max_output_bytes` (default 200 KiB). Long outputs get a `\n...[truncated N chars]` suffix.
+- **Tool-call count is capped** — user code can make at most `ptc_max_tool_calls` (default 200) inner tool calls per invocation. Exceeding raises `MaxToolCallsExceeded`.
+- **Code size is capped** — incoming code strings are rejected above `ptc_max_code_bytes` (default 100 KiB) with a clear error.
+- **Orphan asyncio tasks are cancelled** — if user code does `asyncio.create_task(...)` without awaiting, PTC cancels the task after `__ptc_main__` completes so it cannot leak output or run forever.
+- **Traceback line numbers match your code** — PTC rewrites `<ptc>` line numbers in tracebacks to remove the 2-line internal wrapper offset, so errors point at the agent's own code.
+- **Tool names must be valid Python identifiers** — tools with hyphens (e.g., `get-data`) are automatically excluded from PTC and remain available as direct tool schemas. A warning is logged once per excluded tool.
 - **Tool results inside PTC are strings** — tools return strings (or JSON-serialized dicts/lists). The code must `json.loads()` to work with structured data.
 - **Tools live in `default_api` namespace** — this prevents collisions with Python builtins (`map`, `list`, `filter`, `type`, `id`), keywords (`return`, `class`, `for`), and stdlib modules (`json`, `math`, `re`). Always use `await default_api.tool_name(...)`.
 - **HITL tools are excluded from PTC** — they stay as direct schemas so the human approval flow is never bypassed. The LLM sees both the PTC tool and the HITL tools as separate callable tools.
