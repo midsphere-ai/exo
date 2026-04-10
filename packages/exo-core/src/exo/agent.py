@@ -404,7 +404,9 @@ async def _apply_context_windowing(
                 from exo.context.info import (  # pyright: ignore[reportMissingImports]
                     build_context_window_info,
                 )
-
+            except ImportError:
+                _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
+            else:
                 _info = build_context_window_info(
                     msg_list,
                     _cfg,
@@ -425,8 +427,6 @@ async def _apply_context_windowing(
                     provider=provider,
                     actions=actions,
                 )
-            except ImportError:
-                _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
         return msg_list, actions
 
     # Separate system messages from conversation history
@@ -447,7 +447,9 @@ async def _apply_context_windowing(
             from exo.context.info import (  # pyright: ignore[reportMissingImports]
                 build_context_window_info,
             )
-
+        except ImportError:
+            _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
+        else:
             _info = build_context_window_info(
                 result_list,
                 _cfg,
@@ -468,8 +470,6 @@ async def _apply_context_windowing(
                 provider=provider,
                 actions=actions,
             )
-        except ImportError:
-            _log.debug("exo-context not installed, skipping CONTEXT_WINDOW hook")
         return result_list, actions
 
     # ── overflow="none" — no context management ──────────────────────────
@@ -805,7 +805,10 @@ class Agent:
                 from exo.context.context import (  # pyright: ignore[reportMissingImports]
                     Context as _CtxClass,
                 )
-
+            except ImportError:
+                self.context = None
+                self._context_is_auto: bool = True
+            else:
                 _kw: dict[str, Any] = {}
                 if context_limit is not None:
                     _kw["limit"] = context_limit
@@ -814,10 +817,7 @@ class Agent:
                 if cache is not None:
                     _kw["cache"] = cache
                 self.context = _CtxClass(task_id="__default__", config=_CtxConfig(**_kw))
-                self._context_is_auto: bool = False
-            except ImportError:
-                self.context = None
-                self._context_is_auto = True
+                self._context_is_auto = False
         elif context is not _CONTEXT_UNSET:
             self.context = context
             self._context_is_auto = False
