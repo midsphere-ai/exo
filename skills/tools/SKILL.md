@@ -308,6 +308,71 @@ agent = Agent(
 
 **Validation:** Keys must be non-empty strings, values must be strings (used as the property description in the JSON schema).
 
+**PTC interaction:** When `ptc=True`, `injected_tool_args` surfaces on both the outer `__exo_ptc__` schema AND each inner tool signature inside the PTC description (with `[injected]` marker in the generated `Args:` section). The PTC wrapper strips them from kwargs before calling the underlying tool function, matching the non-PTC dispatch behavior.
+
+**Related: `ptc_extra_args`** — different semantics, PTC-specific. Adds fields to the `__exo_ptc__` schema **only** (not inner tools), and the values the LLM fills end up in a `ptc_args` dict inside the PTC code namespace instead of being stripped. Use `injected_tool_args` when you want schema-only observability hints; use `ptc_extra_args` when you want the PTC code to actually READ structured input the LLM provided. See `skills/ptc/SKILL.md::PTC Extra Args` for details.
+
+### Rich Type Hints (Annotated / Literal)
+
+Use `Annotated[T, "description"]` and `Literal[...]` for rich per-parameter metadata that flows into the JSON schema:
+
+```python
+from typing import Annotated, Literal
+
+@tool
+def plan(
+    action: Annotated[Literal["update", "advance", "get"], "The plan action to perform."],
+    phase_id: Annotated[int | None, "ID of the current phase."] = None,
+) -> dict:
+    """Create or advance a task plan."""
+    return {}
+```
+
+What ends up in the JSON schema:
+
+```json
+{
+  "action": {"type": "string", "enum": ["update", "advance", "get"], "description": "The plan action to perform."},
+  "phase_id": {"type": "integer", "description": "ID of the current phase."}
+}
+```
+
+What the LLM sees inside PTC mode (`ptc=True`):
+
+```
+async def plan(
+    action: Literal['update', 'advance', 'get'],
+    phase_id: int | None = None,
+) -> str
+    """Create or advance a task plan."""
+
+    Args:
+        action: The plan action to perform.
+        phase_id: ID of the current phase.
+```
+
+The `Literal[...]` type, per-parameter descriptions, default values, and full multi-line docstring (including XML blocks like `<instructions>`) are all preserved. See `skills/ptc/SKILL.md::Rich Tool Signatures` for the complete set of metadata that survives into PTC descriptions.
+
+**Footgun:** `from __future__ import annotations` (PEP 563) turns type hints into strings. `get_type_hints()` has to evaluate them at schema-generation time, resolving names against the function's **module globals**. If `Annotated` / `Literal` / other typing names aren't imported at the module level where the `@tool` function is defined (e.g., imported inside a test function body or a closure), resolution fails silently and all rich metadata is dropped — every parameter falls back to `"type": "string"` with no description or enum. Exo logs a loud warning (`Tool schema generation could not resolve type hints for ...`) when this happens. **Fix:** add the typing imports at module level, not inside the function body.
+
+### Default Values in Schema
+
+Python default values on `@tool` functions are recorded in the JSON schema via `prop["default"]` (for non-`None` primitive defaults), so downstream renderers can show them to the LLM. `None` defaults are intentionally NOT added to the schema (redundant — the param is already optional by virtue of not being in `required`).
+
+```python
+@tool
+def search(query: str, limit: int = 10, mode: str = "web") -> str:
+    """Search."""
+    return ""
+
+# Schema properties:
+# query  → {"type": "string"}                         (required, no default)
+# limit  → {"type": "integer", "default": 10}         (optional, default shown)
+# mode   → {"type": "string", "default": "web"}       (optional, default shown)
+```
+
+In PTC mode, these defaults render directly in the generated signature: `async def search(query: str, limit: int = 10, mode: str = 'web')`.
+
 ### large_output (Workspace Offloading)
 
 When a tool's result exceeds `EXO_LARGE_OUTPUT_THRESHOLD` bytes (default 10,240 = 10KB):

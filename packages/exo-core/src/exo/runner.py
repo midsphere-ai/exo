@@ -592,6 +592,15 @@ async def _stream(
                 if data["id"]
             ]
 
+            # Normalize ``default_api.<name>`` tool call names that some
+            # models emit directly instead of wrapping them in ``__exo_ptc__``.
+            # Without this, the malformed name leaks into the SSE event
+            # stream and dispatch fails with "unknown tool".
+            if tool_calls:
+                from exo.ptc import normalize_default_api_tool_calls
+
+                normalize_default_api_tool_calls(tool_calls, agent)
+
             full_text = "".join(text_parts)
             from types import SimpleNamespace
 

@@ -77,10 +77,19 @@ class HumanInputTool(Tool):
     When the LLM calls this tool, execution blocks until the human
     responds via the configured ``HumanInputHandler``.
 
+    ``_ptc_exclude=True`` keeps the tool as a direct schema even when
+    the agent has ``ptc=True``.  Wrapping human input inside PTC's
+    ``code`` parameter would break the immediacy contract — the human
+    response would be buffered inside the code execution and the LLM
+    wouldn't see the result until after the whole PTC block finished,
+    defeating the point of an interactive prompt.
+
     Args:
         handler: The input handler to use. Defaults to ``ConsoleHandler``.
         timeout: Maximum seconds to wait for input. ``None`` means no timeout.
     """
+
+    _ptc_exclude: bool = True
 
     def __init__(
         self,

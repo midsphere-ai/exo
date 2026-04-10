@@ -15,7 +15,16 @@ class _QueueTool(Tool):
 
     The ``queue`` parameter is NOT part of the JSON schema — it is bound
     by the caller (runner / agent) at setup time.
+
+    ``_ptc_exclude=True`` keeps task-loop tools (``steer_agent``,
+    ``abort_agent``) as *direct* schemas even when the owning agent has
+    ``ptc=True``.  Steer/abort are control-flow signals for another
+    agent's task loop — wrapping them in a PTC ``code`` payload would
+    add latency and break the immediacy contract the task controller
+    depends on.
     """
+
+    _ptc_exclude: bool = True
 
     __slots__ = ("_fn", "_queue", "description", "name", "parameters")
 

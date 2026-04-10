@@ -221,7 +221,25 @@ def _generate_schema(fn: Callable[..., Any]) -> dict[str, Any]:
     sig = inspect.signature(fn)
     try:
         hints = get_type_hints(fn, include_extras=True)
-    except Exception:
+    except Exception as _hints_exc:
+        # Common cause: ``from __future__ import annotations`` turns
+        # annotations into strings that need the typing names (Annotated,
+        # Literal, …) to be resolvable in the function's module globals.
+        # If the function is defined inside a closure/test where those
+        # names aren't imported at module level, resolution fails and the
+        # LLM silently loses all the rich type metadata. Log a loud
+        # warning so the footgun is visible in logs.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Tool schema generation could not resolve type hints for %r "
+            "(%s). This usually means a typing import is missing at the "
+            "module level where the function is defined. All parameters "
+            "will fall back to 'string' type with no descriptions or "
+            "enum constraints.",
+            getattr(fn, "__qualname__", repr(fn)),
+            _hints_exc,
+        )
         hints = {}
 
     doc_args = _parse_docstring_args(fn)
@@ -250,6 +268,22 @@ def _generate_schema(fn: Callable[..., Any]) -> dict[str, Any]:
         # Docstring description as fallback (Annotated description takes precedence)
         if name in doc_args and "description" not in prop:
             prop["description"] = doc_args[name]
+
+        # Record the Python default so downstream renderers (e.g. the PTC
+        # signature generator) can show it to the LLM.  Only primitive,
+        # JSON-friendly non-None values are included — ``None`` defaults
+        # are redundant (the param is already optional by virtue of not
+        # being in ``required``) and anything non-primitive is skipped so
+        # the schema stays JSON-serialisable.
+        if param.default is not inspect.Parameter.empty:
+            default_val = param.default
+            if default_val is not None and isinstance(
+                default_val, (bool, int, float, str, list, dict, tuple)
+            ):
+                # Tuples become lists so json.dumps works.
+                if isinstance(default_val, tuple):
+                    default_val = list(default_val)
+                prop["default"] = default_val
 
         properties[name] = prop
 

@@ -147,9 +147,14 @@ class Swarm:
                 agent._context_is_auto = False
 
         # Propagate PTC to all member agents when explicitly provided.
+        # Use ``_apply_ptc_setting`` so the synthetic ``__exo_ptc__`` tool is
+        # registered (or removed) and each agent's schema cache is
+        # invalidated — a bare ``agent.ptc = ptc`` assignment would leave
+        # stale schemas and no PTC tool, causing PTC-eligible tools to
+        # leak as direct schemas on the next ``get_tool_schemas()`` call.
         if ptc is not None:
             for agent in self.agents.values():
-                agent.ptc = ptc
+                agent._apply_ptc_setting(ptc)
 
         # Set name from the first agent for compatibility with runner
         self.name = f"swarm({self.flow_order[0]}...)"
@@ -306,9 +311,7 @@ class Swarm:
                 state["input"] = current_input
                 target = agent.evaluate(state)
                 if target not in self.agents:
-                    raise SwarmError(
-                        f"Branch '{agent_name}' targets unknown agent '{target}'"
-                    )
+                    raise SwarmError(f"Branch '{agent_name}' targets unknown agent '{target}'")
                 if detailed:
                     _ev = StatusEvent(
                         status="running",
@@ -483,9 +486,7 @@ class Swarm:
         """Stream a LoopNode's body agents through iterations."""
         for body_name in loop_node.body:
             if body_name not in self.agents:
-                raise SwarmError(
-                    f"Loop '{loop_node.name}' references unknown agent '{body_name}'"
-                )
+                raise SwarmError(f"Loop '{loop_node.name}' references unknown agent '{body_name}'")
 
         current_input = input
         iteration = 0
@@ -639,10 +640,14 @@ class Swarm:
             )
             delegate_tools.append(dtool)
 
-        # Temporarily add delegate tools to the lead agent
+        # Temporarily add delegate tools to the lead agent. Invalidate
+        # the schema cache so ``get_tool_schemas()`` rebuilds with the
+        # delegate tools included — otherwise a previously-populated
+        # cache would hide them from the LLM.
         original_tools = dict(lead.tools)
         for dtool in delegate_tools:
             lead.tools[dtool.name] = dtool
+        lead._cached_tool_schemas = None
 
         try:
             if detailed:
@@ -665,8 +670,10 @@ class Swarm:
             ):
                 yield event
         finally:
-            # Restore original tools
+            # Restore original tools and invalidate cache so the next
+            # run does not see the stale delegate schemas.
             lead.tools = original_tools
+            lead._cached_tool_schemas = None
 
     async def _run_workflow(
         self,
@@ -740,12 +747,8 @@ class Swarm:
                 state["input"] = current_input
                 target = agent.evaluate(state)
                 if target not in self.agents:
-                    raise SwarmError(
-                        f"Branch '{agent_name}' targets unknown agent '{target}'"
-                    )
-                _log.debug(
-                    "Branch '%s' routing to '%s'", agent_name, target
-                )
+                    raise SwarmError(f"Branch '{agent_name}' targets unknown agent '{target}'")
+                _log.debug("Branch '%s' routing to '%s'", agent_name, target)
                 completed_nodes.append(agent_name)
                 state[agent_name] = target
 
@@ -858,9 +861,7 @@ class Swarm:
         # Validate body agents exist
         for body_name in loop_node.body:
             if body_name not in self.agents:
-                raise SwarmError(
-                    f"Loop '{loop_node.name}' references unknown agent '{body_name}'"
-                )
+                raise SwarmError(f"Loop '{loop_node.name}' references unknown agent '{body_name}'")
 
         current_input = input
         last_result = RunResult(output=current_input)
@@ -1062,10 +1063,13 @@ class Swarm:
             )
             delegate_tools.append(dtool)
 
-        # Temporarily add delegate tools to the lead agent
+        # Temporarily add delegate tools to the lead agent. Invalidate
+        # the schema cache so the rebuild includes the new delegate
+        # tools (a stale cache would hide them from the LLM).
         original_tools = dict(lead.tools)
         for dtool in delegate_tools:
             lead.tools[dtool.name] = dtool
+        lead._cached_tool_schemas = None
 
         try:
             result = await call_runner(
@@ -1076,8 +1080,10 @@ class Swarm:
                 max_retries=max_retries,
             )
         finally:
-            # Restore original tools
+            # Restore original tools and invalidate again so subsequent
+            # runs of the lead agent do not see stale delegate schemas.
             lead.tools = original_tools
+            lead._cached_tool_schemas = None
 
         return result
 
@@ -1153,7 +1159,14 @@ class _DelegateTool(Tool):
     When the lead agent calls this tool, the worker agent runs with
     the provided task description and its output is returned as the
     tool result.
+
+    ``_ptc_exclude=True`` keeps delegate tools as *direct* schemas even
+    when the lead agent has ``ptc=True`` — routing to another agent is
+    not a PTC-eligible orchestration step, it must be a distinct
+    tool_call the LLM can see at the top level.
     """
+
+    _ptc_exclude: bool = True
 
     def __init__(
         self,
@@ -1197,7 +1210,5 @@ class _DelegateTool(Tool):
                 max_retries=self._max_retries,
             )
         except Exception as exc:
-            raise ToolError(
-                f"Delegation to '{self._worker.name}' failed: {exc}"
-            ) from exc
+            raise ToolError(f"Delegation to '{self._worker.name}' failed: {exc}") from exc
         return result.output

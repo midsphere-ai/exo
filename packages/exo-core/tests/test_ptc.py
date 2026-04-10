@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Annotated, Any, Literal
 from unittest.mock import AsyncMock
 
 import pytest
@@ -1671,3 +1671,707 @@ class TestPTCSandboxMessages:
         executor = PTCExecutor(agent)
         result = await executor.run("x = object.__bases__")
         assert "default_api" in result
+
+
+# ---------------------------------------------------------------------------
+# Schema-leak regressions — Swarm propagation, spawn_self, activate_skill,
+# delegate tool marking, default_api.* normalization
+# ---------------------------------------------------------------------------
+
+
+class TestSwarmPTCLeakRegression:
+    """``Swarm(ptc=True)`` must properly register the PTC tool on each member
+    AND invalidate the cached tool schemas, otherwise PTC-eligible tools leak
+    as direct schemas on the next LLM call.
+    """
+
+    def test_swarm_ptc_true_registers_ptc_tool_on_members(self) -> None:
+        from exo.swarm import Swarm
+
+        a1 = Agent(name="a1", tools=[greet])
+        a2 = Agent(name="a2", tools=[add])
+        assert PTC_TOOL_NAME not in a1.tools
+        assert PTC_TOOL_NAME not in a2.tools
+
+        Swarm(agents=[a1, a2], ptc=True)
+
+        assert a1.ptc is True
+        assert a2.ptc is True
+        assert PTC_TOOL_NAME in a1.tools
+        assert PTC_TOOL_NAME in a2.tools
+        assert isinstance(a1.tools[PTC_TOOL_NAME], PTCTool)
+        assert isinstance(a2.tools[PTC_TOOL_NAME], PTCTool)
+
+    def test_swarm_ptc_true_hides_eligible_tools_from_schema(self) -> None:
+        from exo.swarm import Swarm
+
+        a1 = Agent(name="a1", tools=[greet, add])
+
+        # Prime the cache in non-PTC state
+        before = a1.get_tool_schemas()
+        before_names = {s["function"]["name"] for s in before}
+        assert "greet" in before_names
+        assert "add" in before_names
+
+        Swarm(agents=[a1], ptc=True)
+
+        # Cache must be invalidated and schemas rebuilt with PTC filter.
+        after = a1.get_tool_schemas()
+        after_names = {s["function"]["name"] for s in after}
+        assert "greet" not in after_names
+        assert "add" not in after_names
+        assert PTC_TOOL_NAME in after_names
+
+    def test_swarm_ptc_false_removes_ptc_tool(self) -> None:
+        from exo.swarm import Swarm
+
+        a1 = Agent(name="a1", tools=[greet], ptc=True)
+        assert PTC_TOOL_NAME in a1.tools
+
+        Swarm(agents=[a1], ptc=False)
+
+        assert a1.ptc is False
+        assert PTC_TOOL_NAME not in a1.tools
+        schemas = a1.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "greet" in names  # back as direct schema
+        assert PTC_TOOL_NAME not in names
+
+    def test_swarm_ptc_true_is_idempotent(self) -> None:
+        """Propagating ``ptc=True`` to an agent already in PTC mode is a no-op."""
+        from exo.swarm import Swarm
+
+        a1 = Agent(name="a1", tools=[greet], ptc=True)
+        ptc_tool_before = a1.tools[PTC_TOOL_NAME]
+
+        Swarm(agents=[a1], ptc=True)
+
+        assert a1.ptc is True
+        # The existing PTCTool instance should be preserved, not replaced.
+        assert a1.tools[PTC_TOOL_NAME] is ptc_tool_before
+
+
+class TestSpawnSelfPTCLeakRegression:
+    """``spawn_self`` must not leak the parent's PTC tool into child.tools
+    as a direct schema, and must propagate PTC settings so the child
+    re-registers its own PTCTool.
+    """
+
+    async def test_spawn_self_excludes_parent_ptc_tool(self) -> None:
+        from unittest.mock import AsyncMock
+
+        parent = Agent(
+            name="p",
+            tools=[greet, add],
+            ptc=True,
+            allow_self_spawn=True,
+        )
+        parent._current_provider = AsyncMock()
+
+        # Grab the spawn_self tool's closure-captured build of child_tools
+        # by inspecting what the constructor would receive.  The simplest
+        # regression proof is to spawn once and verify the child inherits
+        # ptc=True, has its own PTCTool, and does NOT have the parent's
+        # PTCTool object.
+        parent_ptc_tool = parent.tools[PTC_TOOL_NAME]
+
+        # Instead of running a full spawn (which needs a real provider),
+        # replicate the child construction logic directly to verify the fix.
+        child_tools = [
+            t
+            for name, t in parent.tools.items()
+            if name != "spawn_self"
+            and not getattr(t, "_is_context_tool", False)
+            and not getattr(t, "_is_ptc_tool", False)
+        ]
+        # Parent's PTCTool MUST be filtered out
+        assert parent_ptc_tool not in child_tools
+        tool_names = {t.name for t in child_tools}
+        assert PTC_TOOL_NAME not in tool_names
+        assert "greet" in tool_names
+        assert "add" in tool_names
+
+    async def test_spawned_child_has_own_ptc_tool(self) -> None:
+        """Reconstructing the child agent with propagated PTC settings
+        should give it a fresh PTCTool bound to itself."""
+        parent = Agent(
+            name="parent",
+            tools=[greet, add],
+            ptc=True,
+            ptc_timeout=45,
+            ptc_max_tool_calls=99,
+        )
+
+        # Mimic the construction path in spawn_self
+        child_tools = [
+            t
+            for name, t in parent.tools.items()
+            if name != "spawn_self"
+            and not getattr(t, "_is_context_tool", False)
+            and not getattr(t, "_is_ptc_tool", False)
+        ]
+        child = Agent(
+            name="child",
+            tools=child_tools,
+            ptc=parent.ptc,
+            ptc_timeout=parent.ptc_timeout,
+            ptc_max_output_bytes=parent.ptc_max_output_bytes,
+            ptc_max_tool_calls=parent.ptc_max_tool_calls,
+        )
+
+        assert child.ptc is True
+        assert child.ptc_timeout == 45
+        assert child.ptc_max_tool_calls == 99
+        assert PTC_TOOL_NAME in child.tools
+        # Child's PTCTool must be bound to the CHILD, not the parent.
+        child_ptc_tool = child.tools[PTC_TOOL_NAME]
+        assert isinstance(child_ptc_tool, PTCTool)
+        assert child_ptc_tool._agent is child  # type: ignore[attr-defined]
+        assert child_ptc_tool is not parent.tools[PTC_TOOL_NAME]
+
+        # Child's schemas should NOT leak PTC-eligible tools
+        schemas = child.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "greet" not in names
+        assert "add" not in names
+        assert PTC_TOOL_NAME in names
+
+
+class TestDefaultApiNormalization:
+    """Runner must rewrite ``default_api.<name>`` tool calls that some LLMs
+    emit directly (outside ``__exo_ptc__``) to the bare tool name so dispatch
+    succeeds and the clean name flows through SSE events.
+    """
+
+    def test_normalize_strips_prefix_for_known_tool(self) -> None:
+        from exo.ptc import normalize_default_api_tool_calls
+
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        tcs = [ToolCall(id="tc1", name="default_api.greet", arguments="{}")]
+        # ToolCall is a frozen pydantic model — the helper rebuilds the
+        # entry at its list index via model_copy(update=...).
+        normalize_default_api_tool_calls(tcs, agent)
+        assert tcs[0].name == "greet"
+
+    def test_normalize_leaves_unknown_tool_alone(self) -> None:
+        from exo.ptc import normalize_default_api_tool_calls
+
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        tcs = [ToolCall(id="tc1", name="default_api.unknown", arguments="{}")]
+        normalize_default_api_tool_calls(tcs, agent)
+        # Unknown → leave untouched so the standard "unknown tool" error
+        # path still fires.
+        assert tcs[0].name == "default_api.unknown"
+
+    def test_normalize_leaves_non_prefixed_alone(self) -> None:
+        from exo.ptc import normalize_default_api_tool_calls
+
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        tcs = [ToolCall(id="tc1", name="greet", arguments="{}")]
+        normalize_default_api_tool_calls(tcs, agent)
+        assert tcs[0].name == "greet"
+
+    def test_normalize_handles_multiple_calls(self) -> None:
+        from exo.ptc import normalize_default_api_tool_calls
+
+        agent = Agent(name="t", tools=[greet, add], ptc=True)
+        tcs = [
+            ToolCall(id="tc1", name="default_api.greet", arguments='{"name":"A"}'),
+            ToolCall(id="tc2", name="default_api.add", arguments='{"a":1,"b":2}'),
+            ToolCall(id="tc3", name="plain_name", arguments="{}"),
+        ]
+        normalize_default_api_tool_calls(tcs, agent)
+        assert tcs[0].name == "greet"
+        assert tcs[1].name == "add"
+        assert tcs[2].name == "plain_name"
+
+    async def test_ptc_description_no_longer_mentions_dotted_name(self) -> None:
+        """The per-tool ``# usage: await default_api.<name>`` comment was
+        removed because some models misparse it as the literal function
+        name.  The preamble still teaches the ``default_api`` prefix."""
+        agent = Agent(name="t", tools=[greet, add], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        # Preamble keeps the high-level directive
+        assert "default_api" in desc
+        # But no per-tool "# usage: ..." comments (root cause of confusion)
+        assert "# usage: await default_api.greet" not in desc
+        assert "# usage: await default_api.add" not in desc
+
+
+class TestSwarmTeamDelegateNoPTCLeak:
+    """Swarm team-mode delegate tools must stay as direct schemas even when
+    the lead agent has ``ptc=True``.  Routing to workers is not a PTC step.
+    """
+
+    def test_delegate_tool_has_ptc_exclude_flag(self) -> None:
+        from exo.swarm import _DelegateTool
+
+        class _FakeWorker:
+            name = "worker_x"
+
+        dtool = _DelegateTool(worker=_FakeWorker())
+        assert getattr(dtool, "_ptc_exclude", False) is True
+
+    def test_delegate_tool_excluded_from_ptc_eligibility(self) -> None:
+        from exo.swarm import _DelegateTool
+
+        class _FakeWorker:
+            name = "worker_x"
+
+        agent = Agent(name="lead", tools=[greet], ptc=True)
+        dtool = _DelegateTool(worker=_FakeWorker())
+        agent.tools[dtool.name] = dtool
+        agent._cached_tool_schemas = None
+
+        eligible = get_ptc_eligible_tools(agent)
+        assert "greet" in eligible
+        assert dtool.name not in eligible  # excluded via _ptc_exclude
+
+        # And it appears as a DIRECT schema (not absorbed into PTC)
+        schemas = agent.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert dtool.name in names
+        assert PTC_TOOL_NAME in names
+        assert "greet" not in names  # greet stays absorbed into PTC
+
+
+class TestPTCSignatureRichMetadata:
+    """Rich tool metadata (Literal, descriptions, full docstring, defaults,
+    injected_tool_args) must all survive into the PTC description.
+    """
+
+    def test_literal_rendered_as_literal_type(self) -> None:
+
+        @tool
+        def picker(
+            mode: Annotated[Literal["fast", "slow"], "Execution mode."],
+        ) -> str:
+            """Pick a mode."""
+            return ""
+
+        agent = Agent(name="t", tools=[picker], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "Literal['fast', 'slow']" in desc
+
+    def test_per_param_descriptions_in_args_section(self) -> None:
+
+        @tool
+        def with_desc(
+            query: Annotated[str, "The thing to look up."],
+            limit: Annotated[int | None, "Max results 1-100."] = 10,
+        ) -> str:
+            """Search something."""
+            return ""
+
+        agent = Agent(name="t", tools=[with_desc], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "Args:" in desc
+        assert "query: The thing to look up." in desc
+        assert "limit: Max results 1-100." in desc
+
+    def test_full_multiline_docstring_preserved(self) -> None:
+        @tool
+        def rich(x: int) -> str:
+            """First line.
+
+            <instructions>
+            - Must follow this rule.
+            - Also this rule.
+            </instructions>
+
+            <recommended_usage>
+            - Use it like so.
+            </recommended_usage>
+            """
+            return ""
+
+        agent = Agent(name="t", tools=[rich], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "<instructions>" in desc
+        assert "Must follow this rule" in desc
+        assert "Also this rule" in desc
+        assert "<recommended_usage>" in desc
+        assert "Use it like so" in desc
+
+    def test_default_values_shown_in_signature(self) -> None:
+        @tool
+        def defaults(
+            x: int = 42,
+            y: str = "hello",
+            z: bool = True,
+        ) -> str:
+            """Defaults."""
+            return ""
+
+        agent = Agent(name="t", tools=[defaults], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "x: int = 42" in desc
+        assert "y: str = 'hello'" in desc
+        assert "z: bool = True" in desc
+
+    def test_injected_tool_args_in_inner_signature(self) -> None:
+
+        @tool
+        def inner(q: Annotated[str, "query"]) -> str:
+            """Search."""
+            return ""
+
+        agent = Agent(
+            name="t",
+            tools=[inner],
+            ptc=True,
+            injected_tool_args={"user_id": "The caller's user ID."},
+        )
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "user_id: str | None = None" in desc
+        assert "user_id: [injected] The caller's user ID." in desc
+
+    def test_injected_tool_args_stripped_before_inner_tool_called(self) -> None:
+        from exo.ptc import PTCExecutor
+
+        @tool
+        def spy(x: int) -> str:
+            """Spy tool."""
+            return str(x)
+
+        agent = Agent(
+            name="t",
+            tools=[spy],
+            ptc=True,
+            injected_tool_args={"user_id": "The user ID."},
+        )
+        executor = PTCExecutor(agent)
+        import asyncio
+
+        async def run() -> None:
+            await executor.run('print(await default_api.spy(x=5, user_id="abc"))')
+
+        # The tool function has no user_id param — if we didn't strip it,
+        # this would TypeError.  The strip happens in _make_tool_fn.
+        asyncio.get_event_loop().run_until_complete(run())
+
+
+class TestPTCExtraArgs:
+    """``ptc_extra_args`` adds schema fields to the outer __exo_ptc__ tool
+    call and exposes them to executing PTC code as ``ptc_args``."""
+
+    def test_extra_args_in_outer_schema(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={
+                "intent": "What the PTC call is trying to do.",
+                "tag": "A categorisation tag.",
+            },
+        )
+        schemas = agent.get_tool_schemas()
+        ptc = next(s for s in schemas if s["function"]["name"] == PTC_TOOL_NAME)
+        props = ptc["function"]["parameters"]["properties"]
+        assert "code" in props
+        assert "intent" in props
+        assert "tag" in props
+        assert props["intent"]["description"] == "What the PTC call is trying to do."
+        # Only ``code`` is required
+        assert ptc["function"]["parameters"]["required"] == ["code"]
+
+    def test_extra_args_accessible_in_ptc_code(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={"intent": "Description."},
+        )
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
+        import asyncio
+
+        async def run() -> str:
+            return await ptc_tool.execute(
+                code="print(ptc_args.get('intent', 'MISSING'))",
+                intent="search all items",
+            )
+
+        result = asyncio.get_event_loop().run_until_complete(run())
+        assert "search all items" in result
+
+    def test_extra_args_unknown_keys_filtered(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={"intent": "Description."},
+        )
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
+        import asyncio
+
+        async def run() -> str:
+            return await ptc_tool.execute(
+                code="print(list(sorted(ptc_args.keys())))",
+                intent="ok",
+                bogus_key="should be dropped",
+            )
+
+        result = asyncio.get_event_loop().run_until_complete(run())
+        # Only 'intent' should be in ptc_args; 'bogus_key' dropped
+        assert "['intent']" in result
+
+    def test_extra_args_description_block_present(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={"intent": "What you plan to do."},
+        )
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "<ptc_extra_args>" in desc
+        assert "`intent`: What you plan to do." in desc
+        assert "ptc_args" in desc
+
+    def test_no_extra_args_no_block(self) -> None:
+        agent = Agent(name="t", tools=[greet], ptc=True)
+        desc = agent.tools[PTC_TOOL_NAME].description
+        assert "<ptc_extra_args>" not in desc
+
+    def test_extra_args_serialization_round_trip(self) -> None:
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={"intent": "test"},
+        )
+        data = agent.to_dict()
+        assert data["ptc_extra_args"] == {"intent": "test"}
+        restored = Agent.from_dict(data)
+        assert restored.ptc_extra_args == {"intent": "test"}
+        assert "intent" in restored.tools[PTC_TOOL_NAME].parameters["properties"]
+
+    def test_ptc_args_is_isolated_per_run(self) -> None:
+        """Each PTC invocation gets its own ``ptc_args`` — mutations don't
+        bleed across runs."""
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            ptc=True,
+            ptc_extra_args={"key": "desc"},
+        )
+        ptc_tool = agent.tools[PTC_TOOL_NAME]
+        import asyncio
+
+        async def run() -> tuple[str, str]:
+            a = await ptc_tool.execute(code="print(ptc_args)", key="first")
+            b = await ptc_tool.execute(code="print(ptc_args)", key="second")
+            return a, b
+
+        a, b = asyncio.get_event_loop().run_until_complete(run())
+        assert "first" in a
+        assert "second" in b
+        assert "first" not in b
+
+
+class TestHandoffCacheInvalidation:
+    """Runtime handoff registration must invalidate _cached_tool_schemas
+    so PTC filtering sees the new handoff targets correctly."""
+
+    def test_add_handoff_invalidates_schema_cache(self) -> None:
+        @tool
+        def foo(x: int) -> str:
+            """A foo tool."""
+            return str(x)
+
+        target = Agent(name="target", tools=[])
+        agent = Agent(name="src", tools=[foo])
+
+        # Prime the cache
+        before = agent.get_tool_schemas()
+        before_names = {s["function"]["name"] for s in before}
+        assert "foo" in before_names
+        assert agent._cached_tool_schemas is not None
+
+        # Register a handoff — must invalidate cache
+        agent._register_handoff(target)
+        assert agent._cached_tool_schemas is None
+
+    def test_add_handoff_with_matching_tool_name_excludes_after(self) -> None:
+        """When a handoff target's name matches a tool, PTC filter excludes
+        the tool.  A runtime add_handoff must refresh this filter."""
+
+        @tool
+        def helper(x: int) -> str:
+            """Helper tool."""
+            return str(x)
+
+        # Target named the same as the tool
+        target = Agent(name="helper", tools=[])
+        agent = Agent(name="src", tools=[helper], ptc=True)
+
+        # Before handoff: helper is PTC-eligible → hidden from schemas
+        before_eligible = get_ptc_eligible_tools(agent)
+        assert "helper" in before_eligible
+
+        # Register handoff — invalidates cache
+        agent._register_handoff(target)
+
+        # After handoff: helper is a handoff target → excluded from PTC
+        after_eligible = get_ptc_eligible_tools(agent)
+        assert "helper" not in after_eligible
+
+
+class TestHumanInputToolPTCExclude:
+    """HumanInputTool must stay as a direct schema when ptc=True so the
+    interactive prompt works without being buffered inside PTC code."""
+
+    def test_human_input_tool_has_ptc_exclude(self) -> None:
+        from exo.human import HumanInputTool
+
+        tool = HumanInputTool()
+        assert getattr(tool, "_ptc_exclude", False) is True
+
+    def test_human_input_tool_excluded_from_ptc_eligible(self) -> None:
+        from exo.human import HumanInputTool
+
+        @tool
+        def regular(x: int) -> str:
+            """regular tool"""
+            return str(x)
+
+        agent = Agent(name="t", tools=[regular, HumanInputTool()], ptc=True)
+        eligible = get_ptc_eligible_tools(agent)
+        assert "regular" in eligible
+        assert "human_input" not in eligible
+
+        schemas = agent.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "human_input" in names  # stays as direct schema
+        assert "regular" not in names  # absorbed into PTC
+
+
+class TestPTCDescCacheIncludesParameters:
+    """PTCTool description cache must invalidate when a tool's parameters
+    mutate in place (dynamic schema updates)."""
+
+    def test_parameter_mutation_invalidates_description_cache(self) -> None:
+        @tool
+        def dyn(x: int) -> str:
+            """Dynamic tool."""
+            return str(x)
+
+        agent = Agent(name="t", tools=[dyn], ptc=True)
+        ptc_tool: PTCTool = agent.tools[PTC_TOOL_NAME]  # type: ignore[assignment]
+
+        desc1 = ptc_tool.description
+        assert "x: int" in desc1
+
+        # Mutate the tool's parameters in place (e.g. dynamic schema update)
+        dyn.parameters = {
+            "type": "object",
+            "properties": {"y": {"type": "string"}},
+            "required": ["y"],
+        }
+
+        desc2 = ptc_tool.description
+        # Description must reflect the NEW parameter schema
+        assert "y: str" in desc2
+        assert desc1 is not desc2
+
+
+class TestActivateSkillCacheInvalidation:
+    """``activate_skill`` must invalidate the schema cache after adding tools,
+    otherwise the new tools are invisible to the LLM on the next call.
+    """
+
+    def test_planner_agent_inherits_parent_ptc(self) -> None:
+        """_build_planner_agent must propagate PTC settings and exclude the
+        parent's PTCTool from the planner's tool list."""
+        from exo._internal.planner import _build_planner_agent
+
+        parent = Agent(
+            name="parent",
+            tools=[greet, add],
+            ptc=True,
+            ptc_timeout=90,
+            ptc_max_tool_calls=75,
+        )
+
+        planner = _build_planner_agent(
+            parent,
+            planner_model="openai:gpt-4o-mini",
+            planner_instructions="plan things",
+        )
+
+        # Planner must have its own PTC enabled + its own PTCTool
+        assert planner.ptc is True
+        assert planner.ptc_timeout == 90
+        assert planner.ptc_max_tool_calls == 75
+        assert PTC_TOOL_NAME in planner.tools
+
+        # Planner's PTCTool must be bound to the planner itself, not parent
+        planner_ptc = planner.tools[PTC_TOOL_NAME]
+        assert planner_ptc is not parent.tools[PTC_TOOL_NAME]
+        assert planner_ptc._agent is planner  # type: ignore[attr-defined]
+
+        # PTC-eligible tools must be hidden from the planner's schema list
+        schemas = planner.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "greet" not in names
+        assert "add" not in names
+        assert PTC_TOOL_NAME in names
+
+    def test_planner_agent_without_ptc(self) -> None:
+        """When parent has ptc=False, planner also has ptc=False
+        and all tools appear as direct schemas."""
+        from exo._internal.planner import _build_planner_agent
+
+        parent = Agent(name="parent", tools=[greet, add])
+        assert parent.ptc is False
+
+        planner = _build_planner_agent(
+            parent,
+            planner_model="openai:gpt-4o-mini",
+            planner_instructions="plan",
+        )
+        assert planner.ptc is False
+        assert PTC_TOOL_NAME not in planner.tools
+        schemas = planner.get_tool_schemas()
+        names = {s["function"]["name"] for s in schemas}
+        assert "greet" in names
+        assert "add" in names
+
+    async def test_activate_skill_invalidates_schema_cache(self) -> None:
+        from exo.skills import Skill, SkillRegistry
+
+        @tool
+        def new_skill_tool(x: int) -> str:
+            """A tool added by the skill."""
+            return str(x)
+
+        skill = Skill(
+            name="test_skill",
+            description="test",
+            usage="test skill usage",
+            tool_list={"math": ["compute"]},
+            active=True,
+        )
+        registry = SkillRegistry()
+        registry._skills[skill.name] = skill  # type: ignore[attr-defined]
+
+        agent = Agent(
+            name="t",
+            tools=[greet],
+            skills=registry,
+            tool_resolver={"test_skill": [new_skill_tool]},
+        )
+
+        # Prime the cache
+        before = agent.get_tool_schemas()
+        before_names = {s["function"]["name"] for s in before}
+        assert "new_skill_tool" not in before_names
+
+        # Activate the skill — this should invalidate the cache so the
+        # next LLM call sees the new tool.
+        await agent.tools["activate_skill"].execute(name="test_skill")
+
+        # The new tool must appear in the schema list on the next fetch
+        # (regression guard: before the fix, the stale cache hid it).
+        after = agent.get_tool_schemas()
+        after_names = {s["function"]["name"] for s in after}
+        assert "new_skill_tool" in after_names

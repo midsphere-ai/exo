@@ -111,6 +111,12 @@ def _build_agent(name: str, spec: dict[str, Any]) -> Any:
         "injected_tool_args",
         "allow_parallel_subagents",
         "max_parallel_subagents",
+        # PTC settings — forwarded so YAML-defined agents can enable PTC.
+        "ptc",
+        "ptc_timeout",
+        "ptc_max_output_bytes",
+        "ptc_max_tool_calls",
+        "ptc_extra_args",
     ):
         if field in spec:
             kwargs[field] = spec[field]

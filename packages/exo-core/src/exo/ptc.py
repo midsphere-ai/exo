@@ -397,6 +397,58 @@ def get_ptc_eligible_tools(agent: Agent) -> dict[str, Tool]:
     return eligible
 
 
+def normalize_default_api_tool_calls(tool_calls: list[Any], agent: Agent) -> list[Any]:
+    """Strip the ``default_api.`` prefix from LLM-emitted tool call names.
+
+    Some models misread the PTC tool description (which shows tool
+    signatures alongside a reference to the ``default_api`` Python
+    namespace) and generate a *direct* tool call with a dotted name like
+    ``default_api.shell`` instead of wrapping the call in ``__exo_ptc__``.
+    The runner would then look up ``default_api.shell`` in ``agent.tools``,
+    miss it, and leak the malformed name into ``ToolCallEvent`` /
+    ``ToolResultEvent`` SSE output.
+
+    This helper rewrites the list **in place** (replacing entries at
+    their index, since :class:`exo.types.ToolCall` is a frozen Pydantic
+    model).  For each call:
+
+    - If the name starts with ``default_api.`` AND the stripped suffix is
+      a registered tool on *agent*, replace the entry with a new
+      ``ToolCall`` carrying the stripped name.  Dispatch then succeeds
+      via the tool's direct schema (the model effectively bypassed PTC
+      but the tool still runs) and the event stream stays clean.
+    - Otherwise leave the entry alone so the normal "unknown tool" error
+      path still works for genuinely malformed calls.
+
+    Returns the same list object for chaining.
+    """
+    prefix = "default_api."
+    for i, tc in enumerate(tool_calls):
+        name = getattr(tc, "name", "")
+        if not (isinstance(name, str) and name.startswith(prefix)):
+            continue
+        stripped = name[len(prefix) :]
+        if not (stripped and stripped in agent.tools):
+            continue
+        _ptc_log.warning(
+            "PTC: rewrote LLM tool call %r → %r on agent %s "
+            "(model emitted default_api-prefixed name directly; "
+            "it should have wrapped this in __exo_ptc__)",
+            name,
+            stripped,
+            getattr(agent, "name", "<unknown>"),
+        )
+        # ToolCall is frozen — rebuild via model_copy(update=...) so any
+        # validator / frozen state stays intact.
+        if hasattr(tc, "model_copy"):
+            tool_calls[i] = tc.model_copy(update={"name": stripped})
+        else:
+            # Fallback for non-pydantic ToolCall-like shims (tests).
+            with contextlib.suppress(Exception):
+                tc.name = stripped
+    return tool_calls
+
+
 def _ast_scan_user_code(code: str) -> list[str]:
     """Walk the user code AST and return sandbox violations.
 
@@ -432,8 +484,24 @@ def _ast_scan_user_code(code: str) -> list[str]:
     return errors
 
 
+# Width at which we switch a signature from single-line to multi-line.
+_SIG_WRAP_WIDTH = 100
+
+
 def _schema_type(prop: dict[str, Any]) -> str:
-    """Convert a JSON Schema property to a Python type hint string."""
+    """Convert a JSON Schema property to a Python type hint string.
+
+    Handles ``enum`` (→ ``Literal[...]``), ``array`` with item types
+    (→ ``list[str]`` etc.), JSON Schema unions (``"type": ["string","null"]``),
+    and the base scalar types.
+    """
+    # Enum / Literal constraints take priority — surface the allowed
+    # values so the LLM sees them directly in the signature.
+    enum_vals = prop.get("enum")
+    if enum_vals:
+        rendered = ", ".join(repr(v) for v in enum_vals)
+        return f"Literal[{rendered}]"
+
     raw = prop.get("type", "Any")
     if isinstance(raw, list):
         # e.g. ["string", "null"]
@@ -446,60 +514,318 @@ def _schema_type(prop: dict[str, Any]) -> str:
     if base == "list":
         items = prop.get("items")
         if isinstance(items, dict):
-            item_raw = items.get("type", "")
-            item_type = _SCHEMA_TYPE_MAP.get(item_raw)
-            if item_type:
+            # Recurse so nested ``list[Literal["a", "b"]]`` etc. also work.
+            item_type = _schema_type(items)
+            if item_type and item_type != "Any":
                 return f"list[{item_type}]"
     return base
 
 
-def schema_to_python_sig(tool: Tool) -> str:
-    """Convert a Tool's JSON Schema parameters into a Python function signature.
+def _format_param(
+    pname: str,
+    prop: dict[str, Any],
+    *,
+    required: bool,
+    injected: bool = False,
+) -> str:
+    """Format a single parameter as ``name: type[ = default]``."""
+    ptype = _schema_type(prop)
 
-    Returns a string like ``async def search(query: str, max_results: int = 10) -> str``.
+    if required and not injected:
+        return f"{pname}: {ptype}"
+
+    default = prop.get("default") if not injected else None
+    if ptype == "Any":
+        type_hint = "Any"
+    elif default is None:
+        type_hint = f"{ptype} | None"
+    else:
+        type_hint = ptype
+    if default is None:
+        return f"{pname}: {type_hint} = None"
+    return f"{pname}: {type_hint} = {default!r}"
+
+
+def schema_to_python_sig(
+    tool: Tool,
+    injected_args: dict[str, str] | None = None,
+) -> str:
+    """Return the Python function signature line(s) for *tool*.
+
+    Required params come first, then optional params, then
+    ``injected_args`` (always optional, always at the end).  When the
+    single-line form would exceed ``_SIG_WRAP_WIDTH`` characters, the
+    signature is emitted across multiple lines with one parameter per
+    line so the LLM can scan it easily.
+
+    Example (short):
+        async def search(query: str, max_results: int | None = None) -> str
+
+    Example (long, wrapped):
+        async def plan_tool(
+            action: Literal['update', 'advance', 'get'],
+            current_phase_id: int | None = None,
+            goal: str | None = None,
+            phases: list | None = None,
+            user_id: str | None = None,
+        ) -> str
     """
     params = tool.parameters
     properties: dict[str, Any] = params.get("properties", {})
     required: set[str] = set(params.get("required", []))
 
     parts: list[str] = []
-    # Required params first, then optional
+    # Required params first, then optional (stable by name within each group)
     for pname in sorted(properties, key=lambda p: (p not in required, p)):
-        ptype = _schema_type(properties[pname])
-        if pname in required:
-            parts.append(f"{pname}: {ptype}")
-        else:
-            default = properties[pname].get("default")
-            # "Any" already implies optional, so skip the "| None" suffix.
-            if ptype == "Any":
-                type_hint = "Any"
-            elif default is None:
-                type_hint = f"{ptype} | None"
-            else:
-                type_hint = ptype
-            if default is None:
-                parts.append(f"{pname}: {type_hint} = None")
-            else:
-                parts.append(f"{pname}: {type_hint} = {default!r}")
+        parts.append(_format_param(pname, properties[pname], required=pname in required))
 
-    sig = ", ".join(parts)
-    return f"async def {tool.name}({sig}) -> str"
+    # Append injected args as optional trailing params so the LLM can
+    # pass them from inside PTC code.  Matches non-PTC ``_augment_schema``
+    # semantics where injected args are always optional string fields.
+    if injected_args:
+        for arg_name in sorted(injected_args):
+            if arg_name in properties:
+                continue  # don't duplicate if the tool already declares it
+            parts.append(
+                _format_param(
+                    arg_name,
+                    {"type": "string"},
+                    required=False,
+                    injected=True,
+                )
+            )
+
+    single_line = f"async def {tool.name}({', '.join(parts)}) -> str"
+    if len(single_line) <= _SIG_WRAP_WIDTH or not parts:
+        return single_line
+
+    # Multi-line form — one param per line, 4-space indent.
+    wrapped = [f"async def {tool.name}("]
+    for part in parts:
+        wrapped.append(f"    {part},")
+    wrapped.append(") -> str")
+    return "\n".join(wrapped)
 
 
-def build_tool_signatures(tools: dict[str, Tool]) -> str:
-    """Build a description block listing all PTC-eligible tools as function signatures."""
+def _full_tool_docstring(tool: Tool) -> str:
+    """Return the FULL docstring of a tool — untruncated, no Args: block.
+
+    ``tool.description`` (from ``_extract_description``) stops at the
+    first Google-style section header (``Args:``, ``Returns:``, …) and
+    therefore drops content that appears after it.  For PTC we want as
+    much guidance as possible — the model should see everything the
+    author wrote: the prologue, any XML blocks, any ``Returns:`` /
+    ``Raises:`` / ``Examples:`` / ``Notes:`` sections.
+
+    We only strip the ``Args:`` block because its contents are already
+    rendered into the generated ``Args:`` section by
+    :func:`_render_args_section`, keeping both would be redundant.
+
+    Resolution order:
+
+    1. If the tool exposes an original Python function via ``tool._fn``
+       AND ``tool.description`` matches the auto-extracted description
+       from that function (i.e. the user did NOT override it), return
+       the full docstring minus the ``Args:`` block.
+    2. Otherwise return ``tool.description`` verbatim — respecting any
+       explicit override the user set on the tool.
+    """
+    fn = getattr(tool, "_fn", None)
+    declared = tool.description or ""
+    if fn is None:
+        return declared
+
+    import inspect as _inspect
+
+    raw = _inspect.getdoc(fn)
+    if not raw:
+        return declared
+
+    # If the user manually set tool.description to something different
+    # from the auto-extracted short form, honour that override.
+    try:
+        from exo.tool import _extract_description as _auto_extract
+
+        auto = _auto_extract(fn)
+    except Exception:
+        auto = ""
+    if declared and declared != auto:
+        return declared
+
+    # Walk lines and drop the Args: block ONLY. All other sections and
+    # the rest of the docstring survive.
+    lines = raw.splitlines()
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    args_header = re.compile(r"^\s*Args\s*:\s*$")
+    other_section = re.compile(
+        r"^(Returns|Raises|Yields|Examples|Notes|Attributes|References|"
+        r"See Also|Todo|Warnings)\s*:\s*$"
+    )
+    while i < n:
+        line = lines[i]
+        if args_header.match(line):
+            # Skip the Args: header
+            i += 1
+            # Skip indented lines belonging to Args: (until a blank-then-
+            # non-indented line, a new top-level section header, or EOF).
+            while i < n:
+                cur = lines[i]
+                stripped = cur.strip()
+                if not stripped:
+                    # Blank line — peek ahead to see if next non-blank is
+                    # still part of Args (indented) or a new section.
+                    j = i + 1
+                    while j < n and not lines[j].strip():
+                        j += 1
+                    if j >= n:
+                        i = j
+                        break
+                    nxt = lines[j]
+                    if other_section.match(nxt.strip()):
+                        # Hit the next section — stop skipping, restart
+                        # outer loop at blank line before it.
+                        break
+                    # Next line is still indented: treat as Args: body.
+                    if nxt.startswith((" ", "\t")):
+                        i = j + 1
+                        continue
+                    # Otherwise Args: is done at this blank line.
+                    break
+                if cur.startswith((" ", "\t")):
+                    # Still inside Args: (indented)
+                    i += 1
+                    continue
+                # Hit a non-indented line while in Args: — Args: is done.
+                break
+            continue
+        out.append(line)
+        i += 1
+
+    # Trim trailing blank lines introduced by stripping Args:
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out).strip()
+
+
+def _indent_docstring(doc: str, indent: str = "    ") -> list[str]:
+    """Render a multi-line docstring inside an ``async def`` body.
+
+    Preserves the full docstring — no truncation, no one-line collapse.
+    Handles embedded newlines and XML blocks like ``<instructions>``.
+    """
+    doc = (doc or "").strip()
+    if not doc:
+        return []
+    lines = doc.split("\n")
+    if len(lines) == 1:
+        return [f'{indent}"""{lines[0]}"""']
+    out = [f'{indent}"""{lines[0]}']
+    for line in lines[1:]:
+        # Preserve existing relative indent; just add our base indent prefix
+        # for lines that have content (blank lines stay blank).
+        out.append(f"{indent}{line}" if line.strip() else "")
+    out.append(f'{indent}"""')
+    return out
+
+
+def _collect_arg_descriptions(
+    tool: Tool,
+    injected_args: dict[str, str] | None = None,
+) -> list[tuple[str, str, bool]]:
+    """Return ``(name, description, is_injected)`` triples for the Args section.
+
+    Only parameters that actually carry a non-empty description (or are
+    injected_args with a description) are returned.
+    """
+    properties: dict[str, Any] = tool.parameters.get("properties", {})
+    required: set[str] = set(tool.parameters.get("required", []))
+    items: list[tuple[str, str, bool]] = []
+    for pname in sorted(properties, key=lambda p: (p not in required, p)):
+        desc = (properties[pname].get("description") or "").strip()
+        if desc:
+            items.append((pname, desc, False))
+    if injected_args:
+        for arg_name in sorted(injected_args):
+            if arg_name in properties:
+                continue
+            desc = (injected_args[arg_name] or "").strip()
+            items.append((arg_name, desc or "(injected at runtime)", True))
+    return items
+
+
+def _render_args_section(
+    tool: Tool,
+    injected_args: dict[str, str] | None = None,
+    indent: str = "    ",
+) -> list[str]:
+    """Render a Google-style ``Args:`` block listing per-parameter descriptions.
+
+    Returns an empty list when no parameter has a description — we don't
+    emit an empty ``Args:`` header in that case.
+    """
+    triples = _collect_arg_descriptions(tool, injected_args)
+    if not triples:
+        return []
+    out: list[str] = ["", f"{indent}Args:"]
+    arg_indent = indent + "    "
+    cont_indent = arg_indent + "    "
+    for name, desc, is_injected in triples:
+        prefix = "[injected] " if is_injected else ""
+        desc_lines = desc.split("\n")
+        first = desc_lines[0].strip()
+        out.append(f"{arg_indent}{name}: {prefix}{first}")
+        for cont in desc_lines[1:]:
+            cont_stripped = cont.strip()
+            if cont_stripped:
+                out.append(f"{cont_indent}{cont_stripped}")
+    return out
+
+
+def build_tool_signatures(
+    tools: dict[str, Tool],
+    injected_args: dict[str, str] | None = None,
+) -> str:
+    """Build a description block listing all PTC-eligible tools.
+
+    Each tool is rendered as a Python ``async def`` with full type hints
+    (including ``Literal[...]`` for enums and ``list[str]`` for typed
+    arrays), its complete untruncated docstring, and a Google-style
+    ``Args:`` block carrying per-parameter descriptions from
+    ``Annotated[T, "..."]`` metadata and the ``Args:`` section of the
+    original Python docstring.
+
+    Injected tool args (``agent.injected_tool_args``) appear as optional
+    trailing parameters in the signature AND in the ``Args:`` section
+    with a ``[injected]`` marker, matching the non-PTC schema
+    augmentation behaviour.
+
+    The signatures intentionally do NOT show ``default_api.<name>``
+    annotations per-function — some LLMs misparse that as the literal
+    tool name and generate a direct tool call with a dotted name.  The
+    preamble already teaches the ``default_api`` prefix.
+    """
     if not tools:
         return "(no tools available)"
 
-    lines: list[str] = []
+    blocks: list[str] = []
     for tool in tools.values():
-        sig = schema_to_python_sig(tool)
-        lines.append(f"  {sig}")
-        if tool.description:
-            lines.append(f'    """{tool.description}"""')
-        lines.append(f"    # usage: await default_api.{tool.name}(...)")
-        lines.append("")
-    return "\n".join(lines)
+        sig = schema_to_python_sig(tool, injected_args)
+        # Re-indent the (possibly multi-line) signature by 2 spaces for
+        # readability inside the PTC preamble listing.
+        sig_lines = [f"  {line}" if line else "" for line in sig.split("\n")]
+
+        body: list[str] = []
+        doc = _full_tool_docstring(tool)
+        if doc.strip():
+            body.extend(_indent_docstring(doc, indent="    "))
+        body.extend(_render_args_section(tool, injected_args, indent="    "))
+
+        block_lines = sig_lines + body
+        blocks.append("\n".join(block_lines))
+
+    return "\n\n".join(blocks) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -542,6 +868,33 @@ Execute Python code that calls the agent's tools as async functions in a single 
 Available tool functions (call via `default_api`):
 
 """
+
+
+def _build_extra_args_note(extra_args: dict[str, str]) -> str:
+    """Render a small block describing ``extra_args`` available on this PTC call.
+
+    Appears between the ``<recommended_usage>`` section and the tool
+    function listing so the LLM sees it before the signatures.  Returns
+    an empty string when no extra args are declared.
+    """
+    if not extra_args:
+        return ""
+    lines: list[str] = [
+        "",
+        "<ptc_extra_args>",
+        "The `__exo_ptc__` tool call accepts additional top-level string arguments",
+        "beyond `code`.  Fill them alongside `code` when you invoke the tool.  Inside",
+        "the executing Python code they are available via the `ptc_args` dict:",
+        "",
+    ]
+    for name, desc in sorted(extra_args.items()):
+        lines.append(f"  - `{name}`: {desc}")
+    lines.append("")
+    lines.append("Example:")
+    lines.append('  __exo_ptc__(code="print(ptc_args[\'name\'])", name="alice")')
+    lines.append("</ptc_extra_args>")
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 _CODE_PARAM_DESCRIPTION = (
@@ -592,6 +945,7 @@ class PTCTool(Tool):
         max_output_bytes: int = DEFAULT_PTC_MAX_OUTPUT_BYTES,
         max_tool_calls: int = DEFAULT_PTC_MAX_TOOL_CALLS,
         max_code_bytes: int = DEFAULT_PTC_MAX_CODE_BYTES,
+        extra_args: dict[str, str] | None = None,
     ) -> None:
         self.name = PTC_TOOL_NAME
         self._agent = agent
@@ -599,16 +953,27 @@ class PTCTool(Tool):
         self._max_output_bytes = max(256, int(max_output_bytes))
         self._max_tool_calls = max(1, int(max_tool_calls))
         self._max_code_bytes = max(1024, int(max_code_bytes))
+        self._extra_args: dict[str, str] = dict(extra_args or {})
         self._desc_cache: str | None = None
-        self._desc_cache_key: tuple[tuple[str, str], ...] | None = None
+        self._desc_cache_key: tuple[Any, ...] | None = None
+        # Build the schema: ``code`` is always required; each entry in
+        # ``extra_args`` becomes an OPTIONAL string field with the
+        # provided description.  The LLM fills them alongside ``code``
+        # and they become available to user code as ``ptc_args["..."]``.
+        properties: dict[str, Any] = {
+            "code": {
+                "type": "string",
+                "description": _CODE_PARAM_DESCRIPTION,
+            },
+        }
+        for key, desc in self._extra_args.items():
+            properties[key] = {
+                "type": "string",
+                "description": desc,
+            }
         self.parameters: dict[str, Any] = {
             "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "description": _CODE_PARAM_DESCRIPTION,
-                },
-            },
+            "properties": properties,
             "required": ["code"],
         }
 
@@ -616,12 +981,14 @@ class PTCTool(Tool):
     def description(self) -> str:  # type: ignore[override]
         """Dynamically build description from current PTC-eligible tools.
 
-        The result is cached and keyed on (tool_name, tool_description)
-        pairs so that add/remove/description-change invalidates correctly
-        without needing explicit cache busts from the agent.  If the
-        cache key computation fails (e.g., a tool's ``description``
-        property raises), we fall back to an uncached rebuild so the
-        tool still works.
+        The result is cached and keyed on a tuple that includes each
+        tool's name, full description, parameter-schema JSON hash, and
+        the agent's ``injected_tool_args`` dict — so add/remove/
+        description-change/parameter-change/injected-args-change all
+        invalidate correctly without explicit cache busts from the
+        agent.  If the cache key computation fails (e.g., a tool's
+        ``description`` property raises), we fall back to an uncached
+        rebuild so the tool still works.
         """
         try:
             eligible = get_ptc_eligible_tools(self._agent)
@@ -629,12 +996,34 @@ class PTCTool(Tool):
             _ptc_log.exception("PTC description: get_ptc_eligible_tools failed")
             return _PTC_PREAMBLE + "(tool list unavailable)"
 
+        injected_args: dict[str, str] = dict(getattr(self._agent, "injected_tool_args", {}) or {})
+
         try:
-            current_key = tuple(
-                (name, tool.description or "") for name, tool in sorted(eligible.items())
+            tools_key = tuple(
+                (
+                    name,
+                    tool.description or "",
+                    # Include a stable signature of parameters so in-place
+                    # mutations to ``tool.parameters`` (e.g. dynamic tool
+                    # schema updates) invalidate the cached description.
+                    json.dumps(
+                        getattr(tool, "parameters", {}) or {},
+                        sort_keys=True,
+                        default=str,
+                    ),
+                )
+                for name, tool in sorted(eligible.items())
             )
+            # Include injected_args in the key so changes to the agent's
+            # injected_tool_args dict invalidate the cached description.
+            injected_key = tuple(sorted(injected_args.items()))
+            # Include extra_args on this PTCTool too so that changing
+            # the outer-PTC extra args rebuilds the description (which
+            # mentions ``ptc_args`` availability).
+            extra_key = tuple(sorted(self._extra_args.items()))
+            current_key: tuple[Any, ...] = (tools_key, injected_key, extra_key)
         except Exception:
-            current_key = None
+            current_key = None  # type: ignore[assignment]
 
         if (
             current_key is not None
@@ -644,7 +1033,12 @@ class PTCTool(Tool):
             return self._desc_cache
 
         try:
-            desc = _PTC_PREAMBLE + build_tool_signatures(eligible)
+            extra_args_note = _build_extra_args_note(self._extra_args)
+            desc = (
+                _PTC_PREAMBLE
+                + extra_args_note
+                + build_tool_signatures(eligible, injected_args or None)
+            )
         except Exception:
             _ptc_log.exception("PTC description: build_tool_signatures failed")
             return _PTC_PREAMBLE + "(signature rendering failed)"
@@ -671,15 +1065,30 @@ class PTCTool(Tool):
         }
 
     async def execute(self, **kwargs: Any) -> str:
-        """Run user code via PTCExecutor."""
+        """Run user code via PTCExecutor.
+
+        ``code`` is pulled out of ``kwargs`` and executed.  Any other
+        keys matching declared ``extra_args`` are collected into a
+        ``ptc_args`` dict and exposed to the executing user code as a
+        top-level namespace variable.  Unknown extra keys are silently
+        dropped (so stray fields the LLM hallucinated don't leak).
+        """
         code_arg = kwargs.get("code", "")
         code: str = code_arg if isinstance(code_arg, str) else str(code_arg)
+
+        # Collect declared extra args (filter out unknown keys).
+        ptc_args: dict[str, Any] = {}
+        for key in self._extra_args:
+            if key in kwargs:
+                ptc_args[key] = kwargs[key]
+
         executor = PTCExecutor(
             self._agent,
             timeout=self._timeout,
             max_output_bytes=self._max_output_bytes,
             max_tool_calls=self._max_tool_calls,
             max_code_bytes=self._max_code_bytes,
+            ptc_args=ptc_args,
         )
         return await executor.run(code)
 
@@ -732,6 +1141,7 @@ class PTCExecutor:
         max_output_bytes: int = DEFAULT_PTC_MAX_OUTPUT_BYTES,
         max_tool_calls: int = DEFAULT_PTC_MAX_TOOL_CALLS,
         max_code_bytes: int = DEFAULT_PTC_MAX_CODE_BYTES,
+        ptc_args: dict[str, Any] | None = None,
     ) -> None:
         self._agent = agent
         # Clamp all limits to safe minimums so bad config cannot break the tool.
@@ -739,6 +1149,10 @@ class PTCExecutor:
         self._max_output_bytes = max(256, int(max_output_bytes))
         self._max_tool_calls = max(1, int(max_tool_calls))
         self._max_code_bytes = max(1024, int(max_code_bytes))
+        # Values the outer ``__exo_ptc__`` tool call was given by the LLM
+        # for any declared ``extra_args``.  Exposed to user code as the
+        # top-level ``ptc_args`` dict in the execution namespace.
+        self._ptc_args: dict[str, Any] = dict(ptc_args or {})
         self._tool_call_count = 0
 
     async def run(self, code: str) -> str:
@@ -1018,6 +1432,10 @@ class PTCExecutor:
         ns: dict[str, Any] = {"__builtins__": safe_builtins}
         ns.update(_PTC_STDLIB)
         ns["__PTC_TRAP__"] = _PTCBaseExceptionTrap
+        # Expose any ``extra_args`` the LLM filled on the outer PTC call
+        # as a frozen-ish dict the user code can read.  We copy the dict
+        # so user mutations don't affect the executor's own state.
+        ns["ptc_args"] = dict(self._ptc_args)
 
         eligible = get_ptc_eligible_tools(self._agent)
         api = _ToolNamespace()
@@ -1074,6 +1492,15 @@ class PTCExecutor:
                 tool_name=tool_obj.name,
                 arguments=kwargs,
             )
+
+            # Strip ``injected_tool_args`` — these are schema-only fields
+            # the LLM fills in (visible in the PTC signature), but the
+            # underlying tool function must never receive them.  This
+            # matches the non-PTC dispatch path in ``agent.py``.
+            injected = getattr(agent, "injected_tool_args", None)
+            if injected:
+                for key in injected:
+                    kwargs.pop(key, None)
 
             # Inject ToolContext if the tool declares one (any Tool subclass).
             ctx_param = getattr(tool_obj, "_tool_context_param", None)

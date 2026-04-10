@@ -96,7 +96,14 @@ async def _resolve_instructions(raw_instructions: Any, agent_name: str) -> str:
 
 
 def _build_planner_agent(agent: Any, planner_model: str, planner_instructions: str) -> Any:
-    """Create an ephemeral planner agent with the executor's tool set."""
+    """Create an ephemeral planner agent with the executor's tool set.
+
+    Excludes the parent's ``__exo_ptc__`` tool (bound to the parent
+    instance) and propagates the executor's PTC settings so the planner
+    re-registers its own ``PTCTool`` — otherwise PTC-eligible tools
+    would leak as direct schemas on the planner and the planner could
+    call tools that should only be reachable through PTC.
+    """
     from exo.agent import Agent
 
     planner_tools = []
@@ -105,6 +112,11 @@ def _build_planner_agent(agent: Any, planner_model: str, planner_instructions: s
         if tool_name == "retrieve_artifact":
             continue
         if getattr(tool, "_is_context_tool", False):
+            continue
+        if getattr(tool, "_is_ptc_tool", False):
+            # Parent's PTCTool is bound to the parent agent; the planner
+            # constructor below will register a fresh PTCTool on the
+            # planner when ``ptc`` is propagated.
             continue
         if allow_self_spawn and tool_name == "spawn_self":
             continue
@@ -130,6 +142,14 @@ def _build_planner_agent(agent: Any, planner_model: str, planner_instructions: s
         allow_self_spawn=allow_self_spawn,
         max_spawn_depth=getattr(agent, "max_spawn_depth", 3),
         max_spawn_children=getattr(agent, "max_spawn_children", 4),
+        # Propagate PTC settings so the planner sees the same filtered
+        # schema view as the executor (PTC-eligible tools absorbed into
+        # ``__exo_ptc__``, not leaked as direct schemas).
+        ptc=bool(getattr(agent, "ptc", False)),
+        ptc_timeout=int(getattr(agent, "ptc_timeout", 60)),
+        ptc_max_output_bytes=int(getattr(agent, "ptc_max_output_bytes", 200_000)),
+        ptc_max_tool_calls=int(getattr(agent, "ptc_max_tool_calls", 200)),
+        ptc_extra_args=dict(getattr(agent, "ptc_extra_args", {}) or {}) or None,
     )
 
 

@@ -437,10 +437,7 @@ async def _apply_context_windowing(
     # ── CONTEXT_WINDOW hook registered — bypass ALL built-in strategies ──
     # When a user registers a CONTEXT_WINDOW hook, it becomes the sole owner
     # of context reduction regardless of the configured overflow strategy.
-    _has_ctx_hook = (
-        hook_manager is not None
-        and hook_manager.has_hooks(HookPoint.CONTEXT_WINDOW)
-    )
+    _has_ctx_hook = hook_manager is not None and hook_manager.has_hooks(HookPoint.CONTEXT_WINDOW)
     if _has_ctx_hook:
         result_list = system_msgs + non_system
         try:
@@ -736,6 +733,7 @@ class Agent:
         ptc_timeout: int = 60,
         ptc_max_output_bytes: int = 200_000,
         ptc_max_tool_calls: int = 200,
+        ptc_extra_args: dict[str, str] | None = None,
         skills: SkillRegistry | None = None,
         tool_resolver: ToolResolver | dict[str, Tool | list[Tool]] | None = None,
         tool_gate: dict[str, list[Tool]] | None = None,
@@ -768,6 +766,11 @@ class Agent:
         self.ptc_timeout: int = ptc_timeout
         self.ptc_max_output_bytes: int = ptc_max_output_bytes
         self.ptc_max_tool_calls: int = ptc_max_tool_calls
+        # Schema-only args added to the outer ``__exo_ptc__`` tool call.
+        # The LLM fills them alongside ``code``; they are NOT propagated
+        # to inner tools (unlike ``injected_tool_args``) and are instead
+        # exposed to the executing PTC code as a ``ptc_args`` dict.
+        self.ptc_extra_args: dict[str, str] = validate_injected_tool_args(ptc_extra_args)
         # Internal: spawn depth (0 for top-level agents; incremented for each spawn level)
         self._spawn_depth: int = 0
         # Internal: provider reference stored during run() for use by spawn_self tool
@@ -894,6 +897,7 @@ class Agent:
                 timeout=self.ptc_timeout,
                 max_output_bytes=self.ptc_max_output_bytes,
                 max_tool_calls=self.ptc_max_tool_calls,
+                extra_args=self.ptc_extra_args or None,
             )
             self._cached_tool_schemas = None
 
@@ -923,9 +927,7 @@ class Agent:
             # Validate that trigger names actually refer to registered tools
             for trigger_name in self._tool_gate:
                 if trigger_name not in self.tools:
-                    raise AgentError(
-                        f"tool_gate trigger '{trigger_name}' is not a registered tool"
-                    )
+                    raise AgentError(f"tool_gate trigger '{trigger_name}' is not a registered tool")
             self.hook_manager.add(HookPoint.POST_TOOL_CALL, self._tool_gate_hook)
 
         # Auto-attach memory persistence hooks when a MemoryStore is provided
@@ -969,6 +971,12 @@ class Agent:
         if agent.name in self.handoffs:
             raise AgentError(f"Duplicate handoff agent '{agent.name}' on agent '{self.name}'")
         self.handoffs[agent.name] = agent
+        # Invalidate schema cache: ``get_ptc_eligible_tools`` uses
+        # ``self.handoffs`` keys to exclude tools whose name matches a
+        # handoff target.  Without invalidation, a runtime handoff add on
+        # a ``ptc=True`` agent would leave a stale schema where a tool is
+        # still listed that should now be excluded.
+        self._cached_tool_schemas = None
 
     def _register_retrieve_artifact(self) -> None:
         """Auto-register the ``retrieve_artifact`` tool for workspace access.
@@ -1051,20 +1059,27 @@ class Agent:
             from exo.context.config import OverflowStrategy  # pyright: ignore[reportMissingImports]
 
             if self.context.config.overflow == OverflowStrategy.HOOK:
-                _log.debug(
-                    "skipping context tools for agent %r (overflow=hook)", self.name
-                )
+                _log.debug("skipping context tools for agent %r (overflow=hook)", self.name)
                 return
         except (ImportError, AttributeError):
             pass
         try:
             from exo.context.tools import get_context_tools  # pyright: ignore[reportMissingImports]
 
+            added = False
             for t in get_context_tools():
                 t.bind(self.context)
                 # Skip if user already registered a tool with the same name
                 if t.name not in self.tools:
                     self.tools[t.name] = t
+                    added = True
+            # Defensive: invalidate the schema cache if any context tool
+            # was injected.  Currently this method runs only during
+            # ``__init__`` (before the cache is populated), but an explicit
+            # invalidation protects against future call sites that might
+            # run it after the cache has been built.
+            if added:
+                self._cached_tool_schemas = None
             _log.debug(
                 "auto-loaded context tools for agent %r (%d tools)",
                 self.name,
@@ -1181,11 +1196,19 @@ class Agent:
                         ),
                     )
 
-                # Build tools list once — exclude spawn_self and context tools.
+                # Build tools list once — exclude spawn_self, context tools,
+                # and the parent's PTC tool (which is bound to the parent
+                # agent instance).  If parent has ``ptc=True`` the child
+                # agent will re-register its own PTCTool via its ``ptc``
+                # init flag below, so PTC-eligible tools are absorbed into
+                # the child's ``__exo_ptc__`` instead of leaking as direct
+                # schemas on the child.
                 child_tools = [
                     t
                     for name, t in parent.tools.items()
-                    if name != "spawn_self" and not getattr(t, "_is_context_tool", False)
+                    if name != "spawn_self"
+                    and not getattr(t, "_is_context_tool", False)
+                    and not getattr(t, "_is_ptc_tool", False)
                 ]
 
                 results: list[str] = [""] * len(tasks)
@@ -1208,6 +1231,14 @@ class Agent:
                             memory=child_memory,
                             context=child_context,
                             allow_self_spawn=False,
+                            # Inherit PTC settings so the child re-registers
+                            # its own PTCTool and the schema filter hides
+                            # PTC-eligible tools from the child's LLM call.
+                            ptc=parent.ptc,
+                            ptc_timeout=parent.ptc_timeout,
+                            ptc_max_output_bytes=parent.ptc_max_output_bytes,
+                            ptc_max_tool_calls=parent.ptc_max_tool_calls,
+                            ptc_extra_args=dict(parent.ptc_extra_args) or None,
                         )
                         child_agent._spawn_depth = parent._spawn_depth + 1
 
@@ -1295,17 +1326,23 @@ class Agent:
                         available_skills=available,
                     )
 
-                # Resolve and add tools (skip duplicates)
+                # Resolve and add tools (skip duplicates). Invalidate the
+                # schema cache so the next LLM call includes the newly
+                # activated skill's tools (and, when ``ptc=True``, so the
+                # PTCTool description is rebuilt with the new eligible
+                # set — a stale cache would hide the new tools entirely).
                 if agent_ref._tool_resolver is not None and skill.tool_list:
                     tools = agent_ref._tool_resolver.resolve(skill)
                     async with agent_ref._tools_lock:
+                        added = False
                         for t in tools:
                             if t.name not in agent_ref.tools:
                                 agent_ref.tools[t.name] = t
+                                added = True
+                        if added:
+                            agent_ref._cached_tool_schemas = None
 
-                return skill.usage or tool_ok(
-                    f"Skill '{name}' activated (no usage instructions)"
-                )
+                return skill.usage or tool_ok(f"Skill '{name}' activated (no usage instructions)")
             except Exception as exc:
                 available: list[str] = []
                 try:
@@ -1477,6 +1514,41 @@ class Agent:
         del self.tools[tool_name]
         self._cached_tool_schemas = None
 
+    def _apply_ptc_setting(self, enabled: bool) -> None:
+        """Toggle ``ptc`` state at runtime, safely.
+
+        Unlike a bare ``self.ptc = True`` assignment, this:
+        - Registers the synthetic ``__exo_ptc__`` tool on enable (if not
+          already present), bound to *this* agent instance.
+        - Removes ``__exo_ptc__`` on disable (if present).
+        - Invalidates ``_cached_tool_schemas`` in both cases so the next
+          ``get_tool_schemas()`` call re-applies (or drops) the PTC filter.
+
+        Used by :class:`Swarm` when propagating ``ptc`` to member agents,
+        and by :meth:`spawn_self` children so they inherit parent PTC
+        settings without leaking PTC-eligible tools as direct schemas.
+        """
+        from exo.ptc import PTC_TOOL_NAME, PTCTool
+
+        if enabled:
+            self.ptc = True
+            if PTC_TOOL_NAME not in self.tools:
+                self.tools[PTC_TOOL_NAME] = PTCTool(
+                    agent=self,
+                    timeout=self.ptc_timeout,
+                    max_output_bytes=self.ptc_max_output_bytes,
+                    max_tool_calls=self.ptc_max_tool_calls,
+                    extra_args=self.ptc_extra_args or None,
+                )
+            self._cached_tool_schemas = None
+        else:
+            self.ptc = False
+            if PTC_TOOL_NAME in self.tools and getattr(
+                self.tools[PTC_TOOL_NAME], "_is_ptc_tool", False
+            ):
+                del self.tools[PTC_TOOL_NAME]
+            self._cached_tool_schemas = None
+
     async def _tool_gate_hook(self, **kwargs: Any) -> None:
         """POST_TOOL_CALL hook that unlocks gated tools when a trigger fires.
 
@@ -1591,11 +1663,7 @@ class Agent:
                 from exo.ptc import get_ptc_eligible_tools
 
                 ptc_names = set(get_ptc_eligible_tools(self).keys())
-                schemas = [
-                    t.to_schema()
-                    for name, t in self.tools.items()
-                    if name not in ptc_names
-                ]
+                schemas = [t.to_schema() for name, t in self.tools.items() if name not in ptc_names]
             else:
                 schemas = [t.to_schema() for t in self.tools.values()]
             if self.injected_tool_args:
@@ -1886,6 +1954,15 @@ class Agent:
             # Record token usage in tracker
             if _token_tracker is not None and output.usage.total_tokens > 0:
                 _token_tracker.add_usage(self.name, output.usage)
+
+            # Normalize ``default_api.<name>`` tool calls that some models
+            # emit directly when they misread the PTC description.  This
+            # rewrites the name to the bare tool name so dispatch succeeds
+            # and the clean name flows through downstream events.
+            if output.tool_calls:
+                from exo.ptc import normalize_default_api_tool_calls
+
+                normalize_default_api_tool_calls(output.tool_calls, self)
 
             # No tool calls — save snapshot and return the final text response
             if not output.tool_calls:
@@ -2201,9 +2278,7 @@ class Agent:
                             getattr(tool, "large_output", False)
                             or len(content.encode("utf-8")) > _get_large_output_threshold()
                         ):
-                            content = await self._offload_large_result(
-                                action.tool_name, content
-                            )
+                            content = await self._offload_large_result(action.tool_name, content)
                         result = ToolResult(
                             tool_call_id=action.tool_call_id,
                             tool_name=action.tool_name,
@@ -2216,9 +2291,7 @@ class Agent:
                             self.name,
                             exc,
                         )
-                        result = _tool_error(
-                            action.tool_name, action.tool_call_id, str(exc)
-                        )
+                        result = _tool_error(action.tool_name, action.tool_call_id, str(exc))
 
                 # POST_TOOL_CALL hook
                 await self.hook_manager.run(
@@ -2300,6 +2373,7 @@ class Agent:
             "ptc_timeout": self.ptc_timeout,
             "ptc_max_output_bytes": self.ptc_max_output_bytes,
             "ptc_max_tool_calls": self.ptc_max_tool_calls,
+            "ptc_extra_args": dict(self.ptc_extra_args),
             "bare_tools": self.bare_tools,
         }
 
@@ -2380,6 +2454,7 @@ class Agent:
             ptc_timeout=data.get("ptc_timeout", 60),
             ptc_max_output_bytes=data.get("ptc_max_output_bytes", 200_000),
             ptc_max_tool_calls=data.get("ptc_max_tool_calls", 200),
+            ptc_extra_args=data.get("ptc_extra_args"),
             bare_tools=data.get("bare_tools", False),
         )
 

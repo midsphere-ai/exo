@@ -44,6 +44,10 @@ agent = Agent(
     ptc_timeout=60,                  # Timeout for code execution (seconds, default 60)
     ptc_max_output_bytes=200_000,    # Truncate captured stdout+stderr above this
     ptc_max_tool_calls=200,          # Cap inner tool calls per PTC invocation
+    ptc_max_code_bytes=100_000,      # Cap incoming user code size
+    ptc_extra_args={                 # Schema fields added DIRECTLY to __exo_ptc__
+        "intent": "Brief description of what this PTC invocation will do.",
+    },
 )
 ```
 
@@ -52,6 +56,8 @@ agent = Agent(
 - `ptc_timeout: int = 60` — Maximum seconds for a single PTC invocation. Long-running code is terminated with a `TimeoutError` message.
 - `ptc_max_output_bytes: int = 200_000` — Maximum bytes of captured stdout+stderr returned to the model. Larger outputs are truncated with a `[truncated N chars]` suffix.
 - `ptc_max_tool_calls: int = 200` — Maximum number of inner tool calls the user code can make per PTC invocation. Exceeding raises `MaxToolCallsExceeded`.
+- `ptc_max_code_bytes: int = 100_000` — Maximum size of the incoming `code` string. Oversized code is rejected with a clear error before any execution.
+- `ptc_extra_args: dict[str, str] | None = None` — Extra schema fields added to the **outer** `__exo_ptc__` tool call (not propagated to inner tools). The LLM fills them alongside `code`, and they become accessible inside the executing Python code as the `ptc_args` dict. Use this to surface metadata (intent, phase ID, confidence, …) or structured inputs the PTC code should act on. See the **PTC Extra Args** section below for details.
 
 ### How It Works
 
@@ -133,6 +139,130 @@ When `ptc=True`, tools are split into two groups:
 | Handoff targets | YES | NO |
 
 The LLM sees the PTC tool plus any direct tools. Inside the code, tools are accessed via the `default_api` namespace to avoid collisions with Python builtins and keywords.
+
+### Rich Tool Signatures
+
+PTC renders each inner tool as a full Python `async def` block inside the `__exo_ptc__` description. **All** the metadata from the original `@tool` decorator survives into PTC mode — nothing gets dropped or truncated.
+
+What the LLM sees for an inner tool:
+
+```python
+@tool(name="plan")
+def plan_tool(
+    action: Annotated[Literal["update", "advance", "get"], "The plan action to perform."],
+    current_phase_id: Annotated[int | None, "ID of the current phase (auto-incrementing int starting from 1)."] = None,
+    goal: Annotated[str | None, "The overall goal of the plan."] = None,
+    phases: Annotated[list | None, "List of phase dicts. Each dict has 'id' (int), 'title' (str), ..."] = None,
+) -> dict:
+    """Create, update, and advance the structured task plan.
+
+    <instructions>
+    - This tool helps plan tasks and break down complex work into manageable phases.
+    - MUST `update` when user makes new requests.
+    - Phase count scales with complexity: simple (2), typical (4-6), complex (10+).
+    </instructions>
+
+    <recommended_usage>
+    - Use `get` to retrieve the current plan.
+    - Use `update` at the start of a new task.
+    - Use `advance` when the current phase is complete.
+    </recommended_usage>
+    """
+```
+
+Is rendered into the `__exo_ptc__` description as:
+
+```
+  async def plan(
+      action: Literal['update', 'advance', 'get'],
+      current_phase_id: int | None = None,
+      goal: str | None = None,
+      phases: list | None = None,
+  ) -> str
+    """Create, update, and advance the structured task plan.
+
+    <instructions>
+    - This tool helps plan tasks and break down complex work into manageable phases.
+    - MUST `update` when user makes new requests.
+    - Phase count scales with complexity: simple (2), typical (4-6), complex (10+).
+    </instructions>
+
+    <recommended_usage>
+    - Use `get` to retrieve the current plan.
+    - Use `update` at the start of a new task.
+    - Use `advance` when the current phase is complete.
+    </recommended_usage>
+    """
+
+    Args:
+        action: The plan action to perform.
+        current_phase_id: ID of the current phase (auto-incrementing int starting from 1).
+        goal: The overall goal of the plan.
+        phases: List of phase dicts. Each dict has 'id' (int), 'title' (str), ...
+```
+
+What's preserved:
+
+- **`Literal["a", "b", "c"]`** — enum/Literal constraints render as actual `Literal[...]` types, not collapsed to `str`. The LLM sees the allowed values directly.
+- **`Annotated[T, "description"]`** — per-parameter descriptions surface in a Google-style `Args:` section under the docstring.
+- **Full multi-line docstring** — untruncated, including `<instructions>`, `<recommended_usage>`, XML blocks, `Returns:`, `Raises:`, `Notes:`, `Examples:` — everything the author wrote. The only thing stripped is the `Args:` section inside the docstring (its contents are rendered separately to avoid duplication).
+- **Default values** — `x: int = 42`, `mode: Literal['a', 'b'] = 'a'` — visible directly in the signature.
+- **Required vs optional ordering** — required params come first, then optionals, then injected args. Stable alphabetical sort within each group.
+- **`list[str]` / `list[int]`** item types when the JSON Schema provides `items.type`.
+- **Long signatures auto-wrap** — single-line when ≤ 100 chars, multi-line (one param per line) when longer.
+- **`injected_tool_args`** — appear as optional trailing params in the signature AND in the `Args:` section with a `[injected]` marker. Inside the PTC wrapper they are stripped from kwargs before the tool function is called (matching non-PTC dispatch semantics).
+
+> **Footgun**: `from __future__ import annotations` turns type hints into strings. If `Annotated` / `Literal` aren't imported at the **module level** where your `@tool` function is defined (e.g., imported inside a test function body), `get_type_hints()` silently fails and all metadata drops. You'll get a loud warning log — watch for `Tool schema generation could not resolve type hints for ...` in your logs.
+
+### PTC Extra Args
+
+Sometimes you want to surface structured inputs directly on the outer `__exo_ptc__` tool call — metadata the LLM should provide alongside the code, or values the PTC code should read. `ptc_extra_args` adds optional string fields to the `__exo_ptc__` schema itself:
+
+```python
+agent = Agent(
+    name="planner",
+    tools=[...],
+    ptc=True,
+    ptc_extra_args={
+        "intent": "Brief description of what the PTC code is trying to do.",
+        "phase_id": "The current plan phase ID this invocation belongs to.",
+        "confidence": "Your confidence level: 'low', 'medium', or 'high'.",
+    },
+)
+```
+
+**What changes:**
+
+1. **Outer schema**: `__exo_ptc__.parameters.properties` now includes `code` (required) + `intent` + `phase_id` + `confidence` (all optional strings).
+2. **Description**: a `<ptc_extra_args>` block appears in the `__exo_ptc__` description explaining the fields and referencing the `ptc_args` dict.
+3. **LLM call**: the LLM invokes `__exo_ptc__(code="...", intent="batch search Q3 data", confidence="high")`.
+4. **PTC code namespace**: a `ptc_args` dict is pre-populated with the values the LLM filled:
+
+```python
+# Inside the code= payload the LLM writes:
+print(ptc_args['intent'])                    # "batch search Q3 data"
+threshold = 0.9 if ptc_args.get('confidence') == 'high' else 0.5
+regions = json.loads(await default_api.get_regions(phase=ptc_args['phase_id']))
+for r in regions:
+    data = await default_api.search(query=ptc_args['intent'], region=r)
+    ...
+```
+
+**Semantics:**
+
+- **Unknown keys are filtered.** If the LLM hallucinates a field not in `ptc_extra_args`, it never reaches `ptc_args` — no silent contamination.
+- **Per-run isolation.** Each PTC invocation gets a fresh `ptc_args` dict. Mutations never bleed across runs.
+- **NOT propagated to inner tools.** `ptc_args['intent']` does NOT auto-append to `default_api.foo(...)` calls. If you want to forward values to an inner tool, pass them explicitly.
+- **NOT the same as `injected_tool_args`.** Those are agent-level schema decorations visible on *every* tool schema (inner and outer), stripped before dispatch so the tool function never sees them. `ptc_extra_args` are specific to `__exo_ptc__`, **exposed** rather than stripped, and reachable via the `ptc_args` dict inside user code.
+- **Propagation.** `ptc_extra_args` is inherited by `spawn_self` children and by the ephemeral planner agent built inside `planning_enabled=True` flows, and survives `Agent.to_dict()` / `from_dict()` round-trips. Also forwardable via the YAML `Agent` loader.
+
+**When to use which:**
+
+| Need | Use |
+|---|---|
+| Metadata the LLM should be aware of on every tool call (observability hint) | `injected_tool_args` |
+| Structured input the PTC **code** should actually read and use | `ptc_extra_args` |
+| Values auto-injected from runtime context (e.g., user_id from a request handler) | Neither — use a `ToolContext` parameter on the tool function |
 
 ### PTC Tool Internals
 
@@ -394,3 +524,12 @@ agent.remove_tool("search")
 - **Guide the LLM via instructions** — be explicit: "Write code to batch-process all items and return only the summary." Without guidance, the model may still use individual tool calls if PTC-eligible tools happen to also be in the schema (they're not, but the model may not realize PTC is available without clear instructions).
 - **Stream is fully transparent** — `run.stream()` emits individual `ToolCallEvent`/`ToolResultEvent` per inner tool call. The `__exo_ptc__` tool never appears in the event stream. UI consumers never need to know PTC exists.
 - **`output_type` works with PTC** — structured output validation happens after the tool loop ends, so PTC doesn't interfere.
+- **Full tool metadata survives into PTC** — `Literal`, `Annotated[T, "description"]`, full multi-line docstrings, default values, and injected_tool_args all render into the PTC description. See the **Rich Tool Signatures** section above. Nothing gets dropped or truncated.
+- **`from __future__ import annotations` + missing typing imports** — turns type hints into strings that `get_type_hints()` tries to resolve in the function's module globals. If `Annotated` / `Literal` aren't imported at the module level where a `@tool` function is defined, resolution fails silently and **all** rich type metadata drops (every param falls back to `str` with no description or enum). Exo logs a loud warning (`Tool schema generation could not resolve type hints for ...`) so the footgun is visible. Fix: add the typing imports at module level.
+- **`ptc_extra_args` are exposed, not stripped** — unlike `injected_tool_args` (stripped before tool dispatch), values the LLM fills for `ptc_extra_args` end up in a `ptc_args` dict inside the PTC code namespace. Use them when the code needs to **read** structured input the LLM provides alongside `code`. Unknown keys the LLM hallucinates are silently filtered so only declared fields reach `ptc_args`.
+- **LLM sometimes emits direct `default_api.tool_name(...)` calls** — some models misread the PTC description and generate a tool_call with a dotted name instead of wrapping it in `__exo_ptc__(code="...")`. The runner normalizes these at parse time: if the stripped name matches a registered tool, the call is rewritten to the bare name and dispatched normally (events and dispatch both see the clean name). A warning is logged so the user can investigate why the model bypassed PTC.
+- **Swarm/spawn_self/planner propagate PTC correctly** — `Swarm(ptc=True)` uses `Agent._apply_ptc_setting` to register `__exo_ptc__` on each member and invalidate their schema caches. `spawn_self` children inherit the parent's `ptc`/`ptc_timeout`/`ptc_max_output_bytes`/`ptc_max_tool_calls`/`ptc_extra_args` and exclude the parent's `__exo_ptc__` from their tool list. The ephemeral planner agent (planning pre-pass) does the same.
+- **Handoffs invalidate the PTC schema cache** — `add_handoff` / `_register_handoff` invalidate `_cached_tool_schemas`. The PTC filter uses handoff names to exclude matching tools, so a runtime handoff must trigger a cache rebuild.
+- **`HumanInputTool` is excluded from PTC** — has `_ptc_exclude=True` so the interactive prompt stays as a direct schema and isn't buffered inside a PTC code block.
+- **`_DelegateTool` (Swarm team mode) is excluded from PTC** — has `_ptc_exclude=True` so routing-to-worker calls stay as direct schemas and the cache is invalidated correctly when delegates are injected.
+- **Task-loop control tools are excluded from PTC** — `_QueueTool` (`steer_agent`, `abort_agent`) has `_ptc_exclude=True` so control-flow signals fire immediately and aren't delayed by PTC code execution.
