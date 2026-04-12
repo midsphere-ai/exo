@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
-import os
 import uuid
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -47,9 +46,6 @@ _log = get_logger(__name__)
 # Sentinels: distinguish "not provided" (auto-create) from explicit None (disable)
 _MEMORY_UNSET: Any = object()
 _CONTEXT_UNSET: Any = object()
-
-# Default byte threshold for automatic large-output offloading (10 KB)
-_LARGE_OUTPUT_THRESHOLD_DEFAULT = 10240
 
 
 # ---------------------------------------------------------------------------
@@ -129,19 +125,6 @@ def _drain_task_loop_queue(queue: TaskLoopQueue, messages: list) -> None:  # typ
         elif evt.type == TaskLoopEventType.FOLLOWUP:
             messages.append(UserMessage(content=f"[FOLLOWUP] {evt.content}"))
 
-
-def _get_large_output_threshold() -> int:
-    """Return the byte threshold for automatic tool result offloading.
-
-    Reads the ``EXO_LARGE_OUTPUT_THRESHOLD`` environment variable
-    (default: 10240 = 10 KB).
-    """
-    try:
-        return int(
-            os.environ.get("EXO_LARGE_OUTPUT_THRESHOLD", str(_LARGE_OUTPUT_THRESHOLD_DEFAULT))
-        )
-    except (ValueError, TypeError):
-        return _LARGE_OUTPUT_THRESHOLD_DEFAULT
 
 
 def _make_default_long_term() -> Any:
@@ -850,9 +833,12 @@ class Agent:
             self._register_tool(self._make_activate_skill_tool())
 
         if not self.bare_tools:
-            # Register retrieve_artifact so any tool result that exceeds the
-            # EXO_LARGE_OUTPUT_THRESHOLD byte limit can be retrieved by the LLM.
-            if "retrieve_artifact" not in self.tools:
+            # Register retrieve_artifact when the context mode supports
+            # workspace offloading (disabled for context=None / overflow=hook).
+            if (
+                self._should_enable_artifact_offloading()
+                and "retrieve_artifact" not in self.tools
+            ):
                 self._register_retrieve_artifact()
 
             # Auto-load context tools (planning, knowledge, file) when context is available
@@ -937,9 +923,10 @@ class Agent:
     def _register_tool(self, t: Tool) -> None:
         """Add a tool, raising on duplicate names.
 
-        When a ``large_output=True`` tool is registered and ``retrieve_artifact``
-        is not yet present, auto-registers the ``retrieve_artifact`` tool so the
-        LLM can access offloaded results.
+        When a ``large_output=True`` tool is registered, the context mode
+        supports offloading, and ``retrieve_artifact`` is not yet present,
+        auto-registers the ``retrieve_artifact`` tool so the LLM can access
+        offloaded results.
 
         Args:
             t: The tool to register.
@@ -952,9 +939,11 @@ class Agent:
         self.tools[t.name] = t
         self._cached_tool_schemas = None
         # Auto-register retrieve_artifact when the first large_output=True tool is added
+        # and the context mode supports workspace offloading.
         if (
             not self.bare_tools
             and getattr(t, "large_output", False)
+            and self._should_enable_artifact_offloading()
             and "retrieve_artifact" not in self.tools
         ):
             self._register_retrieve_artifact()
@@ -978,11 +967,29 @@ class Agent:
         # still listed that should now be excluded.
         self._cached_tool_schemas = None
 
+    def _should_enable_artifact_offloading(self) -> bool:
+        """Return True only when the context mode supports workspace offloading.
+
+        Disabled when context is ``None`` or overflow is ``hook``-based — the
+        ``retrieve_artifact`` tool cannot function without a managed context.
+        """
+        if self.context is None:
+            return False
+        try:
+            from exo.context.config import OverflowStrategy  # pyright: ignore[reportMissingImports]
+
+            if self.context.config.overflow == OverflowStrategy.HOOK:
+                return False
+        except (ImportError, AttributeError):
+            pass
+        return True
+
     def _register_retrieve_artifact(self) -> None:
         """Auto-register the ``retrieve_artifact`` tool for workspace access.
 
         Called automatically by :meth:`_register_tool` when the first
-        ``large_output=True`` tool is registered on this agent.
+        ``large_output=True`` tool is registered on this agent and the
+        context mode supports offloading.
         """
         agent_ref = self
 
@@ -2272,11 +2279,12 @@ class Agent:
                                 json.dumps(output) if isinstance(output, dict) else str(output)
                             )
                         # Large-output offloading: store in workspace and inject pointer.
-                        # Fires when large_output=True OR result exceeds the byte threshold.
-                        # Only applies to string content (not multimodal content blocks).
-                        if isinstance(content, str) and (
-                            getattr(tool, "large_output", False)
-                            or len(content.encode("utf-8")) > _get_large_output_threshold()
+                        # Only fires for tools with explicit large_output=True and when
+                        # the agent's context mode supports workspace offloading.
+                        if (
+                            isinstance(content, str)
+                            and getattr(tool, "large_output", False)
+                            and self._should_enable_artifact_offloading()
                         ):
                             content = await self._offload_large_result(action.tool_name, content)
                         result = ToolResult(

@@ -1,4 +1,4 @@
-"""Tests for @tool(large_output=True), threshold-based offloading, and MCP large_output_tools — US-026/US-027."""
+"""Tests for @tool(large_output=True), context-mode gating, and MCP large_output_tools — US-026/US-027."""
 
 from __future__ import annotations
 
@@ -43,6 +43,30 @@ def _mock_provider(content: str = "done", tool_calls: list[ToolCall] | None = No
         provider = AsyncMock()
         provider.complete = AsyncMock(return_value=resp)
     return provider
+
+
+def _make_default_context() -> Any:
+    """Create a default context (summarize overflow) that supports offloading."""
+    try:
+        from exo.context.config import make_config  # pyright: ignore[reportMissingImports]
+        from exo.context.context import Context  # pyright: ignore[reportMissingImports]
+
+        config = make_config("copilot")
+        return Context(task_id="test", config=config)
+    except ImportError:
+        pytest.skip("exo-context not installed")
+
+
+def _make_hook_context() -> Any:
+    """Create a hook-based context (overflow=hook) that does NOT support offloading."""
+    try:
+        from exo.context.config import ContextConfig  # pyright: ignore[reportMissingImports]
+        from exo.context.context import Context  # pyright: ignore[reportMissingImports]
+
+        config = ContextConfig(overflow="hook")
+        return Context(task_id="test", config=config)
+    except ImportError:
+        pytest.skip("exo-context not installed")
 
 
 # ---------------------------------------------------------------------------
@@ -101,13 +125,37 @@ class TestFunctionToolLargeOutput:
 
 
 # ---------------------------------------------------------------------------
-# retrieve_artifact auto-registration
+# Context-mode gating: _should_enable_artifact_offloading
+# ---------------------------------------------------------------------------
+
+
+class TestShouldEnableArtifactOffloading:
+    def test_disabled_when_context_is_none(self) -> None:
+        """Offloading is disabled when agent has no context."""
+        agent = Agent(name="bot", memory=None, context=None)
+        assert agent._should_enable_artifact_offloading() is False
+
+    def test_disabled_when_overflow_is_hook(self) -> None:
+        """Offloading is disabled when overflow strategy is hook-based."""
+        ctx = _make_hook_context()
+        agent = Agent(name="bot", memory=None, context=ctx)
+        assert agent._should_enable_artifact_offloading() is False
+
+    def test_enabled_with_default_context(self) -> None:
+        """Offloading is enabled with a default (summarize) context."""
+        ctx = _make_default_context()
+        agent = Agent(name="bot", memory=None, context=ctx)
+        assert agent._should_enable_artifact_offloading() is True
+
+
+# ---------------------------------------------------------------------------
+# retrieve_artifact auto-registration (context-mode gated)
 # ---------------------------------------------------------------------------
 
 
 class TestRetrieveArtifactAutoRegister:
-    def test_retrieve_artifact_always_registered(self) -> None:
-        """retrieve_artifact is always present on all agents (needed for threshold offloading)."""
+    def test_retrieve_artifact_not_registered_when_context_is_none(self) -> None:
+        """retrieve_artifact is NOT registered when context is None."""
 
         @tool
         def normal() -> str:
@@ -115,27 +163,48 @@ class TestRetrieveArtifactAutoRegister:
             return "ok"
 
         agent = Agent(name="bot", memory=None, context=None, tools=[normal])
-        assert "retrieve_artifact" in agent.tools
+        assert "retrieve_artifact" not in agent.tools
 
-    def test_retrieve_artifact_present_on_empty_tools_agent(self) -> None:
-        """retrieve_artifact is registered even when no tools are provided."""
-        agent = Agent(name="bot", memory=None, context=None)
+    def test_retrieve_artifact_not_registered_when_overflow_is_hook(self) -> None:
+        """retrieve_artifact is NOT registered when overflow=hook."""
+        ctx = _make_hook_context()
+
+        @tool
+        def normal() -> str:
+            """Normal tool."""
+            return "ok"
+
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[normal])
+        assert "retrieve_artifact" not in agent.tools
+
+    def test_retrieve_artifact_registered_with_default_context(self) -> None:
+        """retrieve_artifact IS registered with a default (summarize) context."""
+        ctx = _make_default_context()
+
+        @tool
+        def normal() -> str:
+            """Normal tool."""
+            return "ok"
+
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[normal])
         assert "retrieve_artifact" in agent.tools
 
     def test_retrieve_artifact_is_function_tool(self) -> None:
         """retrieve_artifact is a FunctionTool."""
+        ctx = _make_default_context()
 
         @tool(large_output=True)
         def big() -> str:
             """Big tool."""
             return "x" * 50000
 
-        agent = Agent(name="bot", memory=None, context=None, tools=[big])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[big])
         ra = agent.tools["retrieve_artifact"]
         assert isinstance(ra, FunctionTool)
 
     def test_retrieve_artifact_registered_once_for_multiple_large_tools(self) -> None:
         """Only one retrieve_artifact is registered even with multiple large_output tools."""
+        ctx = _make_default_context()
 
         @tool(large_output=True)
         def big1() -> str:
@@ -147,20 +216,21 @@ class TestRetrieveArtifactAutoRegister:
             """Big tool 2."""
             return "b" * 50000
 
-        agent = Agent(name="bot", memory=None, context=None, tools=[big1, big2])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[big1, big2])
         # Only one retrieve_artifact, not duplicated
         assert list(agent.tools.keys()).count("retrieve_artifact") == 1
 
     @pytest.mark.asyncio
     async def test_add_tool_does_not_duplicate_retrieve_artifact(self) -> None:
-        """add_tool does not create a second retrieve_artifact (already registered in __init__)."""
+        """add_tool does not create a second retrieve_artifact."""
+        ctx = _make_default_context()
 
         @tool(large_output=True)
         def big() -> str:
             """Big tool."""
             return "x" * 50000
 
-        agent = Agent(name="bot", memory=None, context=None)
+        agent = Agent(name="bot", memory=None, context=ctx)
         assert "retrieve_artifact" in agent.tools
         await agent.add_tool(big)
         # Still only one retrieve_artifact
@@ -251,6 +321,7 @@ class TestLargeOutputEndToEnd:
     @pytest.mark.asyncio
     async def test_large_output_tool_result_is_pointer_in_context(self) -> None:
         """When a large_output=True tool is called, the LLM sees the pointer, not the content."""
+        ctx = _make_default_context()
         large_content = "X" * 20000
 
         @tool(large_output=True)
@@ -261,12 +332,11 @@ class TestLargeOutputEndToEnd:
         tool_calls = [ToolCall(id="tc1", name="fetch_data", arguments="{}")]
         provider = _mock_provider(content="Analysis complete.", tool_calls=tool_calls)
 
-        agent = Agent(name="bot", memory=None, context=None, tools=[fetch_data])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[fetch_data])
         await agent.run("fetch the data", provider=provider)
 
         # The second LLM call receives the pointer, not the raw large content
         second_call_messages = provider.complete.call_args_list[1][0][0]
-        # Find the ToolResult message
         from exo.types import ToolResult
 
         tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
@@ -277,6 +347,7 @@ class TestLargeOutputEndToEnd:
     @pytest.mark.asyncio
     async def test_retrieve_artifact_returns_full_content(self) -> None:
         """retrieve_artifact tool retrieves the full offloaded content."""
+        ctx = _make_default_context()
         large_content = "big data " * 5000
 
         @tool(large_output=True)
@@ -287,7 +358,7 @@ class TestLargeOutputEndToEnd:
         # First run: store the artifact
         tool_calls = [ToolCall(id="tc1", name="produce", arguments="{}")]
         provider = _mock_provider(content="done", tool_calls=tool_calls)
-        agent = Agent(name="bot", memory=None, context=None, tools=[produce])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[produce])
         await agent.run("produce data", provider=provider)
 
         # Now call retrieve_artifact directly to check content
@@ -310,13 +381,14 @@ class TestLargeOutputEndToEnd:
     @pytest.mark.asyncio
     async def test_retrieve_artifact_unknown_id(self) -> None:
         """retrieve_artifact returns error string for unknown artifact ID."""
+        ctx = _make_default_context()
 
         @tool(large_output=True)
         def big() -> str:
             """Big tool."""
             return "x"
 
-        agent = Agent(name="bot", memory=None, context=None, tools=[big])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[big])
         # Pre-create workspace so retrieve_artifact doesn't get "no workspace" error
         from exo.context.workspace import Workspace  # pyright: ignore[reportMissingImports]
 
@@ -328,13 +400,14 @@ class TestLargeOutputEndToEnd:
     @pytest.mark.asyncio
     async def test_retrieve_artifact_no_workspace_yet(self) -> None:
         """retrieve_artifact returns graceful error when no workspace has been created."""
+        ctx = _make_default_context()
 
         @tool(large_output=True)
         def big() -> str:
             """Big tool."""
             return "x"
 
-        agent = Agent(name="bot", memory=None, context=None, tools=[big])
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[big])
         # Workspace not yet created
         assert agent._workspace is None
         ra_tool = agent.tools["retrieve_artifact"]
@@ -362,6 +435,55 @@ class TestLargeOutputEndToEnd:
         tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
         assert len(tool_result_msgs) == 1
         assert tool_result_msgs[0].content == normal_content
+
+    @pytest.mark.asyncio
+    async def test_large_output_not_offloaded_when_context_is_none(self) -> None:
+        """large_output=True tool result is NOT offloaded when context=None."""
+        large_content = "X" * 20000
+
+        @tool(large_output=True)
+        def fetch_data() -> str:
+            """Fetch a large dataset."""
+            return large_content
+
+        tool_calls = [ToolCall(id="tc1", name="fetch_data", arguments="{}")]
+        provider = _mock_provider(content="done", tool_calls=tool_calls)
+
+        agent = Agent(name="bot", memory=None, context=None, tools=[fetch_data])
+        await agent.run("fetch the data", provider=provider)
+
+        second_call_messages = provider.complete.call_args_list[1][0][0]
+        from exo.types import ToolResult
+
+        tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
+        assert len(tool_result_msgs) == 1
+        # Content should pass through unchanged — no offloading
+        assert tool_result_msgs[0].content == large_content
+
+    @pytest.mark.asyncio
+    async def test_large_output_not_offloaded_when_overflow_is_hook(self) -> None:
+        """large_output=True tool result is NOT offloaded when overflow=hook."""
+        ctx = _make_hook_context()
+        large_content = "X" * 20000
+
+        @tool(large_output=True)
+        def fetch_data() -> str:
+            """Fetch a large dataset."""
+            return large_content
+
+        tool_calls = [ToolCall(id="tc1", name="fetch_data", arguments="{}")]
+        provider = _mock_provider(content="done", tool_calls=tool_calls)
+
+        agent = Agent(name="bot", memory=None, context=ctx, tools=[fetch_data])
+        await agent.run("fetch the data", provider=provider)
+
+        second_call_messages = provider.complete.call_args_list[1][0][0]
+        from exo.types import ToolResult
+
+        tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
+        assert len(tool_result_msgs) == 1
+        # Content should pass through unchanged — no offloading
+        assert tool_result_msgs[0].content == large_content
 
 
 # ---------------------------------------------------------------------------
@@ -474,92 +596,6 @@ class TestToolResultOffloaderLargeOutputFlag:
 
 
 # ---------------------------------------------------------------------------
-# US-027: Threshold-based auto-offload
-# ---------------------------------------------------------------------------
-
-
-class TestThresholdBasedAutoOffload:
-    @pytest.mark.asyncio
-    async def test_result_above_threshold_is_offloaded(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A tool result exceeding EXO_LARGE_OUTPUT_THRESHOLD bytes is auto-offloaded."""
-        monkeypatch.setenv("EXO_LARGE_OUTPUT_THRESHOLD", "50")  # very small threshold
-
-        large_content = "x" * 100  # 100 bytes > 50
-
-        @tool
-        def big_normal() -> str:
-            """Normal tool that returns a lot."""
-            return large_content
-
-        tool_calls = [ToolCall(id="tc1", name="big_normal", arguments="{}")]
-        provider = _mock_provider(content="done", tool_calls=tool_calls)
-        agent = Agent(name="bot", memory=None, context=None, tools=[big_normal])
-        await agent.run("go", provider=provider)
-
-        second_call_messages = provider.complete.call_args_list[1][0][0]
-        from exo.types import ToolResult
-
-        tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
-        assert len(tool_result_msgs) == 1
-        assert "Result stored as artifact" in tool_result_msgs[0].content
-        assert large_content not in tool_result_msgs[0].content
-
-    @pytest.mark.asyncio
-    async def test_result_below_threshold_not_offloaded(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A tool result under the threshold is passed through unchanged."""
-        monkeypatch.setenv("EXO_LARGE_OUTPUT_THRESHOLD", "10240")
-
-        small_content = "small"
-
-        @tool
-        def small_tool() -> str:
-            """Small tool."""
-            return small_content
-
-        tool_calls = [ToolCall(id="tc1", name="small_tool", arguments="{}")]
-        provider = _mock_provider(content="ok", tool_calls=tool_calls)
-        agent = Agent(name="bot", memory=None, context=None, tools=[small_tool])
-        await agent.run("go", provider=provider)
-
-        second_call_messages = provider.complete.call_args_list[1][0][0]
-        from exo.types import ToolResult
-
-        tool_result_msgs = [m for m in second_call_messages if isinstance(m, ToolResult)]
-        assert len(tool_result_msgs) == 1
-        assert tool_result_msgs[0].content == small_content
-
-    @pytest.mark.asyncio
-    async def test_default_threshold_is_10kb(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Default threshold is 10240 bytes when env var is not set."""
-        from exo.agent import _get_large_output_threshold
-
-        monkeypatch.delenv("EXO_LARGE_OUTPUT_THRESHOLD", raising=False)
-        assert _get_large_output_threshold() == 10240
-
-    @pytest.mark.asyncio
-    async def test_env_var_overrides_threshold(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """EXO_LARGE_OUTPUT_THRESHOLD env var overrides the default."""
-        from exo.agent import _get_large_output_threshold
-
-        monkeypatch.setenv("EXO_LARGE_OUTPUT_THRESHOLD", "1000")
-        assert _get_large_output_threshold() == 1000
-
-    @pytest.mark.asyncio
-    async def test_invalid_env_var_falls_back_to_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Invalid EXO_LARGE_OUTPUT_THRESHOLD value falls back to 10240."""
-        from exo.agent import _get_large_output_threshold
-
-        monkeypatch.setenv("EXO_LARGE_OUTPUT_THRESHOLD", "not_a_number")
-        assert _get_large_output_threshold() == 10240
-
-
-# ---------------------------------------------------------------------------
 # US-027: MCPServerConfig.large_output_tools + MCPToolWrapper.large_output
 # ---------------------------------------------------------------------------
 
@@ -605,12 +641,14 @@ class TestMCPLargeOutputTools:
         except ImportError:
             pytest.skip("exo-mcp not installed")
 
-        config = MCPServerConfig(name="test", command="echo", large_output_tools=["tool1", "tool2"])
+        config = MCPServerConfig(
+            name="test", command="echo", large_output_tools=["tool1", "tool2"]
+        )
         restored = MCPServerConfig.from_dict(config.to_dict())
         assert restored.large_output_tools == ["tool1", "tool2"]
 
     def test_mcp_tool_wrapper_large_output_from_config(self) -> None:
-        """MCPToolWrapper.large_output is True when tool name is in server_config.large_output_tools."""
+        """MCPToolWrapper.large_output is True when tool name is in large_output_tools."""
         try:
             from exo.mcp.client import MCPServerConfig  # pyright: ignore[reportMissingImports]
             from exo.mcp.tools import MCPToolWrapper  # pyright: ignore[reportMissingImports]
