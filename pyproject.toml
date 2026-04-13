@@ -3,6 +3,9 @@ name = "exo-workspace"
 version = "0.1.0"
 description = "Exo: A modern multi-agent framework"
 requires-python = ">=3.11"
+dependencies = [
+    "graphifyy>=0.4.2",
+]
 
 [tool.uv.workspace]
 members = [
