@@ -100,6 +100,85 @@ The Kubernetes sandbox:
 - Polls the pod status until it reaches `Running` state.
 - Cleans up all resources on `stop()` or `cleanup()`.
 
+## E2BSandbox
+
+Runs code in an [E2B](https://e2b.dev) cloud sandbox — a remote VM managed via the E2B SDK:
+
+```python
+from exo.sandbox import E2BSandbox
+
+sandbox = E2BSandbox(
+    api_key="e2b_...",          # or set E2B_API_KEY env var
+    template="my-template-id",  # or set E2B_TEMPLATE_ID env var
+    timeout=300,                # sandbox lifetime in seconds
+    metadata={"user": "123"},   # metadata attached to the sandbox
+)
+
+async with sandbox:
+    # Run shell commands
+    result = await sandbox.run_tool("shell", {"command": "python --version"})
+    print(result["stdout"])
+
+    # Read/write files
+    await sandbox.run_tool("file_write", {"path": "/home/user/data.txt", "content": "hello"})
+    content = await sandbox.run_tool("file_read", {"path": "/home/user/data.txt"})
+
+    # List directory
+    listing = await sandbox.run_tool("file_list", {"path": "/home/user"})
+```
+
+### Connecting to an Existing Sandbox
+
+```python
+sandbox = E2BSandbox(
+    api_key="e2b_...",
+    existing_sandbox_id="sandbox-abc123",  # connect instead of create
+)
+await sandbox.start()
+```
+
+### Tool Registration
+
+Register custom tool handlers that execute inside the E2B sandbox:
+
+```python
+async def run_pytest(sandbox, arguments):
+    result = await sandbox.run_tool("shell", {"command": f"pytest {arguments['path']}"})
+    return result
+
+sandbox.register_tool("pytest", run_pytest)
+
+# Now run_tool dispatches to your handler
+result = await sandbox.run_tool("pytest", {"path": "tests/"})
+```
+
+Registered tools take priority over built-in dispatch (`shell`, `file_read`, etc.). Use `unregister_tool(name)` to remove them.
+
+### Sandbox-Aware Tools
+
+All built-in tools accept an optional `sandbox` parameter. When provided, operations execute remotely in the E2B sandbox instead of locally:
+
+```python
+from exo.sandbox import E2BSandbox, FilesystemTool, TerminalTool, ShellTool, CodeTool
+
+sandbox = E2BSandbox(api_key="e2b_...")
+await sandbox.start()
+
+# Option 1: Pass sandbox to tool constructor
+fs = FilesystemTool(sandbox=sandbox)
+terminal = TerminalTool(sandbox=sandbox)
+
+# Option 2: Use factory methods on the sandbox
+fs = sandbox.filesystem_tool()
+terminal = sandbox.terminal_tool()
+shell = sandbox.shell_tool()
+code = sandbox.code_tool()
+
+# Tools now execute in E2B
+content = await fs.execute(action="read", path="/home/user/data.txt")
+output = await terminal.execute(command="ls -la")
+```
+
 ## SandboxBuilder
 
 The `SandboxBuilder` provides a fluent API for constructing sandboxes:
@@ -226,6 +305,48 @@ async def run_user_code(code: str) -> str:
         await sandbox.cleanup()
 ```
 
+### E2B Sandbox with Agent Tools
+
+Give an agent tools that execute inside an E2B cloud sandbox:
+
+```python
+from exo.agent import Agent
+from exo.sandbox import E2BSandbox
+
+sandbox = E2BSandbox(api_key="e2b_...")
+await sandbox.start()
+
+agent = Agent(
+    name="coder",
+    model="openai:gpt-4o",
+    instructions="You are a coding assistant. Use the tools to work in the sandbox.",
+    tools=[
+        sandbox.filesystem_tool(),
+        sandbox.terminal_tool(timeout=60),
+        sandbox.code_tool(),
+    ],
+)
+```
+
+### E2B Sandbox with Custom Tools
+
+Register domain-specific tools that run inside the sandbox:
+
+```python
+sandbox = E2BSandbox(api_key="e2b_...")
+await sandbox.start()
+
+async def install_package(sandbox, args):
+    return await sandbox.run_tool("shell", {"command": f"pip install {args['package']}"})
+
+async def run_script(sandbox, args):
+    await sandbox.run_tool("file_write", {"path": "/tmp/script.py", "content": args["code"]})
+    return await sandbox.run_tool("shell", {"command": "python /tmp/script.py"})
+
+sandbox.register_tool("install", install_package)
+sandbox.register_tool("run_script", run_script)
+```
+
 ### Builder with Custom Configuration
 
 ```python
@@ -260,6 +381,9 @@ def create_sandbox_for_task(task_type: str) -> Any:
 | `SandboxError` | `exo.sandbox` | Error raised during sandbox operations |
 | `LocalSandbox` | `exo.sandbox` | Local subprocess sandbox |
 | `KubernetesSandbox` | `exo.sandbox` | Kubernetes pod-based sandbox |
+| `E2BSandbox` | `exo.sandbox` | E2B cloud sandbox with built-in tool dispatch |
 | `SandboxBuilder` | `exo.sandbox` | Fluent builder for sandbox construction |
-| `FilesystemTool` | `exo.sandbox` | Safe file read/write/list within allowed directories |
-| `TerminalTool` | `exo.sandbox` | Shell command execution with timeout and blacklist |
+| `FilesystemTool` | `exo.sandbox` | Safe file read/write/list (local or sandbox) |
+| `TerminalTool` | `exo.sandbox` | Shell command execution (local or sandbox) |
+| `ShellTool` | `exo.sandbox` | Allowlist-based shell execution (local or sandbox) |
+| `CodeTool` | `exo.sandbox` | Python code execution (local or sandbox) |

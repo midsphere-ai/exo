@@ -1,9 +1,9 @@
 # exo.sandbox.tools
 
-Built-in sandbox tools: filesystem access and terminal execution.
+Built-in sandbox tools: filesystem access, terminal execution, shell commands, and code execution. All tools accept an optional `sandbox` parameter — when provided, operations execute remotely via the sandbox's `run_tool()` instead of locally.
 
 ```python
-from exo.sandbox.tools import FilesystemTool, TerminalTool
+from exo.sandbox.tools import FilesystemTool, TerminalTool, ShellTool, CodeTool
 ```
 
 ---
@@ -13,10 +13,14 @@ from exo.sandbox.tools import FilesystemTool, TerminalTool
 ```python
 class FilesystemTool(Tool)(
     allowed_directories: list[str] | None = None,
+    *,
+    sandbox: Any | None = None,
 )
 ```
 
 Sandboxed filesystem tool with allowed-directory restrictions. Only paths that resolve within one of `allowed_directories` are permitted. This prevents agents from reading or writing files outside the designated workspace.
+
+When a `sandbox` is provided, all operations are delegated to the sandbox via `run_tool()` instead of executing locally.
 
 Inherits from `exo.tool.Tool`.
 
@@ -25,6 +29,7 @@ Inherits from `exo.tool.Tool`.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `allowed_directories` | `list[str] \| None` | `None` | List of allowed directory paths. If empty/None, all paths are allowed |
+| `sandbox` | `Any \| None` | `None` | Sandbox instance for remote execution. When set, operations delegate to `sandbox.run_tool()` |
 
 ### Class attributes
 
@@ -114,10 +119,13 @@ class TerminalTool(Tool)(
     *,
     blacklist: frozenset[str] | None = None,
     timeout: float = 30.0,
+    sandbox: Any | None = None,
 )
 ```
 
 Sandboxed terminal tool with command filtering and timeout. Dangerous commands (`rm`, `shutdown`, etc.) are blocked by default. Custom blacklists can be provided. All commands run with a configurable timeout to prevent runaway processes.
+
+When a `sandbox` is provided, commands are executed remotely via `sandbox.run_tool()` instead of on the local machine.
 
 Inherits from `exo.tool.Tool`.
 
@@ -127,6 +135,7 @@ Inherits from `exo.tool.Tool`.
 |---|---|---|---|
 | `blacklist` | `frozenset[str] \| None` | `None` | Set of blocked command names. Defaults to built-in dangerous commands |
 | `timeout` | `float` | `30.0` | Command execution timeout in seconds |
+| `sandbox` | `Any \| None` | `None` | Sandbox instance for remote execution |
 
 ### Default blacklist
 

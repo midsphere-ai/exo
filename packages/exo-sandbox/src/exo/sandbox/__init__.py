@@ -7,6 +7,7 @@ from exo.sandbox.base import (  # pyright: ignore[reportMissingImports]
     SandboxStatus,
 )
 from exo.sandbox.builder import SandboxBuilder  # pyright: ignore[reportMissingImports]
+from exo.sandbox.e2b import E2BSandbox  # pyright: ignore[reportMissingImports]
 from exo.sandbox.kubernetes import (  # pyright: ignore[reportMissingImports]
     KubernetesSandbox,
 )
@@ -21,6 +22,7 @@ from exo.sandbox.tools import (  # pyright: ignore[reportMissingImports]
 
 __all__ = [
     "CodeTool",
+    "E2BSandbox",
     "FilesystemTool",
     "KubernetesSandbox",
     "LocalSandbox",

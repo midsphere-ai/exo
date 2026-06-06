@@ -8,6 +8,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+e2b = ["e2b>=2.0"]
 kubernetes = ["kubernetes>=28.0"]
 
 [tool.uv.sources]

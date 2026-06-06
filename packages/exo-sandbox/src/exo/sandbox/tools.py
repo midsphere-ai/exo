@@ -45,14 +45,23 @@ class FilesystemTool(Tool):
     Only paths that resolve within one of ``allowed_directories`` are
     permitted.  This prevents agents from reading or writing files outside
     the designated workspace.
+
+    When a ``sandbox`` is provided, all operations are delegated to the
+    sandbox via :meth:`~Sandbox.run_tool` instead of executing locally.
     """
 
     name = "filesystem"
     description = "Read, write, or list files within the sandbox workspace."
     parameters = _FS_SCHEMA
 
-    def __init__(self, allowed_directories: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        allowed_directories: list[str] | None = None,
+        *,
+        sandbox: Any | None = None,
+    ) -> None:
         self._allowed: list[Path] = [Path(d).resolve() for d in (allowed_directories or [])]
+        self._sandbox = sandbox
 
     # -- path validation ----------------------------------------------------
 
@@ -80,6 +89,9 @@ class FilesystemTool(Tool):
         if action not in {"read", "write", "list"}:
             raise ToolError(f"Unknown filesystem action: {action!r}")
 
+        if self._sandbox is not None:
+            return await self._execute_via_sandbox(action, raw_path, content)
+
         path = self._validate_path(raw_path)
         logger.debug("FilesystemTool: %s %s", action, path)
 
@@ -91,6 +103,29 @@ class FilesystemTool(Tool):
             return await self._write(path, content)
         # action == "list"
         return await self._list(path)
+
+    async def _execute_via_sandbox(
+        self, action: str, path: str, content: str | None
+    ) -> str | dict[str, Any]:
+        """Delegate filesystem operations to the sandbox."""
+        try:
+            if action == "read":
+                result = await self._sandbox.run_tool("file_read", {"path": path})
+                return result.get("content", "") if isinstance(result, dict) else result
+            if action == "write":
+                if content is None:
+                    raise ToolError("'content' is required for write action")
+                result = await self._sandbox.run_tool(
+                    "file_write", {"path": path, "content": content}
+                )
+                return result  # type: ignore[no-any-return]
+            # action == "list"
+            result = await self._sandbox.run_tool("file_list", {"path": path})
+            return result  # type: ignore[no-any-return]
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Sandbox filesystem {action} failed: {exc}") from exc
 
     async def _read(self, path: Path) -> str:
         try:
@@ -167,6 +202,9 @@ class TerminalTool(Tool):
     Dangerous commands (``rm``, ``shutdown``, etc.) are blocked by default.
     Custom blacklists can be provided.  All commands run with a configurable
     timeout to prevent runaway processes.
+
+    When a ``sandbox`` is provided, commands are executed remotely via
+    :meth:`~Sandbox.run_tool` instead of on the local machine.
     """
 
     name = "terminal"
@@ -178,11 +216,13 @@ class TerminalTool(Tool):
         *,
         blacklist: frozenset[str] | None = None,
         timeout: float = 30.0,
+        sandbox: Any | None = None,
     ) -> None:
         self._blacklist: frozenset[str] = (
             blacklist if blacklist is not None else _DANGEROUS_COMMANDS
         )
         self._timeout = timeout
+        self._sandbox = sandbox
 
     @property
     def platform(self) -> str:
@@ -206,6 +246,16 @@ class TerminalTool(Tool):
             raise ToolError("Empty command")
 
         self._check_command(command)
+
+        if self._sandbox is not None:
+            try:
+                result = await self._sandbox.run_tool("command", {"command": command})
+                return result  # type: ignore[no-any-return]
+            except ToolError:
+                raise
+            except Exception as exc:
+                raise ToolError(f"Sandbox command execution failed: {exc}") from exc
+
         logger.debug("TerminalTool: executing %r (timeout=%.1fs)", command, self._timeout)
 
         if platform.system() == "Windows":
@@ -289,6 +339,9 @@ class ShellTool(Tool):
     Only commands whose base executable is in the allowlist are permitted.
     Uses ``asyncio.create_subprocess_exec()`` (no shell) for safety.
     Output is truncated to 10,000 characters.
+
+    When a ``sandbox`` is provided, commands are executed remotely via
+    :meth:`~Sandbox.run_tool` instead of on the local machine.
     """
 
     name = "shell"
@@ -300,6 +353,7 @@ class ShellTool(Tool):
         *,
         allowed_commands: list[str] | None = None,
         timeout: float = 30.0,
+        sandbox: Any | None = None,
     ) -> None:
         self._allowed: list[str] = (
             list(allowed_commands)
@@ -307,6 +361,7 @@ class ShellTool(Tool):
             else list(_DEFAULT_ALLOWED_COMMANDS)
         )
         self._timeout = timeout
+        self._sandbox = sandbox
 
     def _validate_command(self, command: str) -> list[str]:
         """Parse and validate *command* against the allowlist."""
@@ -338,6 +393,15 @@ class ShellTool(Tool):
         command: str = kwargs.get("command", "")
         parts = self._validate_command(command)
 
+        if self._sandbox is not None:
+            try:
+                result = await self._sandbox.run_tool("shell", {"command": command})
+                return result  # type: ignore[no-any-return]
+            except ToolError:
+                raise
+            except Exception as exc:
+                raise ToolError(f"Sandbox shell execution failed: {exc}") from exc
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *parts,
@@ -363,9 +427,14 @@ class ShellTool(Tool):
         }
 
 
-def shell_tool(allowed_commands: list[str] | None = None, *, timeout: float = 30.0) -> ShellTool:
+def shell_tool(
+    allowed_commands: list[str] | None = None,
+    *,
+    timeout: float = 30.0,
+    sandbox: Any | None = None,
+) -> ShellTool:
     """Factory that creates an allowlist-based shell tool."""
-    return ShellTool(allowed_commands=allowed_commands, timeout=timeout)
+    return ShellTool(allowed_commands=allowed_commands, timeout=timeout, sandbox=sandbox)
 
 
 # ---------------------------------------------------------------------------
